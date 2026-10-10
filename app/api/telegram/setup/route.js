@@ -1,18 +1,20 @@
+import { serverEnv } from "../../../../lib/env";
 // Open https://YOUR-SITE/api/telegram/setup?key=YOUR_TELEGRAM_WEBHOOK_SECRET once to connect the bot.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req) {
   const url = new URL(req.url);
-  if (!process.env.TELEGRAM_WEBHOOK_SECRET || url.searchParams.get("key") !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  const secret = serverEnv("TELEGRAM_WEBHOOK_SECRET");
+  if (!secret || url.searchParams.get("key") !== secret) {
     return new Response("❌ کلیلەکە هەڵەیە", { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
-  const res = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/setWebhook`, {
+  const res = await fetch(`https://api.telegram.org/bot${serverEnv("TELEGRAM_BOT_TOKEN")}/setWebhook`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       url: `${url.origin}/api/telegram`,
-      secret_token: process.env.TELEGRAM_WEBHOOK_SECRET,
+      secret_token: secret,
       allowed_updates: ["message"],
     }),
   });

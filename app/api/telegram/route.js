@@ -1,11 +1,12 @@
+import { serverEnv } from "../../../lib/env";
 import { adminDb, isPaidActive, usageOf } from "../../../lib/server";
 import { PLANS, PAID_PLANS, planByPrice } from "../../../lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN = String(process.env.ADMIN_TELEGRAM_ID || "");
+const TOKEN = serverEnv("TELEGRAM_BOT_TOKEN");
+const ADMIN = serverEnv("ADMIN_TELEGRAM_ID");
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -115,7 +116,7 @@ async function handleAdmin(chatId, text) {
 }
 
 export async function POST(req) {
-  if (req.headers.get("x-telegram-bot-api-secret-token") !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  if (req.headers.get("x-telegram-bot-api-secret-token") !== serverEnv("TELEGRAM_WEBHOOK_SECRET")) {
     return new Response("forbidden", { status: 403 });
   }
   const update = await req.json().catch(() => null);

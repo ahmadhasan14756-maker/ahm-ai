@@ -1,3 +1,4 @@
+import { serverEnv } from "../../../lib/env";
 import { GoogleGenAI } from "@google/genai";
 import { adminDb, getUser, getProfile, usageOf } from "../../../lib/server";
 
@@ -5,7 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let ai;
+const gemini = () => (ai ||= new GoogleGenAI({ apiKey: serverEnv("GEMINI_API_KEY") }));
 
 const SYSTEM_PROMPT = `You are "AHM AI", a smart assistant built by the AHM team.
 - Always reply in the user's language: Kurdish Sorani (Arabic script), Arabic, or English. If the user writes Kurdish in Latin letters, reply in Kurdish Sorani with Arabic script.
@@ -95,14 +97,14 @@ export async function POST(req) {
   });
 
   const model = usage.pro
-    ? process.env.GEMINI_MODEL_PRO || process.env.GEMINI_MODEL || "gemini-3.8-flash"
-    : process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    ? serverEnv("GEMINI_MODEL_PRO") || serverEnv("GEMINI_MODEL") || "gemini-3.8-flash"
+    : serverEnv("GEMINI_MODEL") || "gemini-3.8-flash";
 
   const encoder = new TextEncoder();
   const readable = new ReadableStream({
     async start(controller) {
       try {
-        const stream = await ai.models.generateContentStream({
+        const stream = await gemini().models.generateContentStream({
           model,
           contents,
           config: {

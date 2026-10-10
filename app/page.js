@@ -1,4 +1,5 @@
 "use client";
+import { TELEGRAM_BOT } from "../lib/env";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -6,8 +7,7 @@ import { supabase } from "../lib/supabase";
 import { PAID_PLANS } from "../lib/plans";
 import { parseFiles, buildPreview, downloadZip } from "../lib/builder";
 
-const BOT = process.env.NEXT_PUBLIC_TELEGRAM_BOT || "";
-const BOT_URL = BOT ? `https://t.me/${BOT.replace("@", "")}` : null;
+const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
 const MAX_FILE_BYTES = 1_500_000;
 
 /* ---------------- small icons ---------------- */
@@ -60,6 +60,7 @@ function Auth() {
       else if (m.includes("Email not confirmed")) setMsg("سەرەتا ئیمەیڵەکەت پشتڕاست بکەرەوە.");
       else if (m.includes("already registered")) setMsg("ئەم ئیمەیڵە پێشتر تۆمار کراوە.");
       else if (m.includes("at least") || m.includes("weak")) setMsg("وشەی نهێنی بەهێزتر هەڵبژێرە (پیتی گەورە و بچووک و ژمارە).");
+      else if (/load failed|failed to fetch|network/i.test(m)) setMsg("پەیوەندی نەکرا. ئینتەرنێتەکەت بپشکنە و دووبارە هەوڵ بدەرەوە.");
       else setMsg("هەڵە: " + m);
     } finally {
       setLoading(false);
