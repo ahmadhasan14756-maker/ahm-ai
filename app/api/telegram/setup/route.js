@@ -1,24 +1,27 @@
 import { serverEnv } from "../../../../lib/env";
-// Open https://YOUR-SITE/api/telegram/setup?key=YOUR_TELEGRAM_WEBHOOK_SECRET once to connect the bot.
+import { webhookSecret } from "../../../../lib/telegram";
+// Open https://YOUR-SITE/api/telegram/setup once to connect the bot to this app.
+// Safe to open many times: it can only point the bot at this same site.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const text = (s, status = 200) => new Response(s, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+
 export async function GET(req) {
   const url = new URL(req.url);
-  const secret = serverEnv("TELEGRAM_WEBHOOK_SECRET");
-  if (!secret || url.searchParams.get("key") !== secret) {
-    return new Response("❌ کلیلەکە هەڵەیە", { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } });
-  }
-  const res = await fetch(`https://api.telegram.org/bot${serverEnv("TELEGRAM_BOT_TOKEN")}/setWebhook`, {
+  const token = serverEnv("TELEGRAM_BOT_TOKEN");
+  if (!token) return text("❌ TELEGRAM_BOT_TOKEN لە Vercel دانەنراوە.", 500);
+  if (!/^\d+:[\w-]{30,}$/.test(token)) return text("❌ TELEGRAM_BOT_TOKEN هەڵەیە. دەبێت وەک 123456:ABC... بێت (هەمووی کۆپی بکە).", 500);
+
+  const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      url: `${url.origin}/api/telegram`,
-      secret_token: secret,
-      allowed_updates: ["message"],
-    }),
+    body: JSON.stringify({ url: `${url.origin}/api/telegram`, secret_token: webhookSecret(), allowed_updates: ["message"] }),
   });
   const data = await res.json().catch(() => ({}));
-  const ok = data.ok ? "✅ بۆتەکە بەسترایەوە! ئێستا لە تەلەگرام /start بنێرە." : "❌ هەڵە: " + (data.description || "نەزانراو");
-  return new Response(ok, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  if (!data.ok) return text("❌ هەڵە لە تەلەگرامەوە: " + (data.description || "نەزانراو"), 502);
+
+  const admin = serverEnv("ADMIN_TELEGRAM_ID");
+  const adminNote = /^\d+$/.test(admin) ? "✅ ID ی خاوەن دانراوە." : "⚠️ ADMIN_TELEGRAM_ID دانەنراوە یان هەڵەیە (دەبێت تەنها ژمارە بێت).";
+  return text("✅ بۆتەکە بەسترایەوە! ئێستا لە تەلەگرام /start بنێرە.\n" + adminNote);
 }

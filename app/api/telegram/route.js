@@ -1,4 +1,5 @@
 import { serverEnv } from "../../../lib/env";
+import { webhookSecret } from "../../../lib/telegram";
 import { adminDb, isPaidActive, usageOf } from "../../../lib/server";
 import { PLANS, PAID_PLANS, planByPrice } from "../../../lib/plans";
 
@@ -116,7 +117,7 @@ async function handleAdmin(chatId, text) {
 }
 
 export async function POST(req) {
-  if (req.headers.get("x-telegram-bot-api-secret-token") !== serverEnv("TELEGRAM_WEBHOOK_SECRET")) {
+  if (req.headers.get("x-telegram-bot-api-secret-token") !== webhookSecret()) {
     return new Response("forbidden", { status: 403 });
   }
   const update = await req.json().catch(() => null);
