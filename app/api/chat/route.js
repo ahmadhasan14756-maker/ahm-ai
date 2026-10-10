@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { adminDb, getUser, getProfile, usageOf, today } from "../../../lib/server";
+import { adminDb, getUser, getProfile, usageOf } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +26,21 @@ the fixed lines
 
 Rules: the SEARCH part must match the original file exactly (same spaces), include enough lines to be unique, keep each block small. Never rewrite the whole file.`;
 
+const BUILD_PROMPT = `
+You are in APP BUILDER mode. The user wants a working web app that is shown live inside a phone preview.
+- Write every file as a fenced block whose info string is file:PATH, for example:
+\`\`\`file:index.html
+...complete file...
+\`\`\`
+- Use plain HTML, CSS and JavaScript only (no npm, no build step, no TypeScript, no JSX). Libraries only from https://cdnjs.cloudflare.com or https://cdn.jsdelivr.net if really needed.
+- Always have index.html. Put styles in style.css and logic in script.js, linked with relative paths (<link rel="stylesheet" href="style.css">, <script src="script.js"></script>).
+- Mobile-first: it must look great at 360–430px wide. Beautiful, modern, polished design with good spacing, readable fonts and smooth touch targets. Save data with localStorage when useful.
+- When the project already has files, output ONLY the files that change, and always each file COMPLETE (never partial snippets, never "..." placeholders).
+- Before the files write 1–3 short sentences in the user's language about what you built or changed. Do not add other code blocks.`;
+
 const MAX_MESSAGES = 30;
 const MAX_FILE_CHARS = 1_500_000;
+const MAX_PROJECT_CHARS = 400_000;
 
 export async function POST(req) {
   const user = await getUser(req);
@@ -47,25 +60,36 @@ export async function POST(req) {
     return Response.json({ error: "bad_request" }, { status: 400 });
   }
 
-  const file = body.file && typeof body.file.content === "string" ? body.file : null;
+  const build = body.mode === "build";
+  const file = !build && body.file && typeof body.file.content === "string" ? body.file : null;
+  const project =
+    build && body.project && typeof body.project === "object"
+      ? Object.entries(body.project).filter(([k, v]) => typeof k === "string" && typeof v === "string")
+      : [];
 
   // ---- usage limits ----
   const profile = await getProfile(user);
   const usage = usageOf(profile);
   if (file && !usage.pro) return Response.json({ error: "pro_only" }, { status: 403 });
   if (file && file.content.length > MAX_FILE_CHARS) return Response.json({ error: "file_too_big" }, { status: 413 });
+  if (project.reduce((n, [, v]) => n + v.length, 0) > MAX_PROJECT_CHARS) return Response.json({ error: "file_too_big" }, { status: 413 });
   if (usage.used >= usage.limit) return Response.json({ error: "limit", ...usage }, { status: 429 });
 
   await adminDb()
     .from("profiles")
-    .update({ daily_count: usage.used + 1, daily_date: today(), total_count: (profile.total_count || 0) + 1 })
+    .update({ used: usage.used + 1, period_key: usage.periodKey, total_count: (profile.total_count || 0) + 1 })
     .eq("id", user.id);
 
-  // ---- build the conversation for Gemini ----
+  // ---- build the conversation ----
   const contents = messages.map((m, i) => {
     let text = m.content.slice(0, 30000);
-    if (file && i === messages.length - 1) {
+    const last = i === messages.length - 1;
+    if (last && file) {
       text = `File name: ${String(file.name || "file").slice(0, 200)}\n\`\`\`\n${file.content}\n\`\`\`\n\n${text}`;
+    }
+    if (last && project.length) {
+      const files = project.map(([k, v]) => `\`\`\`file:${k}\n${v}\n\`\`\``).join("\n\n");
+      text = `Current project files:\n\n${files}\n\nRequest: ${text}`;
     }
     return { role: m.role === "assistant" ? "model" : "user", parts: [{ text }] };
   });
@@ -82,8 +106,8 @@ export async function POST(req) {
           model,
           contents,
           config: {
-            systemInstruction: SYSTEM_PROMPT + (file ? FILE_PROMPT : ""),
-            maxOutputTokens: file ? 16384 : 8192,
+            systemInstruction: SYSTEM_PROMPT + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : ""),
+            maxOutputTokens: file || build ? 32768 : 8192,
           },
         });
         for await (const chunk of stream) {

@@ -1,4 +1,5 @@
-import { adminDb, today, isProActive } from "../../../lib/server";
+import { adminDb, isPaidActive, usageOf } from "../../../lib/server";
+import { PLANS, PAID_PLANS, planByPrice } from "../../../lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +22,14 @@ const send = (chat_id, text) => tg("sendMessage", { chat_id, text, parse_mode: "
 
 const fmtDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "-");
 
+const PLAN_LINES = () => PAID_PLANS.map((p) => `• <b>$${p.price}</b> ← ${p.limit} پرسیار بۆ یەک مانگ`).join("\n");
+
 const WELCOME = () => `سڵاو! 👋 بەخێربێیت بۆ <b>AHM AI</b>
 
-⭐ <b>بەشداریی Pro</b>
-${esc(process.env.PAYMENT_INFO || "نرخ و ژمارەی FIB بەم زووانە دادەنرێت.")}
+⭐ <b>پلانەکانی Pro</b>
+${PLAN_LINES()}
+
+💳 ${esc(process.env.PAYMENT_INFO || "ژمارەی FIB بەم زووانە دادەنرێت.")}
 
 <b>چۆن Pro وەربگریت:</b>
 ١. پارەکە بە FIB بنێرە.
@@ -34,7 +39,7 @@ ${esc(process.env.PAYMENT_INFO || "نرخ و ژمارەی FIB بەم زووان�
 دوای پشتڕاستکردنەوە، هەژمارەکەت دەبێتە Pro و ئاگادارت دەکەینەوە. ✅`;
 
 const ADMIN_HELP = `<b>فەرمانەکانی بەڕێوەبەر:</b>
-<code>/pro email 30</code> — Pro بۆ ٣٠ ڕۆژ
+<code>/pro email 5</code> — پلانی $5 بۆ ٣٠ ڕۆژ (هەروەها 10 یان 25)
 <code>/remove email</code> — لابردنی Pro
 <code>/check email</code> — بینینی دۆخی بەکارهێنەر
 <code>/stats</code> — ئامارەکان
@@ -46,20 +51,23 @@ async function findByEmail(email) {
 }
 
 async function handleAdmin(chatId, text) {
-  const [cmd, arg1, arg2] = text.trim().split(/\s+/);
+  const [cmd, arg1, arg2, arg3] = text.trim().split(/\s+/);
   const db = adminDb();
 
   if (cmd === "/pro") {
-    if (!arg1 || !EMAIL_RE.test(arg1)) return send(chatId, "بەم شێوەیە بنووسە: <code>/pro email 30</code>");
-    const days = Math.max(1, Math.min(3650, parseInt(arg2 || "30", 10) || 30));
+    const plan = planByPrice(arg2);
+    if (!arg1 || !EMAIL_RE.test(arg1) || !plan) {
+      return send(chatId, "بەم شێوەیە بنووسە: <code>/pro email 5</code>\n(ژمارەکە نرخی پلانەکەیە: 5 یان 10 یان 25)");
+    }
+    const days = Math.max(1, Math.min(3650, parseInt(arg3 || "30", 10) || 30));
     const p = await findByEmail(arg1);
     if (!p) return send(chatId, `❌ ئەم ئیمەیڵە تۆمار نەکراوە: ${esc(arg1)}\nبەکارهێنەر دەبێت سەرەتا لە ئەپەکەدا خۆی تۆمار بکات.`);
-    const base = isProActive(p) ? new Date(p.pro_until) : new Date();
-    const until = new Date(base.getTime() + days * 86400000).toISOString();
-    await db.from("profiles").update({ pro_until: until }).eq("id", p.id);
-    await send(chatId, `✅ <b>${esc(p.email)}</b> بوو بە Pro تا <b>${fmtDate(until)}</b>`);
+    const now = new Date();
+    const until = new Date(now.getTime() + days * 86400000).toISOString();
+    await db.from("profiles").update({ plan: plan.id, plan_until: until, used: 0, period_key: "paid:" + now.toISOString() }).eq("id", p.id);
+    await send(chatId, `✅ <b>${esc(p.email)}</b> ← پلانی <b>$${plan.price}</b> (${plan.limit} پرسیار) تا <b>${fmtDate(until)}</b>`);
     if (p.telegram_chat_id) {
-      await send(p.telegram_chat_id, `🎉 پیرۆزە! هەژمارەکەت (<b>${esc(p.email)}</b>) بوو بە <b>Pro</b> تا <b>${fmtDate(until)}</b>.\nئەپەکە دابخە و بیکەرەوە.`);
+      await send(p.telegram_chat_id, `🎉 پیرۆزە! هەژمارەکەت (<b>${esc(p.email)}</b>) بوو بە <b>Pro</b>\n${plan.limit} پرسیار تا <b>${fmtDate(until)}</b>.\nئەپەکە دابخە و بیکەرەوە.`);
     }
     return;
   }
@@ -67,37 +75,39 @@ async function handleAdmin(chatId, text) {
   if (cmd === "/remove") {
     const p = arg1 && (await findByEmail(arg1));
     if (!p) return send(chatId, "❌ نەدۆزرایەوە.");
-    await db.from("profiles").update({ pro_until: null }).eq("id", p.id);
+    await db.from("profiles").update({ plan: "free", plan_until: null, used: 0, period_key: null }).eq("id", p.id);
     return send(chatId, `✅ Pro لە <b>${esc(p.email)}</b> لابرا.`);
   }
 
   if (cmd === "/check") {
     const p = arg1 && (await findByEmail(arg1));
     if (!p) return send(chatId, "❌ نەدۆزرایەوە.");
-    const used = p.daily_date === today() ? p.daily_count : 0;
+    const u = usageOf(p);
     return send(
       chatId,
-      `👤 <b>${esc(p.email)}</b>\nPro: ${isProActive(p) ? "✅ تا " + fmtDate(p.pro_until) : "❌"}\nئەمڕۆ: ${used} پرسیار\nکۆی گشتی: ${p.total_count} پرسیار\nتۆماربوون: ${fmtDate(p.created_at)}`
+      `👤 <b>${esc(p.email)}</b>\nپلان: <b>${u.pro ? "$" + PLANS[u.plan].price + " تا " + fmtDate(u.planUntil) : "بەخۆڕایی"}</b>\nبەکارهاتوو: ${u.used} / ${u.limit}\nکۆی گشتی: ${p.total_count} پرسیار\nتۆماربوون: ${fmtDate(p.created_at)}`
     );
   }
 
   if (cmd === "/stats") {
     const nowIso = new Date().toISOString();
-    const [{ count: users }, { count: pros }, { data: todayRows }] = await Promise.all([
+    const [{ count: users }, { data: pros }, { data: all }] = await Promise.all([
       db.from("profiles").select("*", { count: "exact", head: true }),
-      db.from("profiles").select("*", { count: "exact", head: true }).gt("pro_until", nowIso),
-      db.from("profiles").select("daily_count").eq("daily_date", today()),
+      db.from("profiles").select("plan").gt("plan_until", nowIso).neq("plan", "free"),
+      db.from("profiles").select("total_count"),
     ]);
-    const msgs = (todayRows || []).reduce((a, r) => a + (r.daily_count || 0), 0);
+    const byPlan = PAID_PLANS.map((pl) => `$${pl.price}: ${(pros || []).filter((r) => r.plan === pl.id).length}`).join(" · ");
+    const income = (pros || []).reduce((a, r) => a + (PLANS[r.plan]?.price || 0), 0);
+    const msgs = (all || []).reduce((a, r) => a + (r.total_count || 0), 0);
     return send(
       chatId,
-      `📊 <b>ئامارەکان</b>\n👥 بەکارهێنەران: <b>${users ?? 0}</b>\n⭐ Pro: <b>${pros ?? 0}</b>\n💬 پرسیارەکانی ئەمڕۆ: <b>${msgs}</b>\n🟢 چالاک ئەمڕۆ: <b>${(todayRows || []).length}</b>`
+      `📊 <b>ئامارەکان</b>\n👥 بەکارهێنەران: <b>${users ?? 0}</b>\n⭐ Pro چالاک: <b>${(pros || []).length}</b> (${byPlan})\n💵 داهاتی پلانە چالاکەکان: <b>$${income}</b>\n💬 کۆی پرسیارەکان: <b>${msgs}</b>`
     );
   }
 
   if (cmd === "/users") {
-    const { data } = await db.from("profiles").select("email,pro_until,total_count").order("created_at", { ascending: false }).limit(20);
-    const lines = (data || []).map((u) => `${isProActive(u) ? "⭐" : "▫️"} ${esc(u.email)} — ${u.total_count}`);
+    const { data } = await db.from("profiles").select("email,plan,plan_until,total_count").order("created_at", { ascending: false }).limit(20);
+    const lines = (data || []).map((u) => `${isPaidActive(u) ? "⭐$" + PLANS[u.plan].price : "▫️"} ${esc(u.email)} — ${u.total_count}`);
     return send(chatId, `<b>دوایین بەکارهێنەران:</b>\n${lines.join("\n") || "هیچ"}`);
   }
 
@@ -150,7 +160,7 @@ export async function POST(req) {
         await adminDb().from("profiles").update({ telegram_chat_id: chatId }).eq("id", p.id);
         await send(chatId, "✅ وەرگیرا! دوای پشتڕاستکردنەوەی پارەدانەکە، هەژمارەکەت دەبێتە Pro و ئاگادارت دەکەینەوە.");
         if (ADMIN) {
-          await send(ADMIN, `💰 داواکاری Pro لە ${who}\nئیمەیڵ: <b>${esc(email)}</b>\n\nبۆ چالاککردن ئەمە کۆپی بکە و بینێرە:\n<code>/pro ${esc(email)} 30</code>`);
+          await send(ADMIN, `💰 داواکاری Pro لە ${who}\nئیمەیڵ: <b>${esc(email)}</b>\n\nبۆ چالاککردن یەکێک لەمانە کۆپی بکە (بەپێی ئەو پارەیەی هاتووە):\n<code>/pro ${esc(email)} 5</code>\n<code>/pro ${esc(email)} 10</code>\n<code>/pro ${esc(email)} 25</code>`);
         }
       }
     } else if (!msg.photo && !msg.document && text && !text.startsWith("/")) {

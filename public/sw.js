@@ -1,5 +1,5 @@
 // Simple service worker: caches the app shell so it opens fast and works like an app.
-const CACHE = "ahm-v1";
+const CACHE = "ahm-v2";
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/logo.png"];
 
 self.addEventListener("install", (e) => {
