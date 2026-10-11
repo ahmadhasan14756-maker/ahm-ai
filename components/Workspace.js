@@ -1,6 +1,6 @@
 "use client";
 // The code workspace: file explorer + editor + live phone preview, like a small VS Code.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { buildPreview, downloadZip, cleanPath } from "../lib/builder";
 
@@ -66,6 +66,24 @@ function Tree({ node, prefix, open, toggle, active, onOpen, depth = 0 }) {
   );
 }
 
+// Computer preview: the page really renders at 1280×800 (desktop layout) and is scaled down to fit, inside a monitor frame.
+const PC_W = 1280, PC_H = 800, BAR = 34;
+function Desktop({ html, nonce, box }) {
+  const scale = box.w ? Math.min(1, (box.w - 8) / PC_W, (box.h - 40) / (PC_H + BAR)) : 0.4;
+  return (
+    <div className="pc" style={{ width: PC_W * scale }}>
+      <div className="pc-screen" style={{ height: (PC_H + BAR) * scale }}>
+        <div className="pc-inner" style={{ width: PC_W, height: PC_H + BAR, transform: `scale(${scale})` }}>
+          <div className="pc-bar" aria-hidden="true"><i /><i /><i /><span>index.html</span></div>
+          <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" style={{ width: PC_W, height: PC_H }} />
+        </div>
+      </div>
+      <div className="pc-neck" aria-hidden="true" />
+      <div className="pc-foot" aria-hidden="true" />
+    </div>
+  );
+}
+
 export default function Workspace({ files, setFiles, busy, t, onClose, onAsk }) {
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
@@ -75,6 +93,15 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk }) 
   const [showTree, setShowTree] = useState(true);
   const [nonce, setNonce] = useState(0);
   const html = useMemo(() => buildPreview(files), [files]);
+  const stageRef = useRef(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tab, !!html]);
   const tree = useMemo(() => buildTree(names), [names.join("|")]);
 
   useEffect(() => { try { const d = localStorage.getItem("ahm-device"); if (d) setDevice(d); } catch {} }, []);
@@ -145,12 +172,15 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk }) 
               <div className="seg small">
                 <button className={device === "iphone" ? "on" : ""} onClick={() => setDevice("iphone")}>iPhone</button>
                 <button className={device === "android" ? "on" : ""} onClick={() => setDevice("android")}>Android</button>
+                <button className={device === "desktop" ? "on" : ""} onClick={() => setDevice("desktop")}>💻 {t("computer")}</button>
               </div>
               <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={P.refresh} /></button>
             </div>
           )}
-          <div className="stage">
-            {html ? (
+          <div className="stage" ref={stageRef}>
+            {html && device === "desktop" ? (
+              <Desktop html={html} nonce={nonce} box={box} />
+            ) : html ? (
               <div className={"device " + device}>
                 <div className="screen">
                   {device === "iphone" ? <div className="island" aria-hidden="true" /> : <div className="punch" aria-hidden="true" />}

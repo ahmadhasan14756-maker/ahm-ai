@@ -651,3 +651,17 @@ footer > * { max-width: var(--col); margin-inline: auto; }
   header { padding-top: env(titlebar-area-height, 10px); -webkit-app-region: drag; app-region: drag; }
   header button, header a { -webkit-app-region: no-drag; app-region: no-drag; }
 }
+
+/* computer preview in the workspace */
+.pc { display: flex; flex-direction: column; align-items: center; max-width: 100%; }
+.pc-screen { position: relative; width: 100%; overflow: hidden; border-radius: 10px; background: #000;
+  box-shadow: 0 0 0 7px #23252a, 0 0 0 8px #3a3d45, 0 40px 80px -30px rgba(0,0,0,.85); }
+.pc-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; display: flex; flex-direction: column; background: #fff; }
+.pc-bar { height: 34px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 12px; background: #e9eaee; direction: ltr; }
+.pc-bar i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; }
+.pc-bar i:nth-child(2) { background: #febc2e; } .pc-bar i:nth-child(3) { background: #28c840; }
+.pc-bar span { margin-left: 14px; flex: 1; max-width: 420px; height: 22px; border-radius: 7px; background: #fff; color: #6b6f78; font: 12px/22px var(--mono); padding: 0 10px; }
+.pc-inner iframe { border: 0; display: block; background: #fff; }
+.pc-neck { width: 12%; height: 22px; margin-top: 7px; background: linear-gradient(#2a2c31, #1a1b1f); }
+.pc-foot { width: 30%; height: 7px; border-radius: 6px 6px 2px 2px; background: #2a2c31; }
+.mode-build .preview-col:has(.pc) { width: 62%; max-width: none; }
