@@ -427,6 +427,68 @@ function Sheet({ label, onClose, children }) {
   );
 }
 
+// "∞" for the owner, the time the wait ends, or the questions left.
+// "Install on this computer": Chrome/Edge give us an install prompt; Safari/Firefox get instructions.
+function useInstall() {
+  const [prompt, setPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone) setInstalled(true);
+    const onPrompt = (e) => { e.preventDefault(); setPrompt(e); };
+    const onDone = () => { setInstalled(true); setPrompt(null); };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onDone);
+    return () => { window.removeEventListener("beforeinstallprompt", onPrompt); window.removeEventListener("appinstalled", onDone); };
+  }, []);
+  const install = async () => {
+    if (!prompt) return false;
+    prompt.prompt();
+    const r = await prompt.userChoice.catch(() => null);
+    if (r?.outcome === "accepted") setInstalled(true);
+    setPrompt(null);
+    return true;
+  };
+  return { canPrompt: !!prompt, installed, install };
+}
+
+function InstallHelp({ onClose }) {
+  const { t } = useLang();
+  return (
+    <Sheet label={t("installPc")} onClose={onClose}>
+      <h3>🖥️ {t("installPc")}</h3>
+      <p className="muted">{t("installWhy")}</p>
+      <ol className="install-steps">
+        <li><b>Chrome / Edge (Windows, Mac):</b> {t("installChrome")}</li>
+        <li><b>Safari (Mac):</b> {t("installSafari")}</li>
+      </ol>
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+function usageText(me, t) {
+  if (!me) return "";
+  if (me.unlimited) return "∞";
+  if (me.lockedUntil && new Date(me.lockedUntil) > new Date()) return "⏳ " + fmtClock(me.lockedUntil);
+  return `${Math.max(0, me.limit - me.used)} ${t("left")}`;
+}
+const fmtClock = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+function WaitBox({ until }) {
+  const { t } = useLang();
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id); }, []);
+  const ms = new Date(until) - now;
+  if (ms <= 0) return null;
+  const h = Math.floor(ms / 3600000), m = Math.ceil((ms % 3600000) / 60000);
+  return (
+    <div className="wait-box" role="status">
+      <div className="wait-time">⏳ {h > 0 && <>{h} {t("hours")} </>}{m} {t("minutes")}</div>
+      <div className="muted">{t("waitUntil")} <b dir="ltr">{fmtClock(until)}</b></div>
+    </div>
+  );
+}
+
 function Upgrade({ reason, me, onClose, onEdit }) {
   const { t } = useLang();
   const text = { limit: t("upLimit"), pro_only: t("upPro"), info: t("upInfo") }[reason] || "";
@@ -437,11 +499,12 @@ function Upgrade({ reason, me, onClose, onEdit }) {
   return (
     <Sheet label={t("plans")} onClose={onClose}>
       <h3>{t("plans")} <span className="gold brand-font">AHM AI</span></h3>
-      <p>{text}</p>
+      {me?.lockedUntil ? <WaitBox until={me.lockedUntil} /> : null}
+      <p>{me?.lockedUntil ? t("upWait") : text}</p>
       <div className="plans">
         <div className={"plan" + (!me?.pro ? " current" : "")}>
           <div className="plan-price">{t("free")}</div>
-          <div className="plan-limit"><b>{plans.freeLimit}</b> {t("questions")} {t("perMonth")}</div>
+          <div className="plan-limit"><b>{plans.freeLimit}</b> {t("questions")}</div>
           {!me?.pro && <div className="plan-tag">{t("currentPlan")}</div>}
         </div>
         {plans.paid.map((p) => (
@@ -457,7 +520,7 @@ function Upgrade({ reason, me, onClose, onEdit }) {
         ))}
       </div>
       {plans.payment && <p className="pay-info" dir="auto">💳 {plans.payment}</p>}
-      <ul className="perks"><li>{t("perk1")}</li><li>{t("perk2")}</li></ul>
+      <ul className="perks"><li>{t("perk1")}</li><li>{t("perk2")}</li><li>{t("roundsInfo").replace("{h}", (plans.cooldowns || [5, 7, 10, 24]).join(" → "))}</li></ul>
       {buyUrl ? (
         <a className="gold-btn" href={buyUrl} target="_blank" rel="noreferrer">
           {chosen ? <>{t("buy")} {chosen.name} · <span dir="ltr">${chosen.price}</span></> : t("buyTelegram")}
@@ -471,7 +534,6 @@ function Upgrade({ reason, me, onClose, onEdit }) {
 
 function Settings({ session, me, onClose, onPlans }) {
   const { t } = useLang();
-  const left = me ? Math.max(0, me.limit - me.used) : null;
   return (
     <Sheet label={t("settings")} onClose={onClose}>
       <h3>{t("settings")}</h3>
@@ -486,12 +548,56 @@ function Settings({ session, me, onClose, onPlans }) {
       {me && (
         <button className="set-row set-btn" onClick={onPlans}>
           <div className="set-label">{t("plans")}</div>
-          <div className="set-val gold">{me.pro ? `⭐ ${me.planName}` : t("free")} · {left} {t("left")}</div>
+          <div className="set-val gold">{me.unlimited ? "👑" : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</div>
         </button>
       )}
       <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
         <Svg d={Icon.logout} size={18} /> {t("logout")}
       </button>
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+function Feedback({ token, onClose }) {
+  const { t } = useLang();
+  const [kind, setKind] = useState("idea");
+  const [text, setText] = useState("");
+  const [state, setState] = useState(""); // "", "sending", "sent", "error"
+  async function send() {
+    if (text.trim().length < 2) return;
+    setState("sending");
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
+        body: JSON.stringify({ kind, text }),
+      });
+      setState(res.ok ? "sent" : "error");
+      if (res.ok) setText("");
+    } catch { setState("error"); }
+  }
+  const kinds = [["idea", "💡", t("fbIdea")], ["critique", "📝", t("fbCritique")], ["bug", "🐞", t("fbBug")]];
+  return (
+    <Sheet label={t("feedback")} onClose={onClose}>
+      <h3>💬 {t("feedback")}</h3>
+      <p className="muted">{t("fbIntro")}</p>
+      {state === "sent" ? (
+        <div className="fb-done"><div className="fb-done-ic">✅</div><b>{t("fbThanks")}</b></div>
+      ) : (
+        <>
+          <div className="fb-kinds" role="radiogroup">
+            {kinds.map(([k, ic, label]) => (
+              <button key={k} type="button" role="radio" aria-checked={kind === k} className={"fb-kind" + (kind === k ? " on" : "")} onClick={() => setKind(k)}>
+                <span aria-hidden="true">{ic}</span> {label}
+              </button>
+            ))}
+          </div>
+          <textarea className="fb-text" rows={5} dir="auto" maxLength={3000} value={text} onChange={(e) => setText(e.target.value)} placeholder={t("fbPlaceholder")} />
+          {state === "error" && <p className="pe-msg">⚠️ {t("errGeneric")}</p>}
+          <button className="gold-btn" disabled={state === "sending" || text.trim().length < 2} onClick={send}>{state === "sending" ? "…" : t("fbSend")}</button>
+        </>
+      )}
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
   );
@@ -543,6 +649,12 @@ function PlanEditor({ me, token, onSaved, onClose }) {
       ))}
       {form.paid.length < 8 && <button className="ghost-btn" onClick={addPlan}><Svg d={Icon.plus} size={16} /> {t("addPlan")}</button>}
       <label className="pe-row col">
+        <span>{t("waitHours")}</span>
+        <input dir="ltr" inputMode="text" style={{ width: "100%" }} value={Array.isArray(form.cooldowns) ? form.cooldowns.join(", ") : form.cooldowns ?? ""}
+          onChange={(e) => setForm({ ...form, cooldowns: e.target.value })} placeholder="5, 7, 10, 24" />
+        <small className="muted">{t("waitHelp")}</small>
+      </label>
+      <label className="pe-row col">
         <span>{t("payInfo")}</span>
         <textarea rows={2} dir="auto" placeholder="FIB: 0770 …" value={form.payment} onChange={(e) => setForm({ ...form, payment: e.target.value })} />
       </label>
@@ -554,7 +666,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
 }
 
 /* ---------------- Sidebar (chat history) ---------------- */
-function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn }) {
+function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback }) {
   const { t } = useLang();
   const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image };
   return (
@@ -579,9 +691,10 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
             </div>
           ))}
         </div>
+        <button className="side-fb" onClick={onFeedback}>💬 <span>{t("feedback")}</span></button>
         <button className="side-settings" onClick={onSettings}>
           <Svg d={Icon.gear} size={18} /> <span>{t("settings")}</span>
-          {me && <em>{me.pro ? `⭐ ${me.planName}` : t("free")} · {Math.max(0, me.limit - me.used)}</em>}
+          {me && <em>{me.unlimited ? "👑" : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</em>}
         </button>
       </aside>
     </>
@@ -618,6 +731,8 @@ function Main({ session }) {
   const recRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
+  const inst = useInstall();
+  const keys = useRef({});
   const [view, setView] = useState("chat"); // chat | learn
   const bottom = useRef(null);
   const ta = useRef(null);
@@ -632,6 +747,10 @@ function Main({ session }) {
   async function token() {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token;
+  }
+  function showLimit(reason = "limit") {
+    loadMe();
+    setSheet({ type: "upgrade", reason });
   }
   async function loadMe() {
     try {
@@ -861,7 +980,7 @@ function Main({ session }) {
         await new Promise((r) => setTimeout(r, 1200 * (tries + 1)));
       }
       if (res.status === 401) { await supabase.auth.signOut(); return; }
-      if (data.error === "limit") { put(next.slice(0, -1)); setInput(text); setSheet({ type: "upgrade", reason: "limit" }); return; }
+      if (data.error === "limit") { put(next.slice(0, -1)); setInput(text); showLimit(); return; }
       if (!res.ok) { put([...next, { role: "assistant", content: data.error === "busy" ? t("errBusy") : t("errAi"), failed: true }]); return; }
       if (kind) {
         put([...next, { role: "assistant", content: data.caption || "", designs: data.designs, kind: data.kind }]);
@@ -987,7 +1106,7 @@ function Main({ session }) {
           setInput(text);
           if (sentFile) setFile(sentFile);
           if (sentImages.length) setImages(sentImages.filter((x) => !x.voice));
-          setSheet({ type: "upgrade", reason: err.error });
+          showLimit(err.error);
           return "stop";
         }
         if (err.error === "file_too_big") { put(next.slice(0, -1)); setInput(text); alert(t("fileBig")); return "stop"; }
@@ -1044,18 +1163,30 @@ function Main({ session }) {
   }
 
   const name = (session.user.email || "").split("@")[0].replace(/[._\d]+/g, " ").trim().split(" ")[0].replace(/^./, (c) => c.toUpperCase());
-  const left = me ? Math.max(0, me.limit - me.used) : null;
-  const pct = me ? Math.min(100, (me.used / me.limit) * 100) : 0;
   const hasFiles = Object.keys(project).length > 0;
   const suggestions = t(mode === "build" ? "buildSugg" : mode === "image" ? "imageSugg" : "chatSugg");
   const chatLike = mode === "chat" || mode === "auto";
   const toolName = { chat: t("capChat"), build: t("capBuild"), image: t("capImage") }[mode];
 
+  // Computer keyboard shortcuts: Ctrl/⌘+K new chat, "/" type, Esc close.
+  keys.current = { startNew, closeSheet: () => setSheet(null), focus: () => ta.current?.focus() };
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) || e.target?.isContentEditable;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); keys.current.startNew("auto"); }
+      else if (e.key === "Escape") keys.current.closeSheet();
+      else if (e.key === "/" && !typing) { e.preventDefault(); keys.current.focus(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className={"app mode-" + mode}>
       <Sidebar open={sideOpen} chats={chats} activeId={activeId} me={me} onLearn={openLearn} learnOn={view === "learn"}
         onPick={pick} onNew={startNew} onDelete={remove} onClose={() => setSideOpen(false)}
-        onSettings={() => { setSideOpen(false); setSheet({ type: "settings" }); }} />
+        onSettings={() => { setSideOpen(false); setSheet({ type: "settings" }); }}
+        onFeedback={() => { setSideOpen(false); setSheet({ type: "feedback" }); }} />
 
       <div className="main-col">
         <header>
@@ -1064,12 +1195,28 @@ function Main({ session }) {
             <img src="/icon-192.png" alt="" aria-hidden="true" />
             <span className="brand-name">AHM <b>AI</b></span>
           </div>
-          <button className="icon-btn" aria-label={t("newChat")} title={t("newChat")} onClick={() => startNew("auto")}><Svg d={Icon.plus} /></button>
+          <div className="head-title" dir="auto">{view === "learn" ? t("learnLang") : active.title || toolName || t("newChat")}</div>
+          <div className="head-tools">
+            {me && (
+              <button className={"quota-pill" + (me.unlimited || me.pro ? " pro" : "") + (me.lockedUntil ? " wait" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })}>
+                {me.unlimited ? "👑" : me.pro ? "⭐" : ""} {usageText(me, t)}
+              </button>
+            )}
+            {!inst.installed && (
+              <button className="head-btn" onClick={async () => { if (!(await inst.install())) setSheet({ type: "install" }); }}>
+                <span aria-hidden="true">🖥️</span> {t("installPc")}
+              </button>
+            )}
+            <button className="head-btn" onClick={() => setSheet({ type: "feedback" })}><span aria-hidden="true">💬</span> {t("feedback")}</button>
+          </div>
+          <button className="icon-btn new-chat-btn" aria-label={t("newChat")} title={t("newChat") + " (Ctrl+K)"} onClick={() => startNew("auto")}>
+            <Svg d={Icon.plus} /><span className="new-chat-label">{t("newChat")}</span>
+          </button>
         </header>
 
         {view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
-            onLimit={() => setSheet({ type: "upgrade", reason: "limit" })} />
+            onLimit={() => showLimit()} />
         ) : (
         <div className="body">
           <div className="chat-col">
@@ -1239,8 +1386,10 @@ function Main({ session }) {
         <VoiceMode lang={lang} getToken={token} tutor={voice.tutor} greeting={voice.greeting}
           history={(chats.find((c) => c.id === voice.chatId) || (draft.id === voice.chatId ? draft : null))?.messages || []}
           onTurn={voiceTurn} onClose={() => { setVoice(null); loadMe(); }}
-          onLimit={() => setSheet({ type: "upgrade", reason: "limit" })} />
+          onLimit={() => showLimit()} />
       )}
+      {sheet?.type === "install" && <InstallHelp onClose={() => setSheet(null)} />}
+      {sheet?.type === "feedback" && <Feedback token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} />}
       {sheet?.type === "settings" && (

@@ -1,6 +1,6 @@
 // Logo & poster designer: Gemini draws real vector designs (SVG) — sharp, editable, and the text (also Kurdish/Arabic) is exact.
 import { jsonCall } from "../../../lib/gemini";
-import { adminDb, getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
+import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,17 +50,15 @@ export async function POST(req) {
 
     const profile = await getProfile(user);
     const usage = usageOf(profile, await getSettings());
-    if (usage.used >= usage.limit) return Response.json({ error: "limit", ...usage }, { status: 429 });
+    const blocked = await blockedResponse(profile, usage);
+    if (blocked) return blocked;
 
     const ask = (previous.length ? `Earlier requests for this design:\n- ${previous.join("\n- ")}\n\nNew request: ` : "Request: ") + idea;
     const out = await jsonCall(SYSTEM(kind), [{ text: ask }], { maxTokens: 24000 });
     const designs = (out.designs || []).map((d) => ({ name: String(d.name || "").slice(0, 40), svg: clean(d.svg) })).filter((d) => d.svg).slice(0, 3);
     if (!designs.length) throw new Error("ai");
 
-    await adminDb()
-      .from("profiles")
-      .update({ used: usage.used + 1, period_key: usage.periodKey, total_count: (profile.total_count || 0) + 1 })
-      .eq("id", user.id);
+    await chargeUsage(profile, usage);
 
     return Response.json({ caption: String(out.caption || "").slice(0, 300), designs, kind });
   } catch (e) {

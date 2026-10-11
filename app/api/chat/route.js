@@ -1,6 +1,6 @@
 import { serverEnv } from "../../../lib/env";
 import { GoogleGenAI } from "@google/genai";
-import { adminDb, getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
+import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -187,7 +187,8 @@ export async function POST(req) {
     if (file && !usage.pro) return Response.json({ error: "pro_only" }, { status: 403 });
     if (file && file.content.length > MAX_FILE_CHARS) return Response.json({ error: "file_too_big" }, { status: 413 });
     if (project.reduce((n, [, v]) => n + v.length, 0) > MAX_PROJECT_CHARS) return Response.json({ error: "file_too_big" }, { status: 413 });
-    if (usage.used >= usage.limit) return Response.json({ error: "limit", ...usage }, { status: 429 });
+    const blocked = await blockedResponse(profile, usage);
+    if (blocked) return blocked;
 
     // ---- build the conversation ----
     const contents = messages.map((m, i) => {
@@ -236,11 +237,7 @@ VOICE CONVERSATION MODE (most important rules)
     const countUsage = async () => {
       if (counted) return;
       counted = true;
-      const { error } = await adminDb()
-        .from("profiles")
-        .update({ used: usage.used + 1, period_key: usage.periodKey, total_count: (profile.total_count || 0) + 1 })
-        .eq("id", user.id);
-      if (error) console.error("usage update", error.message);
+      await chargeUsage(profile, usage);
     };
 
     const readable = new ReadableStream({

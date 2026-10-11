@@ -1,6 +1,6 @@
 // Language learning: placement test, daily lessons and pronunciation feedback.
 import { jsonCall } from "../../../lib/gemini";
-import { adminDb, getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
+import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +56,8 @@ export async function POST(req) {
 
     const profile = await getProfile(user);
     const usage = usageOf(profile, await getSettings());
-    if (usage.used >= usage.limit) return Response.json({ error: "limit", ...usage }, { status: 429 });
+    const blocked = await blockedResponse(profile, usage);
+    if (blocked) return blocked;
 
     let out;
     if (body.action === "placement") {
@@ -84,10 +85,7 @@ export async function POST(req) {
       return Response.json({ error: "bad_request" }, { status: 400 });
     }
 
-    await adminDb()
-      .from("profiles")
-      .update({ used: usage.used + 1, period_key: usage.periodKey, total_count: (profile.total_count || 0) + 1 })
-      .eq("id", user.id);
+    await chargeUsage(profile, usage);
 
     return Response.json(out);
   } catch (e) {

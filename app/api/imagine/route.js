@@ -1,7 +1,7 @@
 // Image studio: turns the user's idea (any language) into a strong English prompt for the image generator.
 import { GoogleGenAI } from "@google/genai";
 import { serverEnv } from "../../../lib/env";
-import { adminDb, getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
+import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +39,8 @@ export async function POST(req) {
 
     const profile = await getProfile(user);
     const usage = usageOf(profile, await getSettings());
-    if (usage.used >= usage.limit) return Response.json({ error: "limit", ...usage }, { status: 429 });
+    const blocked = await blockedResponse(profile, usage);
+    if (blocked) return blocked;
 
     let out = null;
     let lastErr;
@@ -65,10 +66,7 @@ export async function POST(req) {
       return Response.json({ error: busy ? "busy" : "ai" }, { status: busy ? 503 : 502 });
     }
 
-    await adminDb()
-      .from("profiles")
-      .update({ used: usage.used + 1, period_key: usage.periodKey, total_count: (profile.total_count || 0) + 1 })
-      .eq("id", user.id);
+    await chargeUsage(profile, usage);
 
     const prompt = `${String(out.prompt).slice(0, 900)}, ${STYLES[style]}`;
     return Response.json({ prompt, caption: String(out.caption || "").slice(0, 300) });

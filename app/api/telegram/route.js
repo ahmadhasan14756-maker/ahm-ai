@@ -119,7 +119,7 @@ async function handleAdmin(chatId, cmd, rest) {
     const u = usageOf(p, st);
     return send(
       chatId,
-      `👤 <b>${esc(p.email)}</b>\nپلان: <b>${u.pro ? "$" + priceOf(u.plan) + " تا " + fmtDate(u.planUntil) : "بەخۆڕایی"}</b>\nبەکارهاتوو: ${u.used} / ${u.limit}\nکۆی گشتی: ${p.total_count} پرسیار\nتۆماربوون: ${fmtDate(p.created_at)}`
+      `👤 <b>${esc(p.email)}</b>\nپلان: <b>${u.pro ? "$" + priceOf(u.plan) + " تا " + fmtDate(u.planUntil) : "بەخۆڕایی"}</b>\nبەکارهاتوو: ${u.used} / ${u.limit}\n${u.locked ? "⏳ چاوەڕێ دەکات تا " + new Date(u.lockedUntil).toLocaleString("en-GB", { timeZone: "Asia/Baghdad" }) + "\n" : ""}کۆی گشتی: ${p.total_count} پرسیار\nتۆماربوون: ${fmtDate(p.created_at)}`
     );
   }
 
