@@ -293,7 +293,7 @@ async function prepareImage(file) {
 const RATIOS = { square: [1024, 1024], portrait: [768, 1344], landscape: [1344, 768] };
 function imageUrl(prompt, ratio, seed) {
   const [w, h] = RATIOS[ratio] || RATIOS.square;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&seed=${seed}&nologo=true&model=flux`;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&seed=${seed}&nologo=true&safe=true&model=flux`;
 }
 async function saveImage(url) {
   try {
@@ -976,12 +976,12 @@ function Main({ session }) {
           body: JSON.stringify({ prompt: text, style, kind, previous, lang }),
         });
         data = await res.json().catch(() => ({}));
-        if (res.ok || data.error === "limit" || res.status === 401) break;
+        if (res.ok || data.error === "limit" || data.error === "unsafe" || res.status === 401) break;
         await new Promise((r) => setTimeout(r, 1200 * (tries + 1)));
       }
       if (res.status === 401) { await supabase.auth.signOut(); return; }
       if (data.error === "limit") { put(next.slice(0, -1)); setInput(text); showLimit(); return; }
-      if (!res.ok) { put([...next, { role: "assistant", content: data.error === "busy" ? t("errBusy") : t("errAi"), failed: true }]); return; }
+      if (!res.ok) { put([...next, { role: "assistant", content: data.error === "unsafe" ? t("unsafe") : data.error === "busy" ? t("errBusy") : t("errAi"), failed: data.error !== "unsafe" }]); return; }
       if (kind) {
         put([...next, { role: "assistant", content: data.caption || "", designs: data.designs, kind: data.kind }]);
       } else {

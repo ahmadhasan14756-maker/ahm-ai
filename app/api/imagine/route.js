@@ -1,6 +1,7 @@
 // Image studio: turns the user's idea (any language) into a strong English prompt for the image generator.
 import { GoogleGenAI } from "@google/genai";
 import { serverEnv } from "../../../lib/env";
+import { SAFETY_RULES, GEMINI_SAFETY } from "../../../lib/safety";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 
 export const runtime = "nodejs";
@@ -26,7 +27,9 @@ Return JSON: {"prompt": "...", "caption": "..."}
 - "prompt": one detailed English prompt (50–100 words): main subject first, then setting, composition and camera angle, lighting, colour palette, mood, materials/textures and style details. Keep EVERY detail the user asked for (colours, count, positions, clothing, place). Translate Kurdish/Arabic place and object names correctly (e.g. Erbil citadel, Kurdish traditional clothes). The generator cannot write non-Latin letters: if the user wants Kurdish/Arabic text on the image, leave the text out and keep clean empty space for it. English words must be short and in quotes.
 - If earlier requests are given, the new request CHANGES that image: keep everything from before and apply the change.
 - "caption": one short friendly sentence in the user's language describing what you are drawing.
-Never include violence, nudity or real private people. If the request is not allowed, make a safe, related image instead.`;
+Never include violence, nudity or real private people.
+${SAFETY_RULES}
+If the request is sexual, nude, revealing, obscene or about hacking, return {"blocked": true} and nothing else.`;
 
 export async function POST(req) {
   try {
@@ -50,9 +53,11 @@ export async function POST(req) {
           const r = await gemini().models.generateContent({
             model,
             contents: [{ role: "user", parts: [{ text: `Style: ${STYLES[style]}\n${previous.length ? "Earlier requests for this image:\n- " + previous.join("\n- ") + "\n" : ""}Request: ${idea}` }] }],
-            config: { systemInstruction: SYSTEM, responseMimeType: "application/json", ...(thinking ? { thinkingConfig: thinking } : {}) },
+            config: { systemInstruction: SYSTEM, safetySettings: GEMINI_SAFETY, responseMimeType: "application/json", ...(thinking ? { thinkingConfig: thinking } : {}) },
           });
+          if (/SAFETY|PROHIBITED|BLOCKLIST/i.test(String(r.promptFeedback?.blockReason || r.candidates?.[0]?.finishReason || ""))) return Response.json({ error: "unsafe" }, { status: 400 });
           const j = JSON.parse(r.text || "{}");
+          if (j.blocked) return Response.json({ error: "unsafe" }, { status: 400 });
           if (j.prompt) { out = j; break; }
         } catch (e) {
           lastErr = e;

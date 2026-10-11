@@ -63,6 +63,7 @@ export async function POST(req) {
     return Response.json({ caption: String(out.caption || "").slice(0, 300), designs, kind });
   } catch (e) {
     console.error("design", e?.message);
+    if (e?.message === "unsafe") return Response.json({ error: "unsafe" }, { status: 400 });
     const busy = e?.message === "busy";
     return Response.json({ error: busy ? "busy" : "ai" }, { status: busy ? 503 : 502 });
   }

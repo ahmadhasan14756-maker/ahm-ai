@@ -90,6 +90,7 @@ export async function POST(req) {
     return Response.json(out);
   } catch (e) {
     console.error("learn", e?.message);
+    if (e?.message === "unsafe") return Response.json({ error: "unsafe" }, { status: 400 });
     const busy = e?.message === "busy";
     return Response.json({ error: busy ? "busy" : "ai" }, { status: busy ? 503 : 502 });
   }

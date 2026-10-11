@@ -1,6 +1,7 @@
 import { serverEnv } from "../../../lib/env";
 import { GoogleGenAI } from "@google/genai";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
+import { SAFETY_RULES, GEMINI_SAFETY, REFUSAL, isSafetyStop } from "../../../lib/safety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,8 +47,7 @@ PREDICTIONS
 IDENTITY
 - Your name is AHM AI. If asked which company or model is behind you, say you are AHM AI, developed by the AHM team, and that you cannot share technical details about the underlying technology. Never claim to be human.
 
-SAFETY
-- Refuse clearly harmful requests (weapons, hacking others, self-harm instructions, illegal drugs) briefly and kindly, and offer a safe alternative.`;
+${SAFETY_RULES}`;
 
 const FILE_PROMPT = `
 The user attached a file. Read it fully. Explain the problems you find in the user's language.
@@ -112,7 +112,7 @@ const thinkingOk = new Map();
   - unsupported setting → simpler setting
   - an error before any text was sent → start again quietly
 */
-async function* answer(models, contents, baseConfig, useSearch) {
+async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb) {
   let lastErr = null;
   let sentAny = false;
   for (const model of models) {
@@ -127,7 +127,9 @@ async function* answer(models, contents, baseConfig, useSearch) {
         const stream = await gemini().models.generateContentStream({ model, contents, config });
         thinkingOk.set(model, level);
         const sources = new Map();
+        let stopped = false;
         for await (const chunk of stream) {
+          if (isSafetyStop(chunk)) stopped = true;
           const text = chunk.text;
           if (text) { sentAny = true; yield text; }
           const g = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
@@ -136,12 +138,14 @@ async function* answer(models, contents, baseConfig, useSearch) {
         if (sentAny && sources.size) {
           yield "\n\n---\n" + [...sources].slice(0, 6).map(([u, t], i) => `${i + 1}. [${t.replace(/[\[\]]/g, "")}](${u})`).join("\n");
         }
+        if (stopped) { yield (sentAny ? "\n\n" : "") + refusal; return; } // blocked by the content filter
         if (sentAny) return;
         lastErr = new Error("empty answer");
         break; // empty: try the next model
       } catch (e) {
         lastErr = e;
         console.error("gemini", model, level, errText(e));
+        if (/SAFETY|PROHIBITED_CONTENT|BLOCKLIST/i.test(errText(e))) { yield (sentAny ? "\n\n" : "") + refusal; return; }
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
         if (isRateLimit(e) || isModelMissing(e)) break;
         if (isTransient(e) && transientTries < 2) { transientTries++; await sleep(700 * transientTries); continue; }
@@ -229,6 +233,7 @@ VOICE CONVERSATION MODE (most important rules)
     const baseConfig = {
       systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + TUTOR_PROMPT + VOICE_PROMPT,
       maxOutputTokens: file || build ? 32768 : 8192,
+      safetySettings: GEMINI_SAFETY,
     };
     // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).
     const useSearch = !build && usage.pro && serverEnv("ENABLE_SEARCH") === "1";
@@ -244,7 +249,7 @@ VOICE CONVERSATION MODE (most important rules)
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          for await (const piece of answer(models, contents, baseConfig, useSearch)) {
+          for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang])) {
             if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
             controller.enqueue(encoder.encode(piece));
           }
