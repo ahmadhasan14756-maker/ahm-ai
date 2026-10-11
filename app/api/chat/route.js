@@ -5,6 +5,8 @@ import { adminDb, getUser, getProfile, usageOf } from "../../../lib/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+// Run next to the database (Supabase is in Frankfurt) so each step is faster.
+export const preferredRegion = "fra1";
 
 let ai;
 const gemini = () => (ai ||= new GoogleGenAI({ apiKey: serverEnv("GEMINI_API_KEY") }));
@@ -32,6 +34,9 @@ CODE
 - Put code in fenced code blocks with a language tag (e.g. \`\`\`python).
 - When fixing a bug: explain the cause in one or two sentences, then give the corrected code.
 - For a large project, give the file structure first, then each file.
+
+IMAGES
+- When the user sends images, look at them carefully: describe them, read any text in them (including Kurdish and Arabic), explain screenshots, solve problems shown in photos, and find bugs in screenshots of code or errors.
 
 PREDICTIONS
 - You cannot see the future. For predictions (sports, prices, exchange rates, markets, elections) give a careful, reasoned analysis: the main factors, the most likely outcome, rough probabilities, and clearly say it can be wrong. Never present a guess as certain. Do not give personal financial or betting advice.
@@ -78,12 +83,20 @@ const isModelMissing = (e) => /404|NOT_FOUND|not found|not supported/i.test(Stri
 const isBadConfig = (e) => /400|INVALID_ARGUMENT|thinking/i.test(String(e?.status || "") + errText(e));
 
 // Start a stream; fall back to other models / plain config if needed. Returns { stream } or throws.
+// Remember which "thinking" setting each model accepts, so later questions skip failed tries.
+const THINKING = [{ thinkingLevel: "minimal" }, { thinkingLevel: "low" }, null];
+const thinkingOk = new Map();
+
 async function startStream(models, contents, config) {
   let lastErr;
   for (const model of models) {
-    for (const cfg of [{ ...config, thinkingConfig: { thinkingLevel: "low" } }, config]) {
+    const start = thinkingOk.get(model) ?? 0;
+    for (let i = start; i < THINKING.length; i++) {
+      const cfg = THINKING[i] ? { ...config, thinkingConfig: THINKING[i] } : config;
       try {
-        return await gemini().models.generateContentStream({ model, contents, config: cfg });
+        const stream = await gemini().models.generateContentStream({ model, contents, config: cfg });
+        thinkingOk.set(model, i);
+        return stream;
       } catch (e) {
         lastErr = e;
         console.error("gemini", model, errText(e));
@@ -98,15 +111,9 @@ async function startStream(models, contents, config) {
 
 export async function POST(req) {
   try {
-    const user = await getUser(req);
+    const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
     if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-
-    let body;
-    try {
-      body = await req.json();
-    } catch {
-      return Response.json({ error: "bad_request" }, { status: 400 });
-    }
+    if (!body) return Response.json({ error: "bad_request" }, { status: 400 });
 
     const messages = (Array.isArray(body.messages) ? body.messages : [])
       .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
@@ -122,6 +129,10 @@ export async function POST(req) {
       build && body.project && typeof body.project === "object"
         ? Object.entries(body.project).filter(([k, v]) => typeof k === "string" && typeof v === "string")
         : [];
+
+    const images = (Array.isArray(body.images) ? body.images : [])
+      .filter((im) => im && /^image\/(jpeg|png|webp|heic|heif|gif)$/.test(im.mimeType) && typeof im.data === "string" && im.data.length < 3_500_000)
+      .slice(0, 4);
 
     // ---- usage limits ----
     const profile = await getProfile(user);
@@ -142,7 +153,9 @@ export async function POST(req) {
         const files = project.map(([k, v]) => `\`\`\`file:${k}\n${v}\n\`\`\``).join("\n\n");
         text = `Current project files:\n\n${files}\n\nRequest: ${text}`;
       }
-      return { role: m.role === "assistant" ? "model" : "user", parts: [{ text }] };
+      const parts = [{ text }];
+      if (last && images.length) parts.unshift(...images.map((im) => ({ inlineData: { mimeType: im.mimeType, data: im.data } })));
+      return { role: m.role === "assistant" ? "model" : "user", parts };
     });
 
     const preferred = usage.pro

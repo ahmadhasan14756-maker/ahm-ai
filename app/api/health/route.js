@@ -1,5 +1,4 @@
 // Diagnostic page: /api/health — shows which parts work (never shows the keys themselves).
-import { GoogleGenAI } from "@google/genai";
 import { adminDb } from "../../../lib/server";
 import { serverEnv, SUPABASE_URL, SUPABASE_ANON_KEY } from "../../../lib/env";
 
@@ -22,14 +21,6 @@ export async function GET() {
     out.database = error ? "ERROR: " + error.message : `ok (${count} users)`;
   } catch (e) {
     out.database = "ERROR: " + e.message;
-  }
-
-  try {
-    const ai = new GoogleGenAI({ apiKey: serverEnv("GEMINI_API_KEY") });
-    const r = await ai.models.generateContent({ model: out.model, contents: "Reply with the word OK" });
-    out.gemini = "ok: " + String(r.text || "").slice(0, 20);
-  } catch (e) {
-    out.gemini = "ERROR: " + String(e?.message || e).slice(0, 300);
   }
 
   return Response.json(out, { headers: { "Cache-Control": "no-store" } });

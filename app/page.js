@@ -203,6 +203,34 @@ function downloadText(name, text) {
 }
 const fixedName = (n) => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(0, i) + "-fixed" + n.slice(i) : n + "-fixed"; };
 
+/* ---------------- Images ---------------- */
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image")); };
+    img.src = url;
+  });
+}
+function drawScaled(img, max, quality) {
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", quality);
+}
+// Shrinks a photo on the phone before sending: fast to upload, still sharp enough to read text.
+async function prepareImage(file) {
+  const img = await loadImage(file);
+  const full = drawScaled(img, 1600, 0.85);
+  return { mimeType: "image/jpeg", data: full.split(",")[1], thumb: drawScaled(img, 240, 0.7) };
+}
+
 /* ---------------- Sheets ---------------- */
 function Sheet({ label, onClose, children }) {
   return (
@@ -379,6 +407,10 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
 }
 
 /* ---------------- Main app ---------------- */
+function greeting(t) {
+  const h = new Date().getHours();
+  return h < 12 ? t("greetMorning") : h < 18 ? t("greetDay") : t("greetEvening");
+}
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const blank = (mode) => ({ id: newId(), mode, title: "", messages: [], project: {}, updated: Date.now() });
 
@@ -395,6 +427,7 @@ function Main({ session }) {
   const [me, setMe] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [file, setFile] = useState(null);
+  const [images, setImages] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const bottom = useRef(null);
@@ -440,7 +473,7 @@ function Main({ session }) {
   useEffect(() => {
     if (!ready) return;
     try {
-      const slim = chats.slice(0, 60).map((c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }) => m).slice(-80) }));
+      const slim = chats.slice(0, 60).map((c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => (i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) }));
       localStorage.setItem(storeKey, JSON.stringify(slim));
     } catch {}
   }, [chats, ready]);
@@ -486,10 +519,31 @@ function Main({ session }) {
     if (id === activeId) startNew(mode);
   }
 
+  async function addImages(list) {
+    const room = 4 - images.length;
+    if (list.length > room) alert(t("tooManyImages"));
+    for (const f of list.slice(0, Math.max(0, room))) {
+      try {
+        const im = await prepareImage(f);
+        setImages((cur) => (cur.length < 4 ? [...cur, im] : cur));
+      } catch {
+        alert(t("imageFail"));
+      }
+    }
+  }
+
+  function onPaste(e) {
+    const imgs = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+    if (imgs.length) { e.preventDefault(); addImages(imgs); }
+  }
+
   function pickFile(e) {
-    const f = e.target.files?.[0];
+    const all = [...(e.target.files || [])];
     e.target.value = "";
-    if (!f) return;
+    if (!all.length) return;
+    const imgs = all.filter((f) => f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
+    if (imgs.length) { addImages(imgs); return; }
+    const f = all[0];
     if (!me?.pro) { setSheet({ type: "upgrade", reason: "pro_only" }); return; }
     if (f.size > MAX_FILE_BYTES) { alert(t("fileBig")); return; }
     const r = new FileReader();
@@ -498,18 +552,20 @@ function Main({ session }) {
   }
 
   async function send(preset, baseMessages) {
-    const text = (preset ?? input).trim() || (file ? t("fixFile") : "");
+    const sentImages = mode === "chat" ? images : [];
+    const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
     const id = active.id;
     const m = mode;
     const sentFile = m === "chat" ? file : null;
     const base = project;
-    const next = [...(baseMessages || messages), { role: "user", content: text, fileName: sentFile?.name }];
+    const next = [...(baseMessages || messages), { role: "user", content: text, fileName: sentFile?.name, thumbs: sentImages.map((im) => im.thumb) }];
     const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, messages: msgs, title: c.title || text.slice(0, 60) }));
     put([...next, { role: "assistant", content: "" }]);
     setActiveId(id);
     setInput("");
     setFile(null);
+    setImages([]);
     if (ta.current) ta.current.style.height = "auto";
     setBusy(true);
     if (m === "build") setShowPreview(false);
@@ -526,6 +582,7 @@ function Main({ session }) {
           lang,
           messages: next.map(({ role, content }) => ({ role, content })),
           file: sentFile || undefined,
+          images: sentImages.length ? sentImages.map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
           project: m === "build" && Object.keys(base).length ? base : undefined,
         }),
       });
@@ -536,6 +593,7 @@ function Main({ session }) {
           put(next.slice(0, -1));
           setInput(text);
           if (sentFile) setFile(sentFile);
+          if (sentImages.length) setImages(sentImages);
           setSheet({ type: "upgrade", reason: err.error });
           return;
         }
@@ -579,6 +637,7 @@ function Main({ session }) {
     send(messages[idx].content, messages.slice(0, idx));
   }
 
+  const name = (session.user.email || "").split("@")[0].replace(/[._\d]+/g, " ").trim().split(" ")[0].replace(/^./, (c) => c.toUpperCase());
   const left = me ? Math.max(0, me.limit - me.used) : null;
   const pct = me ? Math.min(100, (me.used / me.limit) * 100) : 0;
   const hasFiles = Object.keys(project).length > 0;
@@ -623,8 +682,12 @@ function Main({ session }) {
               {messages.length === 0 && (
                 <div className="empty">
                   <img src="/icon-192.png" alt="" aria-hidden="true" className="empty-logo" />
-                  <h2>{mode === "build" ? t("buildQ") : t("helpQ")}</h2>
-                  <p className="muted">{mode === "build" ? t("buildSub") : t("helpSub")}</p>
+                  {mode === "chat" ? (
+                    <h2 className="greet">{greeting(t)}{name ? (lang === "en" ? ", " : "، ") + name : ""}</h2>
+                  ) : (
+                    <h2 className="greet">{t("buildQ")}</h2>
+                  )}
+                  <p className="muted">{mode === "build" ? t("buildSub") : t("helpQ")}</p>
                   <div className="chips">
                     {suggestions.map((s) => <button key={s} onClick={() => send(s)}>{s}</button>)}
                   </div>
@@ -633,6 +696,9 @@ function Main({ session }) {
               {messages.map((m, i) => (
                 <div key={i} className={"row " + m.role}>
                   <div className={"bubble" + (m.failed ? " failed" : "")} dir={isRTL(m.content) ? "rtl" : "ltr"}>
+                    {m.thumbs?.length > 0 && (
+                      <div className="msg-imgs">{m.thumbs.map((src, k) => <img key={k} src={src} alt="" />)}</div>
+                    )}
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
                     {m.role === "assistant" ? (
                       m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
@@ -659,6 +725,16 @@ function Main({ session }) {
                   <Svg d={Icon.phone} size={18} /> {t("preview")}
                 </button>
               )}
+              {images.length > 0 && (
+                <div className="img-tray">
+                  {images.map((im, k) => (
+                    <div key={k} className="img-chip">
+                      <img src={im.thumb} alt="" />
+                      <button aria-label={t("removeImage")} onClick={() => setImages((l) => l.filter((_, j) => j !== k))}><Svg d={Icon.close} size={13} w={2.6} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
               {file && (
                 <div className="attached" dir="ltr">
                   📎 {file.name} · {file.content.split("\n").length} {t("lines")}
@@ -668,22 +744,24 @@ function Main({ session }) {
               <div className="composer">
                 {mode === "chat" && (
                   <>
-                    <input ref={fileInput} type="file" hidden onChange={pickFile}
-                      accept=".txt,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.php,.rb,.swift,.kt,.dart,.html,.css,.scss,.json,.xml,.yml,.yaml,.sql,.sh,.md,.vue,.svelte,text/*" />
-                    <button className="attach" aria-label={t("attach")} title={t("attach")} onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /></button>
+                    <input ref={fileInput} type="file" hidden multiple onChange={pickFile}
+                      accept="image/*,.heic,.txt,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.php,.rb,.swift,.kt,.dart,.html,.css,.scss,.json,.xml,.yml,.yaml,.sql,.sh,.md,.vue,.svelte,text/*" />
+                    <button className="attach" aria-label={t("attachImage")} title={t("attachImage")} onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /></button>
                   </>
                 )}
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
                   placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
+                  onPaste={onPaste}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 700) { e.preventDefault(); send(); } }} />
                 {busy ? (
                   <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
                 ) : (
-                  <button className="send" aria-label={t("send")} onClick={() => send()} disabled={!input.trim() && !file}><Svg d={Icon.up} size={18} w={2.4} /></button>
+                  <button className="send" aria-label={t("send")} onClick={() => send()} disabled={!input.trim() && !file && !images.length}><Svg d={Icon.up} size={18} w={2.4} /></button>
                 )}
               </div>
+              <p className="foot-note">{t("footNote")}</p>
             </footer>
           </div>
 
