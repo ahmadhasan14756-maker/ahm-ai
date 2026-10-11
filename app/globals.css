@@ -402,3 +402,9 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .google-btn:active { transform: translateY(1px); }
 .or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 18px 0 14px; }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-inline-end: 84px; }
+.pw-eye { position: absolute; top: 50%; transform: translateY(-50%); inset-inline-end: 6px; border: 0; background: none; color: var(--text-2);
+  font-size: 13px; min-height: 40px; padding: 0 12px; border-radius: 10px; }
+[dir="rtl"] .pw-wrap input { padding-inline-end: 15px; padding-left: 84px; }
+[dir="rtl"] .pw-eye { left: 6px; right: auto; }

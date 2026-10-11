@@ -95,6 +95,7 @@ function Auth() {
   const { t } = useLang();
   const [mode, setMode] = useState("login");
   const [googleOn, setGoogleOn] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   // Show the Google button only when Google sign-in is switched on in Supabase.
   useEffect(() => {
@@ -122,9 +123,15 @@ function Auth() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+        const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
         if (error) throw error;
-        setMsg(t("checkEmail"));
+        // Email already registered (Supabase hides this): send them to log in instead.
+        if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setMode("login");
+          setMsg(t("errExists"));
+          return;
+        }
+        if (!data?.session) setMsg(t("checkEmail")); // with confirmation off they are signed in straight away
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
         if (error) throw error;
@@ -134,7 +141,7 @@ function Auth() {
       const m = err.message || "";
       if (m.includes("Invalid login")) setMsg(t("errLogin"));
       else if (m.includes("Email not confirmed")) setMsg(t("errConfirm"));
-      else if (m.includes("already registered")) setMsg(t("errExists"));
+      else if (m.includes("already registered")) { setMode("login"); setMsg(t("errExists")); }
       else if (m.includes("at least") || m.includes("weak")) setMsg(t("errWeak"));
       else if (/load failed|failed to fetch|network/i.test(m)) setMsg(t("errNetwork"));
       else setMsg(t("error") + ": " + m);
@@ -166,9 +173,14 @@ function Auth() {
           {mode !== "reset" && (
             <label className="field">
               <span>{t("password")}</span>
-              <input type="password" dir="ltr" value={password}
+              <div className="pw-wrap">
+              <input type={showPw ? "text" : "password"} dir="ltr" value={password}
                 onChange={(e) => setPassword(e.target.value)} required minLength={6}
                 autoComplete={mode === "login" ? "current-password" : "new-password"} />
+              <button type="button" className="pw-eye" aria-label={showPw ? t("hidePw") : t("showPw")} onClick={() => setShowPw(!showPw)}>
+                {showPw ? t("hidePw") : t("showPw")}
+              </button>
+              </div>
             </label>
           )}
           <button type="submit" className="gold-btn" disabled={loading}>{loading ? "..." : t(mode)}</button>
