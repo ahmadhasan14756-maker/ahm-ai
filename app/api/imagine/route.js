@@ -1,7 +1,7 @@
 // Image studio: turns the user's idea (any language) into a strong English prompt for the image generator.
 import { GoogleGenAI } from "@google/genai";
 import { serverEnv } from "../../../lib/env";
-import { adminDb, getUser, getProfile, usageOf } from "../../../lib/server";
+import { adminDb, getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ export async function POST(req) {
     const previous = (Array.isArray(body?.previous) ? body.previous : []).map((x) => String(x).slice(0, 400)).slice(-5);
 
     const profile = await getProfile(user);
-    const usage = usageOf(profile);
+    const usage = usageOf(profile, await getSettings());
     if (usage.used >= usage.limit) return Response.json({ error: "limit", ...usage }, { status: 429 });
 
     let out = null;

@@ -1,7 +1,7 @@
 import { serverEnv } from "../../../lib/env";
 import { webhookSecret } from "../../../lib/telegram";
-import { adminDb, isPaidActive, usageOf } from "../../../lib/server";
-import { PLANS, PAID_PLANS, planByPrice } from "../../../lib/plans";
+import { adminDb, isPaidActive, usageOf, getSettings } from "../../../lib/server";
+import { planById, planByPrice } from "../../../lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,14 +44,14 @@ const ADMIN_KEYBOARD = {
 
 const fmtDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "-");
 
-const PLAN_LINES = () => PAID_PLANS.map((p) => `• <b>$${p.price}</b> ← ${p.limit} پرسیار بۆ یەک مانگ`).join("\n");
+const PLAN_LINES = (st) => st.paid.map((p) => `• <b>${esc(p.name)}</b> — <b>$${p.price}</b> ← ${p.limit} پرسیار بۆ ${p.days} ڕۆژ`).join("\n");
 
-const WELCOME = () => `سڵاو! 👋 بەخێربێیت بۆ <b>AHM AI</b>
+const WELCOME = (st) => `سڵاو! 👋 بەخێربێیت بۆ <b>AHM AI</b>
 
 ⭐ <b>پلانەکانی Pro</b>
-${PLAN_LINES()}
+${PLAN_LINES(st)}
 
-💳 ${esc(process.env.PAYMENT_INFO || "ژمارەی FIB بەم زووانە دادەنرێت.")}
+💳 ${esc(st.payment || process.env.PAYMENT_INFO || "ژمارەی FIB بەم زووانە دادەنرێت.")}
 
 <b>چۆن Pro وەربگریت:</b>
 ١. پارەکە بە FIB بنێرە.
@@ -78,15 +78,17 @@ async function findByEmail(email) {
 async function handleAdmin(chatId, cmd, rest) {
   const [arg1, arg2, arg3] = rest;
   const db = adminDb();
+  const st = await getSettings();
+  const priceOf = (id) => planById(st, id)?.price ?? "?";
 
   if (cmd === "/pro") {
-    const plan = planByPrice(arg2);
+    const plan = planByPrice(st, arg2) || planById(st, arg2);
     if (!arg1 || !EMAIL_RE.test(arg1) || !plan) {
-      return send(chatId, "بەم شێوەیە بنووسە: <code>/pro email 5</code>\n(ژمارەکە نرخی پلانەکەیە: 5 یان 10 یان 25)");
+      return send(chatId, `بەم شێوەیە بنووسە: <code>/pro email 5</code>\n(ژمارەکە نرخی پلانەکەیە: ${st.paid.map((x) => x.price).join(" یان ")})`);
     }
     const found = await findByEmail(arg1);
     if (!found) return send(chatId, `❌ ئەم ئیمەیڵە تۆمار نەکراوە: ${esc(arg1)}\nبەکارهێنەر دەبێت سەرەتا لە ئەپەکەدا خۆی تۆمار بکات.`);
-    const r = await activate(found.id, plan.price);
+    const r = await activate(found.id, plan.id);
     return send(chatId, `✅ <b>${esc(r.p.email)}</b> ← پلانی <b>$${plan.price}</b> (${plan.limit} پرسیار) تا <b>${fmtDate(r.until)}</b>`);
   }
 
@@ -100,10 +102,10 @@ async function handleAdmin(chatId, cmd, rest) {
   if (cmd === "/check") {
     const p = arg1 && (await findByEmail(arg1));
     if (!p) return send(chatId, "❌ نەدۆزرایەوە.");
-    const u = usageOf(p);
+    const u = usageOf(p, st);
     return send(
       chatId,
-      `👤 <b>${esc(p.email)}</b>\nپلان: <b>${u.pro ? "$" + PLANS[u.plan].price + " تا " + fmtDate(u.planUntil) : "بەخۆڕایی"}</b>\nبەکارهاتوو: ${u.used} / ${u.limit}\nکۆی گشتی: ${p.total_count} پرسیار\nتۆماربوون: ${fmtDate(p.created_at)}`
+      `👤 <b>${esc(p.email)}</b>\nپلان: <b>${u.pro ? "$" + priceOf(u.plan) + " تا " + fmtDate(u.planUntil) : "بەخۆڕایی"}</b>\nبەکارهاتوو: ${u.used} / ${u.limit}\nکۆی گشتی: ${p.total_count} پرسیار\nتۆماربوون: ${fmtDate(p.created_at)}`
     );
   }
 
@@ -114,8 +116,8 @@ async function handleAdmin(chatId, cmd, rest) {
       db.from("profiles").select("plan").gt("plan_until", nowIso).neq("plan", "free"),
       db.from("profiles").select("total_count"),
     ]);
-    const byPlan = PAID_PLANS.map((pl) => `$${pl.price}: ${(pros || []).filter((r) => r.plan === pl.id).length}`).join(" · ");
-    const income = (pros || []).reduce((a, r) => a + (PLANS[r.plan]?.price || 0), 0);
+    const byPlan = st.paid.map((pl) => `$${pl.price}: ${(pros || []).filter((r) => r.plan === pl.id).length}`).join(" · ");
+    const income = (pros || []).reduce((a, r) => a + (planById(st, r.plan)?.price || 0), 0);
     const msgs = (all || []).reduce((a, r) => a + (r.total_count || 0), 0);
     return send(
       chatId,
@@ -125,7 +127,7 @@ async function handleAdmin(chatId, cmd, rest) {
 
   if (cmd === "/users") {
     const { data } = await db.from("profiles").select("email,plan,plan_until,total_count").order("created_at", { ascending: false }).limit(20);
-    const lines = (data || []).map((u) => `${isPaidActive(u) ? "⭐$" + PLANS[u.plan].price : "▫️"} ${esc(u.email)} — ${u.total_count}`);
+    const lines = (data || []).map((u) => `${isPaidActive(u) ? "⭐$" + priceOf(u.plan) : "▫️"} ${esc(u.email)} — ${u.total_count}`);
     return send(chatId, `<b>دوایین بەکارهێنەران:</b>\n${lines.join("\n") || "هیچ"}`);
   }
 
@@ -133,13 +135,14 @@ async function handleAdmin(chatId, cmd, rest) {
 }
 
 // Owner taps a button under a Pro request → activate the plan, no typing needed.
-async function activate(profileId, price) {
-  const plan = planByPrice(price);
+async function activate(profileId, planKey) {
+  const st = await getSettings();
+  const plan = planById(st, planKey) || planByPrice(st, planKey);
   const db = adminDb();
   const { data: p } = await db.from("profiles").select("*").eq("id", profileId).maybeSingle();
   if (!p || !plan) return null;
   const now = new Date();
-  const until = new Date(now.getTime() + 30 * 86400000).toISOString();
+  const until = new Date(now.getTime() + plan.days * 86400000).toISOString();
   await db.from("profiles").update({ plan: plan.id, plan_until: until, used: 0, period_key: "paid:" + now.toISOString() }).eq("id", p.id);
   if (p.telegram_chat_id) {
     await send(p.telegram_chat_id, `🎉 پیرۆزە! هەژمارەکەت (<b>${esc(p.email)}</b>) بوو بە <b>Pro</b>\n${plan.limit} پرسیار تا <b>${fmtDate(until)}</b>.\nئەپەکە دابخە و بیکەرەوە.`);
@@ -199,10 +202,10 @@ export async function POST(req) {
 
     if (c?.cmd === "/start" || c?.cmd === "/help") {
       if (isAdmin) {
-        await send(chatId, WELCOME());
+        await send(chatId, WELCOME(await getSettings()));
         await handleAdmin(chatId, "/help", []);
       } else {
-        await send(chatId, WELCOME());
+        await send(chatId, WELCOME(await getSettings()));
       }
       return Response.json({ ok: true });
     }
@@ -242,7 +245,7 @@ export async function POST(req) {
             text: `💰 <b>داواکاری Pro</b> لە ${who}\nئیمەیڵ: <b>${esc(email)}</b>\n\nبەپێی ئەو پارەیەی هاتووە، دوگمەیەک دابگرە:`,
             reply_markup: {
               inline_keyboard: [
-                PAID_PLANS.map((pl) => ({ text: `✅ $${pl.price}`, callback_data: `p:${p.id}:${pl.price}` })),
+                (await getSettings()).paid.map((pl) => ({ text: `✅ $${pl.price}`, callback_data: `p:${p.id}:${pl.id}` })),
                 [{ text: "❌ ڕەتکردنەوە", callback_data: `x:${chatId}` }],
               ],
             },

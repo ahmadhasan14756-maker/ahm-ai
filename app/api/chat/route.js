@@ -1,6 +1,6 @@
 import { serverEnv } from "../../../lib/env";
 import { GoogleGenAI } from "@google/genai";
-import { adminDb, getUser, getProfile, usageOf } from "../../../lib/server";
+import { adminDb, getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -183,7 +183,7 @@ export async function POST(req) {
 
     // ---- usage limits ----
     const profile = await getProfile(user);
-    const usage = usageOf(profile);
+    const usage = usageOf(profile, await getSettings());
     if (file && !usage.pro) return Response.json({ error: "pro_only" }, { status: 403 });
     if (file && file.content.length > MAX_FILE_CHARS) return Response.json({ error: "file_too_big" }, { status: 413 });
     if (project.reduce((n, [, v]) => n + v.length, 0) > MAX_PROJECT_CHARS) return Response.json({ error: "file_too_big" }, { status: 413 });

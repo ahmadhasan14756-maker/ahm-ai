@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "../lib/supabase";
 import { TELEGRAM_BOT, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/env";
-import { PAID_PLANS } from "../lib/plans";
+import { DEFAULT_SETTINGS } from "../lib/plans";
 import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/builder";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
@@ -430,6 +430,8 @@ function Sheet({ label, onClose, children }) {
 function Upgrade({ reason, me, onClose }) {
   const { t } = useLang();
   const text = { limit: t("upLimit"), pro_only: t("upPro"), info: t("upInfo") }[reason] || "";
+  const plans = me?.plans || DEFAULT_SETTINGS;
+  const best = plans.paid.length >= 3 ? 1 : -1;
   return (
     <Sheet label={t("plans")} onClose={onClose}>
       <h3>{t("plans")} <span className="gold brand-font">AHM AI</span></h3>
@@ -437,18 +439,20 @@ function Upgrade({ reason, me, onClose }) {
       <div className="plans">
         <div className={"plan" + (!me?.pro ? " current" : "")}>
           <div className="plan-price">{t("free")}</div>
-          <div className="plan-limit"><b>30</b> {t("questions")} {t("perMonth")}</div>
+          <div className="plan-limit"><b>{plans.freeLimit}</b> {t("questions")} {t("perMonth")}</div>
           {!me?.pro && <div className="plan-tag">{t("currentPlan")}</div>}
         </div>
-        {PAID_PLANS.map((p) => (
-          <div key={p.id} className={"plan" + (me?.plan === p.id ? " current" : "") + (p.price === 10 ? " best" : "")}>
-            {p.price === 10 && <div className="plan-ribbon">{t("best")}</div>}
-            <div className="plan-price"><span dir="ltr">${p.price}</span><small> {t("perMonth")}</small></div>
+        {plans.paid.map((p, i) => (
+          <div key={p.id} className={"plan" + (me?.plan === p.id ? " current" : "") + (i === best ? " best" : "")}>
+            {i === best && <div className="plan-ribbon">{t("best")}</div>}
+            <div className="plan-name">{p.name}</div>
+            <div className="plan-price"><span dir="ltr">${p.price}</span><small> / {p.days} {t("days")}</small></div>
             <div className="plan-limit"><b>{p.limit}</b> {t("questions")}</div>
             {me?.plan === p.id && <div className="plan-tag">{t("currentPlan")}</div>}
           </div>
         ))}
       </div>
+      {plans.payment && <p className="pay-info" dir="auto">{plans.payment}</p>}
       <ul className="perks"><li>{t("perk1")}</li><li>{t("perk2")}</li></ul>
       {BOT_URL ? <a className="gold-btn" href={BOT_URL} target="_blank" rel="noreferrer">{t("buyTelegram")}</a>
         : <p className="muted">{t("botSoon")}</p>}
@@ -457,7 +461,7 @@ function Upgrade({ reason, me, onClose }) {
   );
 }
 
-function Settings({ session, me, onClose, onPlans }) {
+function Settings({ session, me, onClose, onPlans, onAdmin }) {
   const { t } = useLang();
   const left = me ? Math.max(0, me.limit - me.used) : null;
   return (
@@ -477,9 +481,69 @@ function Settings({ session, me, onClose, onPlans }) {
           <div className="set-val gold">{me.pro ? `⭐ ${me.planName}` : t("free")} · {left} {t("left")}</div>
         </button>
       )}
+      {me?.owner && (
+        <button className="set-row set-btn" onClick={onAdmin}>
+          <div className="set-label">⚙️ {t("managePlans")}</div>
+          <div className="set-val gold">›</div>
+        </button>
+      )}
       <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
         <Svg d={Icon.logout} size={18} /> {t("logout")}
       </button>
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+function PlanEditor({ me, token, onSaved, onClose }) {
+  const { t } = useLang();
+  const [form, setForm] = useState(() => JSON.parse(JSON.stringify(me?.plans || DEFAULT_SETTINGS)));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const setPlan = (i, k, v) => setForm((f) => ({ ...f, paid: f.paid.map((p, j) => (j === i ? { ...p, [k]: v } : p)) }));
+  const addPlan = () => setForm((f) => ({ ...f, paid: [...f.paid, { id: "p" + Date.now().toString(36), name: "Pro", price: 5, limit: 100, days: 30 }] }));
+  const delPlan = (i) => setForm((f) => ({ ...f, paid: f.paid.filter((_, j) => j !== i) }));
+  async function save() {
+    setBusy(true); setMsg("");
+    try {
+      const res = await fetch("/api/admin/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { setMsg("✅ " + t("saved")); onSaved(); }
+      else setMsg(data.error === "no_table" ? "⚠️ " + t("noTable") : "⚠️ " + t("errGeneric"));
+    } catch { setMsg("⚠️ " + t("errGeneric")); }
+    setBusy(false);
+  }
+  return (
+    <Sheet label={t("managePlans")} onClose={onClose}>
+      <h3>⚙️ {t("managePlans")}</h3>
+      <label className="pe-row">
+        <span>{t("freePerMonth")}</span>
+        <input type="number" inputMode="numeric" dir="ltr" value={form.freeLimit} onChange={(e) => setForm({ ...form, freeLimit: e.target.value })} />
+      </label>
+      {form.paid.map((p, i) => (
+        <div key={p.id} className="pe-card">
+          <div className="pe-head">
+            <input className="pe-name" dir="auto" value={p.name} onChange={(e) => setPlan(i, "name", e.target.value)} aria-label={t("planName")} />
+            <button className="side-del" aria-label={t("delete")} onClick={() => delPlan(i)}><Svg d={Icon.trash} size={16} /></button>
+          </div>
+          <div className="pe-grid">
+            <label><span>{t("price")} $</span><input type="number" inputMode="decimal" dir="ltr" value={p.price} onChange={(e) => setPlan(i, "price", e.target.value)} /></label>
+            <label><span>{t("questions")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.limit} onChange={(e) => setPlan(i, "limit", e.target.value)} /></label>
+            <label><span>{t("days")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.days} onChange={(e) => setPlan(i, "days", e.target.value)} /></label>
+          </div>
+        </div>
+      ))}
+      {form.paid.length < 8 && <button className="ghost-btn" onClick={addPlan}><Svg d={Icon.plus} size={16} /> {t("addPlan")}</button>}
+      <label className="pe-row col">
+        <span>{t("payInfo")}</span>
+        <textarea rows={2} dir="auto" placeholder="FIB: 0770 …" value={form.payment} onChange={(e) => setForm({ ...form, payment: e.target.value })} />
+      </label>
+      {msg && <p className="pe-msg">{msg}</p>}
+      <button className="gold-btn" disabled={busy} onClick={save}>{busy ? "…" : t("save")}</button>
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
   );
@@ -1173,9 +1237,10 @@ function Main({ session }) {
           onTurn={voiceTurn} onClose={() => { setVoice(null); loadMe(); }}
           onLimit={() => setSheet({ type: "upgrade", reason: "limit" })} />
       )}
+      {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet(null)} />}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} />}
       {sheet?.type === "settings" && (
-        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} />
+        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onAdmin={() => setSheet({ type: "admin" })} />
       )}
     </div>
   );

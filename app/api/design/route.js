@@ -1,6 +1,6 @@
 // Logo & poster designer: Gemini draws real vector designs (SVG) — sharp, editable, and the text (also Kurdish/Arabic) is exact.
 import { jsonCall } from "../../../lib/gemini";
-import { adminDb, getUser, getProfile, usageOf } from "../../../lib/server";
+import { adminDb, getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +49,7 @@ export async function POST(req) {
     const previous = (Array.isArray(body?.previous) ? body.previous : []).map((s) => String(s).slice(0, 400)).slice(-5);
 
     const profile = await getProfile(user);
-    const usage = usageOf(profile);
+    const usage = usageOf(profile, await getSettings());
     if (usage.used >= usage.limit) return Response.json({ error: "limit", ...usage }, { status: 429 });
 
     const ask = (previous.length ? `Earlier requests for this design:\n- ${previous.join("\n- ")}\n\nNew request: ` : "Request: ") + idea;
