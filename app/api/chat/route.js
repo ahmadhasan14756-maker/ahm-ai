@@ -35,7 +35,9 @@ CODE
 - When fixing a bug: explain the cause in one or two sentences, then give the corrected code.
 - For a large project, give the file structure first, then each file.
 
-IMAGES
+VOICE, FILES AND IMAGES
+- If the user sends a voice message (audio), listen carefully, understand it in whatever language it is spoken (Kurdish Sorani, Arabic or English), and reply in that same language. Do not repeat the transcript unless asked.
+- If the user sends a PDF, read it fully and answer about its content.
 - When the user sends images, look at them carefully: describe them, read any text in them (including Kurdish and Arabic), explain screenshots, solve problems shown in photos, and find bugs in screenshots of code or errors.
 
 PREDICTIONS
@@ -60,53 +62,95 @@ the fixed lines
 Rules: the SEARCH part must match the original file exactly (same spaces), include enough lines to be unique, keep each block small. Never rewrite the whole file.`;
 
 const BUILD_PROMPT = `
-You are in WEBSITE / APP BUILDER mode. The user wants a working website or web app that is shown live inside a phone preview.
-- Write every file as a fenced block whose info string is file:PATH, for example:
-\`\`\`file:index.html
+You are in CODE WORKSPACE mode, like a senior developer working inside VS Code for the user.
+The user's project files are given to you. You create, change and delete files directly in the project.
+
+FILE FORMAT (very important)
+- Write every new or changed file as ONE fenced block whose info string is file:PATH, with the COMPLETE file content:
+\`\`\`file:src/app.py
 ...complete file...
 \`\`\`
-- Use plain HTML, CSS and JavaScript only (no npm, no build step, no TypeScript, no JSX). Libraries only from https://cdnjs.cloudflare.com or https://cdn.jsdelivr.net if really needed.
-- Always have index.html. Put styles in style.css and logic in script.js, linked with relative paths (<link rel="stylesheet" href="style.css">, <script src="script.js"></script>).
-- Mobile-first: it must look great at 360–430px wide and also on desktop. Beautiful, modern, polished design: a clear colour palette, good spacing, readable fonts (Google Fonts allowed), smooth touch targets, subtle animations. Use dir="rtl" for Kurdish or Arabic content.
-- Make it fully working, not a mock-up. Save data with localStorage when useful.
-- When the project already has files, output ONLY the files that change, and always each file COMPLETE (never partial snippets, never "..." placeholders).
-- Before the files write 1–3 short sentences in the user's language about what you built or changed. Do not add other code blocks.`;
+- To delete a file, write an empty block: \`\`\`delete:old/file.js\`\`\` (on its own lines).
+- Use folders when it helps (src/, assets/, css/, js/ ...). Paths use forward slashes, no leading slash.
+- Output ONLY files that change. Never output partial files, "..." or "rest of code unchanged".
+
+WHAT TO BUILD
+- Any language or stack the user asks for: websites (HTML/CSS/JS), Python, Node.js, PHP, Java, C#, Flutter, React, etc.
+- If the user does not name a stack and wants a website or app, use plain HTML + CSS + JavaScript with index.html at the root, style.css and script.js linked by relative paths. This runs instantly in the live phone preview.
+- Mobile-first, beautiful, professional design: clear colour palette, good spacing, readable fonts (Google Fonts allowed), smooth touch targets. Use dir="rtl" for Kurdish or Arabic content. Fully working, not a mock-up; use localStorage when useful.
+- Libraries for web pages only from https://cdnjs.cloudflare.com or https://cdn.jsdelivr.net.
+- ALWAYS create or update README.md written in the user's language with: what the project does, the file structure, and numbered beginner steps to run it on a Windows or Mac computer after downloading the ZIP (which program to install, which folder to open, which command to type, what they should see). For plain HTML projects, explain that double-clicking index.html opens it, and how to put it online for free.
+
+ANSWER SHAPE
+- First write 1–4 short sentences in the user's language: what you built or changed, and the next step.
+- Then the file blocks. No other code blocks.`;
 
 const MAX_MESSAGES = 30;
 const MAX_FILE_CHARS = 1_500_000;
-const MAX_PROJECT_CHARS = 400_000;
+const MAX_PROJECT_CHARS = 600_000;
+const MAX_ATTACH_CHARS = 4_200_000; // Vercel accepts ~4.5 MB per request
 const FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+const ATTACH_TYPES = /^(image\/(jpeg|png|webp|heic|heif|gif)|application\/pdf|audio\/(webm|mp4|mpeg|ogg|wav|aac|x-m4a|m4a))$/;
 
 const errText = (e) => String(e?.message || e || "").slice(0, 400);
-const isRateLimit = (e) => /429|RESOURCE_EXHAUSTED|quota/i.test(String(e?.status || "") + errText(e));
-const isModelMissing = (e) => /404|NOT_FOUND|not found|not supported/i.test(String(e?.status || "") + errText(e));
-const isBadConfig = (e) => /400|INVALID_ARGUMENT|thinking/i.test(String(e?.status || "") + errText(e));
+const errCode = (e) => String(e?.status || e?.code || "") + " " + errText(e);
+const isRateLimit = (e) => /429|RESOURCE_EXHAUSTED|quota/i.test(errCode(e));
+const isModelMissing = (e) => /404|NOT_FOUND|not found|not supported/i.test(errCode(e));
+const isBadConfig = (e) => /400|INVALID_ARGUMENT|thinking|tool/i.test(errCode(e));
+const isTransient = (e) => /500|502|503|504|UNAVAILABLE|INTERNAL|overloaded|timeout|timed out|ECONNRESET|fetch failed|socket|network/i.test(errCode(e));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Start a stream; fall back to other models / plain config if needed. Returns { stream } or throws.
 // Remember which "thinking" setting each model accepts, so later questions skip failed tries.
 const THINKING = [{ thinkingLevel: "minimal" }, { thinkingLevel: "low" }, null];
 const thinkingOk = new Map();
 
-async function startStream(models, contents, config) {
-  let lastErr;
+/*
+  Streams the answer as text pieces. Tries hard before giving up:
+  - busy / quota  → next model (each model has its own free quota)
+  - temporary error → wait a moment and try the same model again (2×), then the next model
+  - unsupported setting → simpler setting
+  - an error before any text was sent → start again quietly
+*/
+async function* answer(models, contents, baseConfig, useSearch) {
+  let lastErr = null;
+  let sentAny = false;
   for (const model of models) {
-    const start = thinkingOk.get(model) ?? 0;
-    for (let i = start; i < THINKING.length; i++) {
-      const cfg = THINKING[i] ? { ...config, thinkingConfig: THINKING[i] } : config;
+    let level = thinkingOk.get(model) ?? 0;
+    let search = useSearch;
+    let transientTries = 0;
+    while (level < THINKING.length) {
+      const config = { ...baseConfig };
+      if (THINKING[level]) config.thinkingConfig = THINKING[level];
+      if (search) config.tools = [{ googleSearch: {} }];
       try {
-        const stream = await gemini().models.generateContentStream({ model, contents, config: cfg });
-        thinkingOk.set(model, i);
-        return stream;
+        const stream = await gemini().models.generateContentStream({ model, contents, config });
+        thinkingOk.set(model, level);
+        const sources = new Map();
+        for await (const chunk of stream) {
+          const text = chunk.text;
+          if (text) { sentAny = true; yield text; }
+          const g = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+          for (const c of g) if (c.web?.uri) sources.set(c.web.uri, c.web.title || c.web.uri);
+        }
+        if (sentAny && sources.size) {
+          yield "\n\n---\n" + [...sources].slice(0, 6).map(([u, t], i) => `${i + 1}. [${t.replace(/[\[\]]/g, "")}](${u})`).join("\n");
+        }
+        if (sentAny) return;
+        lastErr = new Error("empty answer");
+        break; // empty: try the next model
       } catch (e) {
         lastErr = e;
-        console.error("gemini", model, errText(e));
-        if (isRateLimit(e)) throw e;
-        if (isModelMissing(e)) break; // try next model
-        if (!isBadConfig(e)) throw e; // unknown error: stop
+        console.error("gemini", model, level, errText(e));
+        if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
+        if (isRateLimit(e) || isModelMissing(e)) break;
+        if (isTransient(e) && transientTries < 2) { transientTries++; await sleep(700 * transientTries); continue; }
+        if (search && isBadConfig(e)) { search = false; continue; }
+        if (isBadConfig(e)) { level++; continue; }
+        break;
       }
     }
   }
-  throw lastErr;
+  yield isRateLimit(lastErr) ? "\u0000ERR:busy" : "\u0000ERR:ai";
 }
 
 export async function POST(req) {
@@ -130,9 +174,11 @@ export async function POST(req) {
         ? Object.entries(body.project).filter(([k, v]) => typeof k === "string" && typeof v === "string")
         : [];
 
-    const images = (Array.isArray(body.images) ? body.images : [])
-      .filter((im) => im && /^image\/(jpeg|png|webp|heic|heif|gif)$/.test(im.mimeType) && typeof im.data === "string" && im.data.length < 3_500_000)
-      .slice(0, 4);
+    let total = 0;
+    const attachments = (Array.isArray(body.images) ? body.images : [])
+      .filter((a) => a && ATTACH_TYPES.test(a.mimeType) && typeof a.data === "string")
+      .filter((a) => (total += a.data.length) < MAX_ATTACH_CHARS)
+      .slice(0, 6);
 
     // ---- usage limits ----
     const profile = await getProfile(user);
@@ -149,49 +195,46 @@ export async function POST(req) {
       if (last && file) {
         text = `File name: ${String(file.name || "file").slice(0, 200)}\n\`\`\`\n${file.content}\n\`\`\`\n\n${text}`;
       }
-      if (last && project.length) {
-        const files = project.map(([k, v]) => `\`\`\`file:${k}\n${v}\n\`\`\``).join("\n\n");
+      if (last && build) {
+        const files = project.length ? project.map(([k, v]) => `\`\`\`file:${k}\n${v}\n\`\`\``).join("\n\n") : "(empty project)";
         text = `Current project files:\n\n${files}\n\nRequest: ${text}`;
       }
       const parts = [{ text }];
-      if (last && images.length) parts.unshift(...images.map((im) => ({ inlineData: { mimeType: im.mimeType, data: im.data } })));
+      if (last && attachments.length) parts.unshift(...attachments.map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } })));
       return { role: m.role === "assistant" ? "model" : "user", parts };
     });
 
-    const preferred = usage.pro
-      ? serverEnv("GEMINI_MODEL_PRO") || serverEnv("GEMINI_MODEL")
-      : serverEnv("GEMINI_MODEL");
+    const preferred = usage.pro ? serverEnv("GEMINI_MODEL_PRO") || serverEnv("GEMINI_MODEL") : serverEnv("GEMINI_MODEL");
     const models = [...new Set([preferred, ...FALLBACK_MODELS].filter(Boolean))];
-    const config = {
+    const baseConfig = {
       systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : ""),
       maxOutputTokens: file || build ? 32768 : 8192,
     };
-
-    // Start the AI before answering, so a failure becomes a clear error (and is not counted).
-    let stream;
-    try {
-      stream = await startStream(models, contents, config);
-    } catch (e) {
-      if (isRateLimit(e)) return Response.json({ error: "busy" }, { status: 503 });
-      return Response.json({ error: "ai", detail: errText(e) }, { status: 502 });
-    }
-
-    const { error: upErr } = await adminDb()
-      .from("profiles")
-      .update({ used: usage.used + 1, period_key: usage.periodKey, total_count: (profile.total_count || 0) + 1 })
-      .eq("id", user.id);
-    if (upErr) console.error("usage update", upErr.message);
+    // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).
+    const useSearch = !build && usage.pro && serverEnv("ENABLE_SEARCH") === "1";
 
     const encoder = new TextEncoder();
+    let counted = false;
+    const countUsage = async () => {
+      if (counted) return;
+      counted = true;
+      const { error } = await adminDb()
+        .from("profiles")
+        .update({ used: usage.used + 1, period_key: usage.periodKey, total_count: (profile.total_count || 0) + 1 })
+        .eq("id", user.id);
+      if (error) console.error("usage update", error.message);
+    };
+
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of stream) {
-            if (chunk.text) controller.enqueue(encoder.encode(chunk.text));
+          for await (const piece of answer(models, contents, baseConfig, useSearch)) {
+            if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
+            controller.enqueue(encoder.encode(piece));
           }
         } catch (e) {
           console.error(e);
-          controller.enqueue(encoder.encode(isRateLimit(e) ? "\n\n⚠️ busy" : "\n\n⚠️ error"));
+          controller.enqueue(encoder.encode("\u0000ERR:ai"));
         } finally {
           controller.close();
         }

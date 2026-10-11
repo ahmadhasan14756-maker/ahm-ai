@@ -5,8 +5,9 @@ import remarkGfm from "remark-gfm";
 import { supabase } from "../lib/supabase";
 import { TELEGRAM_BOT } from "../lib/env";
 import { PAID_PLANS } from "../lib/plans";
-import { parseFiles, buildPreview, downloadZip } from "../lib/builder";
+import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/builder";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
+import Workspace from "../components/Workspace";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
 const MAX_FILE_BYTES = 1_500_000;
@@ -156,6 +157,10 @@ function CodeBlock({ className, children }) {
   const lang = (className || "").replace("language-", "");
   if (!className && !text.includes("\n")) return <code className="inline">{children}</code>;
 
+  if (lang.startsWith("delete:")) {
+    return <div className="file-chip del" dir="ltr"><div className="del-row">🗑 <span>{lang.slice(7)}</span></div></div>;
+  }
+
   if (lang.startsWith("file:")) {
     return (
       <div className="file-chip" dir="ltr">
@@ -301,66 +306,6 @@ function Settings({ session, me, onClose, onPlans }) {
   );
 }
 
-/* ---------------- Live phone preview ---------------- */
-function Preview({ files, busy, onClose }) {
-  const { t } = useLang();
-  const [device, setDevice] = useState("iphone");
-  const [view, setView] = useState("app");
-  const [openFile, setOpenFile] = useState(null);
-  const [nonce, setNonce] = useState(0);
-  const names = Object.keys(files);
-  const html = useMemo(() => buildPreview(files), [files]);
-
-  useEffect(() => { try { const d = localStorage.getItem("ahm-device"); if (d) setDevice(d); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem("ahm-device", device); } catch {} }, [device]);
-  useEffect(() => { if (!openFile || !files[openFile]) setOpenFile(names[0] || null); }, [files]);
-
-  return (
-    <section className="preview" aria-label={t("preview")}>
-      <div className="pv-bar">
-        <div className="seg" role="tablist">
-          <button role="tab" aria-selected={device === "iphone"} className={device === "iphone" ? "on" : ""} onClick={() => setDevice("iphone")}>iPhone</button>
-          <button role="tab" aria-selected={device === "android"} className={device === "android" ? "on" : ""} onClick={() => setDevice("android")}>Android</button>
-        </div>
-        <div className="pv-actions">
-          <button className="icon-btn sm" aria-label={t("code")} title={t("code")} onClick={() => setView(view === "app" ? "code" : "app")}>
-            <Svg d={view === "app" ? Icon.code : Icon.phone} size={18} />
-          </button>
-          <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={Icon.refresh} size={18} /></button>
-          <button className="icon-btn sm gold" aria-label={t("zip")} title={t("zip")} disabled={!names.length} onClick={() => downloadZip(files)}><Svg d={Icon.zip} size={18} /></button>
-          <button className="icon-btn sm pv-close" aria-label={t("close")} onClick={onClose}><Svg d={Icon.close} size={18} /></button>
-        </div>
-      </div>
-
-      {view === "app" ? (
-        <div className="stage">
-          <div className={"device " + device}>
-            <div className="screen">
-              {device === "iphone" ? <div className="island" aria-hidden="true" /> : <div className="punch" aria-hidden="true" />}
-              {html ? (
-                <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
-              ) : (
-                <div className="screen-empty">
-                  <img src="/icon-192.png" alt="" aria-hidden="true" />
-                  <p>{busy ? t("building") : t("previewEmpty")}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="codeview" dir="ltr">
-          <div className="tabs">
-            {names.map((n) => <button key={n} className={openFile === n ? "on" : ""} onClick={() => setOpenFile(n)}>{n}</button>)}
-          </div>
-          <pre><code>{openFile ? files[openFile] : ""}</code></pre>
-        </div>
-      )}
-      <p className="pv-foot">{names.length ? `${names.length} ${t("files")}` : t("noFiles")}</p>
-    </section>
-  );
-}
-
 /* ---------------- Sidebar (chat history) ---------------- */
 function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me }) {
   const { t } = useLang();
@@ -492,6 +437,12 @@ function Main({ session }) {
     });
   }
 
+  // Edits made by hand in the code editor are saved into the current project.
+  function setProjectFiles(files) {
+    patch(active.id, (c) => ({ ...c, project: files, title: c.title || Object.keys(files)[0] || "project" }));
+    setActiveId(active.id);
+  }
+
   function startNew(m) {
     if (busy) return;
     setDraft(blank(m));
@@ -572,7 +523,12 @@ function Main({ session }) {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     let acc = "";
-    try {
+    const ERR = /\u0000ERR:(busy|ai)\s*$/;
+    const clean = (txt) => txt.replace(/\n*\u0000ERR:(busy|ai)\s*$/, (_m, k) => "\n\n" + (k === "busy" ? t("errBusy") : t("errAi")));
+
+    // One request to the server. Returns "ok", "retry" (nothing arrived yet) or "stop".
+    const attempt = async () => {
+      acc = "";
       const res = await fetch("/api/chat", {
         method: "POST",
         signal: ctrl.signal,
@@ -583,10 +539,10 @@ function Main({ session }) {
           messages: next.map(({ role, content }) => ({ role, content })),
           file: sentFile || undefined,
           images: sentImages.length ? sentImages.map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
-          project: m === "build" && Object.keys(base).length ? base : undefined,
+          project: m === "build" ? base : undefined,
         }),
       });
-      if (res.status === 401) { await supabase.auth.signOut(); return; }
+      if (res.status === 401) { await supabase.auth.signOut(); return "stop"; }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         if (err.error === "limit" || err.error === "pro_only") {
@@ -595,13 +551,11 @@ function Main({ session }) {
           if (sentFile) setFile(sentFile);
           if (sentImages.length) setImages(sentImages);
           setSheet({ type: "upgrade", reason: err.error });
-          return;
+          return "stop";
         }
-        if (err.error === "file_too_big") { put(next.slice(0, -1)); setInput(text); alert(t("fileBig")); return; }
-        const msg = err.error === "busy" ? t("errBusy") : err.error === "ai" ? t("errAi") : t("errConn");
-        put([...next, { role: "assistant", content: msg, failed: true }]);
+        if (err.error === "file_too_big") { put(next.slice(0, -1)); setInput(text); alert(t("fileBig")); return "stop"; }
         if (err.detail) console.error("server:", err.detail);
-        return;
+        return "retry";
       }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -609,20 +563,35 @@ function Main({ session }) {
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        const shown = acc.replace(/\n\n⚠️ busy$/, "\n\n" + t("errBusy")).replace(/\n\n⚠️ error$/, "\n\n" + t("errAi"));
-        const got = m === "build" ? parseFiles(acc) : null;
-        put([...next, { role: "assistant", content: shown }], got && Object.keys(got).length ? { project: { ...base, ...got } } : {});
+        if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
+        const ch = m === "build" ? applyChanges(base, acc) : null;
+        put([...next, { role: "assistant", content: clean(acc) }], ch?.changed ? { project: ch.files } : {});
       }
-      if (sentFile) {
-        const { out, applied, failed } = applyEdits(sentFile.content, acc);
-        put([...next, { role: "assistant", content: acc, fixed: applied ? { name: fixedName(sentFile.name), content: out } : null, fixInfo: { applied, failed } }]);
+      return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
+    };
+
+    try {
+      let result = await attempt();
+      for (let tries = 1; result === "retry" && tries <= 2; tries++) {
+        await new Promise((r) => setTimeout(r, 1200 * tries)); // wait a moment, then quietly try again
+        result = await attempt();
       }
-      if (m === "build" && Object.keys(parseFiles(acc)).length && window.innerWidth < 900) setShowPreview(true);
+      if (result === "retry") {
+        const busyErr = /ERR:busy/.test(acc);
+        put([...next, { role: "assistant", content: busyErr ? t("errBusy") : t("errAi"), failed: true }]);
+      } else if (result === "ok") {
+        if (sentFile) {
+          const { out, applied, failed } = applyEdits(sentFile.content, acc);
+          put([...next, { role: "assistant", content: clean(acc), fixed: applied ? { name: fixedName(sentFile.name), content: out } : null, fixInfo: { applied, failed } }]);
+        }
+        if (m === "build" && applyChanges(base, acc).changed && window.innerWidth < 900) setShowPreview(true);
+        if (ERR.test(acc)) put([...next, { role: "assistant", content: clean(acc), failed: true }]);
+      }
     } catch (e) {
       if (e?.name === "AbortError") {
         if (!acc) put(next.slice(0, -1));
       } else {
-        put([...next, { role: "assistant", content: (acc ? acc + "\n\n" : "") + t("errConn"), failed: true }]);
+        put([...next, { role: "assistant", content: (acc ? clean(acc) + "\n\n" : "") + t("errConn"), failed: true }]);
       }
     } finally {
       abortRef.current = null;
@@ -767,7 +736,8 @@ function Main({ session }) {
 
           {mode === "build" && (
             <div className={"preview-col" + (showPreview ? " open" : "")}>
-              <Preview files={project} busy={busy} onClose={() => setShowPreview(false)} />
+              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t}
+                onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); send(q); }} />
             </div>
           )}
         </div>
