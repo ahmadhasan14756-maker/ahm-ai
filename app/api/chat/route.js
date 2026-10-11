@@ -217,8 +217,15 @@ LANGUAGE TEACHER MODE (this overrides the LANGUAGE rules above)
 - If the learner's last message has mistakes, add a short section starting with "✏️" in their own language: show the corrected sentence and explain the mistake in one line. If there were no mistakes, praise them briefly.
 - For beginners (A0/A1) add the meaning in their own language in brackets after difficult sentences.
 - If they ask for help or a translation, give it, then continue the conversation.` : "";
+    const VOICE_PROMPT = body.voice ? `
+
+VOICE CONVERSATION MODE (most important rules)
+- The user is TALKING to you and will only HEAR your answer (they may not be able to read).
+- First line: exactly ⟦what the user said, transcribed word for word in the language they spoke⟧ — nothing else on that line.
+- Then your spoken reply: natural, warm, conversational, short (1–4 sentences, longer only if they asked for an explanation). No Markdown, no lists, no symbols, no emojis, no links, no code — only words that sound good when read aloud. Write numbers so they can be spoken.
+- Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + TUTOR_PROMPT,
+      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + TUTOR_PROMPT + VOICE_PROMPT,
       maxOutputTokens: file || build ? 32768 : 8192,
     };
     // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).

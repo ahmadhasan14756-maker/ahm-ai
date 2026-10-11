@@ -9,6 +9,7 @@ import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/buil
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
 import Learn from "../components/Learn";
+import VoiceMode from "../components/VoiceMode";
 import { quickGuess } from "../lib/intent";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
@@ -62,6 +63,8 @@ const Icon = {
   image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></>,
   open: <><path d="M14 4h6v6M20 4l-9 9" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>,
   learn: <><path d="M2 9l10-5 10 5-10 5z" /><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5" /></>,
+  wave: <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />,
+  more: <><path d="M12 5v14M5 12h14" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
 };
 const Svg = ({ d, size = 20, w = 2 }) => (
@@ -323,6 +326,42 @@ function GenImage({ url, ratio }) {
           <button aria-label={t("saveImage")} title={t("saveImage")} onClick={() => saveImage(src)}><Svg d={Icon.zip} size={16} /></button>
         </div>
       )}
+    </figure>
+  );
+}
+
+/* ---------------- Vector designs (logos, posters) ---------------- */
+const svgUrl = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+function downloadBlob(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+async function svgToPng(svg, width = 2048) {
+  const img = new Image();
+  await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = svgUrl(svg); });
+  const vb = /viewBox="([\d.\s-]+)"/.exec(svg)?.[1]?.split(/\s+/).map(Number);
+  const ratio = vb && vb[2] && vb[3] ? vb[3] / vb[2] : img.height / img.width || 1;
+  const c = document.createElement("canvas");
+  c.width = width;
+  c.height = Math.round(width * ratio);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return new Promise((r) => c.toBlob(r, "image/png"));
+}
+function DesignTile({ d, kind }) {
+  const { t } = useLang();
+  return (
+    <figure className={"design " + (kind || "logo")}>
+      <img src={svgUrl(d.svg)} alt={d.name} />
+      <figcaption>
+        <span>{d.name}</span>
+        <div className="gen-tools static">
+          <button aria-label="PNG" title="PNG" onClick={async () => downloadBlob(await svgToPng(d.svg), "ahm-design.png")}><Svg d={Icon.zip} size={16} /> PNG</button>
+          <button aria-label="SVG" title="SVG" onClick={() => downloadBlob(new Blob([d.svg], { type: "image/svg+xml" }), "ahm-design.svg")}>SVG</button>
+        </div>
+      </figcaption>
     </figure>
   );
 }
@@ -610,6 +649,20 @@ function Main({ session }) {
     setView("chat");
   }
 
+  function startVoiceTutor(target, level) {
+    const hello = {
+      en: "Hi! I'm your English teacher. Let's talk together. How are you today?",
+      ar: "مرحباً! أنا معلمك للغة العربية. لنتحدث معاً. كيف حالك اليوم؟",
+      ckb: "سڵاو! من مامۆستای زمانی کوردییەکەتم. با پێکەوە قسە بکەین. ئەمڕۆ چۆنی؟",
+    }[target];
+    const names = { en: "English", ar: "العربية", ckb: "کوردی" };
+    const d = { ...blank("chat"), title: "🎙️ " + names[target] + " · " + level, tutor: { target, level }, messages: [{ role: "assistant", content: hello }] };
+    setDraft(d);
+    setActiveId(null);
+    setView("chat");
+    setVoice({ chatId: d.id, tutor: d.tutor, greeting: hello });
+  }
+
   function chooseTool(m) {
     setDraft((d) => ({ ...d, mode: m }));
     setActiveId(null);
@@ -712,8 +765,15 @@ function Main({ session }) {
 
   async function generateImage(text, baseMessages, keepMode = "image") {
     const id = active.id;
-    const style = imgStyle, ratio = imgRatio;
-    const next = [...(baseMessages || messages), { role: "user", content: text }];
+    const base = baseMessages || messages;
+    // Logos and posters are drawn as vector designs (exact text, also Kurdish); everything else as pictures.
+    const lastDesign = [...base].reverse().find((m) => m.designs || m.gen);
+    const wanted = /(لۆگۆ|logo|شعار|لوگو)/i.test(text) ? "logo" : /(پۆستەر|poster|ملصق|بوستر|بانەر|banner|flyer)/i.test(text) ? "poster" : null;
+    const kind = wanted || (lastDesign?.designs ? lastDesign.kind : null) || (["logo", "poster"].includes(imgStyle) ? imgStyle : null);
+    const style = kind ? kind : imgStyle, ratio = imgRatio;
+    // Earlier requests in this chat, so "make it blue" changes the last image instead of starting over.
+    const previous = lastDesign ? base.filter((m) => m.role === "user").map((m) => m.content).slice(-4) : [];
+    const next = [...base, { role: "user", content: text }];
     const put = (msgs) => patch(id, (c) => ({ ...c, mode: keepMode, messages: msgs, title: c.title || text.slice(0, 60) }));
     put([...next, { role: "assistant", content: "" }]);
     setActiveId(id);
@@ -723,10 +783,10 @@ function Main({ session }) {
     try {
       let res, data;
       for (let tries = 0; tries < 3; tries++) {
-        res = await fetch("/api/imagine", {
+        res = await fetch(kind ? "/api/design" : "/api/imagine", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
-          body: JSON.stringify({ prompt: text, style, lang }),
+          body: JSON.stringify({ prompt: text, style, kind, previous, lang }),
         });
         data = await res.json().catch(() => ({}));
         if (res.ok || data.error === "limit" || res.status === 401) break;
@@ -735,14 +795,44 @@ function Main({ session }) {
       if (res.status === 401) { await supabase.auth.signOut(); return; }
       if (data.error === "limit") { put(next.slice(0, -1)); setInput(text); setSheet({ type: "upgrade", reason: "limit" }); return; }
       if (!res.ok) { put([...next, { role: "assistant", content: data.error === "busy" ? t("errBusy") : t("errAi"), failed: true }]); return; }
-      const seeds = [1, 2].map(() => Math.floor(Math.random() * 1e9));
-      put([...next, { role: "assistant", content: data.caption || "", gen: seeds.map((sd) => imageUrl(data.prompt, ratio, sd)), ratio }]);
+      if (kind) {
+        put([...next, { role: "assistant", content: data.caption || "", designs: data.designs, kind: data.kind }]);
+      } else {
+        const seeds = [1, 2].map(() => Math.floor(Math.random() * 1e9));
+        put([...next, { role: "assistant", content: data.caption || "", gen: seeds.map((sd) => imageUrl(data.prompt, ratio, sd)), ratio, prompt: data.prompt }]);
+      }
     } catch {
       put([...next, { role: "assistant", content: t("errConn"), failed: true }]);
     } finally {
       setBusy(false);
       loadMe();
     }
+  }
+
+  // Two more versions of the same picture (free: same description, new random seed).
+  function moreImages(index) {
+    patch(active.id, (c) => ({
+      ...c,
+      messages: c.messages.map((m, i) => (i === index && m.prompt ? { ...m, gen: [...m.gen, ...[1, 2].map(() => imageUrl(m.prompt, m.ratio, Math.floor(Math.random() * 1e9)))].slice(-8) } : m)),
+    }));
+  }
+
+  // ---- hands-free voice conversation ----
+  const [voice, setVoice] = useState(null); // { chatId, tutor, greeting }
+  function openVoice(opts = {}) {
+    if (busy) return;
+    const chatId = opts.chatId || active.id;
+    setVoice({ chatId, tutor: opts.tutor || active.tutor || null, greeting: opts.greeting || null });
+  }
+  function voiceTurn(heardText, answer) {
+    if (!voice) return;
+    patch(voice.chatId, (c) => ({
+      ...c,
+      mode: c.mode === "auto" ? "chat" : c.mode,
+      messages: [...c.messages, { role: "user", content: heardText || t("voiceMessage"), voice: true }, { role: "assistant", content: answer }],
+      title: c.title || (heardText || t("voiceMessage")).slice(0, 60),
+    }));
+    setActiveId(voice.chatId);
   }
 
   async function send(preset, baseMessages, extra = [], forced) {
@@ -910,7 +1000,7 @@ function Main({ session }) {
         </header>
 
         {view === "learn" ? (
-          <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor}
+          <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
             onLimit={() => setSheet({ type: "upgrade", reason: "limit" })} />
         ) : (
         <div className="body">
@@ -927,7 +1017,7 @@ function Main({ session }) {
                         <button className="cap" onClick={() => chooseTool("chat")}><Svg d={Icon.chat} /><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("image")}><Svg d={Icon.image} /><b>{t("capImage")}</b><span>{t("capImageSub")}</span></button>
-                        <button className="cap" onClick={startRec}><Svg d={Icon.mic} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
+                        <button className="cap" onClick={() => openVoice()}><Svg d={Icon.wave} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
                         <button className="cap" onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /><b>{t("capFiles")}</b><span>{t("capFilesSub")}</span></button>
                         <button className="cap learn-cap" onClick={openLearn}><Svg d={Icon.learn} /><b>{t("learnLang")}</b><span>{t("learnLangSub")}</span></button>
                       </div>
@@ -956,11 +1046,17 @@ function Main({ session }) {
                       m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
                         : <span className="typing" role="status"><i /><i /><i /><small>{t("thinking")}</small></span>
                     ) : m.voice ? <span className="voice-tag"><Svg d={Icon.mic} size={16} /> {m.content}</span> : m.content}
-                    {m.role === "assistant" && m.content && !m.failed && !(busy && i === messages.length - 1) && (
+                    {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !(busy && i === messages.length - 1) && (
                       <AnswerActions text={m.content} getToken={token} />
                     )}
                     {m.gen && (
-                      <div className={"gen-grid " + (m.ratio || "square")}>{m.gen.map((u) => <GenImage key={u} url={u} ratio={m.ratio} />)}</div>
+                      <>
+                        <div className={"gen-grid " + (m.ratio || "square")}>{m.gen.map((u) => <GenImage key={u} url={u} ratio={m.ratio} />)}</div>
+                        {m.prompt && !busy && <button className="retry-btn" onClick={() => moreImages(i)}><Svg d={Icon.more} size={15} /> {t("moreImages")}</button>}
+                      </>
+                    )}
+                    {m.designs && (
+                      <div className={"design-grid " + (m.kind || "logo")}>{m.designs.map((d, k) => <DesignTile key={k} d={d} kind={m.kind} />)}</div>
                     )}
                     {m.fixed && (
                       <button className="gold-btn small" onClick={() => downloadText(m.fixed.name, m.fixed.content)}>
@@ -1046,7 +1142,10 @@ function Main({ session }) {
                   onPaste={onPaste}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 700) { e.preventDefault(); send(); } }} />
                 {chatLike && !busy && !deciding && !input.trim() && !images.length && !file ? (
-                  <button className="send mic" aria-label={t("record")} title={t("record")} onClick={startRec}><Svg d={Icon.mic} size={18} /></button>
+                  <span className="send-pair">
+                    <button className="send mic" aria-label={t("record")} title={t("record")} onClick={startRec}><Svg d={Icon.mic} size={18} /></button>
+                    <button className="send live" aria-label={t("liveVoice")} title={t("liveVoice")} onClick={() => openVoice()}><Svg d={Icon.wave} size={18} /></button>
+                  </span>
                 ) : busy ? (
                   <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
                 ) : (
@@ -1068,6 +1167,12 @@ function Main({ session }) {
         )}
       </div>
 
+      {voice && (
+        <VoiceMode lang={lang} getToken={token} tutor={voice.tutor} greeting={voice.greeting}
+          history={(chats.find((c) => c.id === voice.chatId) || (draft.id === voice.chatId ? draft : null))?.messages || []}
+          onTurn={voiceTurn} onClose={() => { setVoice(null); loadMe(); }}
+          onLimit={() => setSheet({ type: "upgrade", reason: "limit" })} />
+      )}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} />}
       {sheet?.type === "settings" && (
         <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} />

@@ -38,7 +38,9 @@ const TX = {
   today: { ckb: "پلانی ئەمڕۆ", ar: "خطة اليوم", en: "Today's plan" },
   taskLesson: { ckb: "وانەی ڕۆژی", ar: "درس اليوم", en: "Lesson, day" },
   taskSpeak: { ckb: "ڕاهێنانی قسەکردن", ar: "تدريب النطق", en: "Speaking practice" },
-  taskTutor: { ckb: "گفتوگۆ لەگەڵ مامۆستا", ar: "محادثة مع المعلم", en: "Chat with the teacher" },
+  taskTutor: { ckb: "قسەکردن لەگەڵ مامۆستا", ar: "تحدّث مع المعلم", en: "Talk with the teacher" },
+  voiceTutorSub: { ckb: "بە دەنگ، بەبێ خوێندنەوە", ar: "بالصوت، دون قراءة", en: "By voice, no reading needed" },
+  textTutor: { ckb: "نووسین لەگەڵ مامۆستا", ar: "اكتب مع المعلم", en: "Write with the teacher" },
   streak: { ckb: "ڕۆژ لە سەر یەک", ar: "أيام متتالية", en: "day streak" },
   points: { ckb: "خاڵ", ar: "نقطة", en: "points" },
   alphabet: { ckb: "پیتەکان", ar: "الحروف", en: "Alphabet" },
@@ -84,6 +86,7 @@ const I = {
   chat: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
   flame: <path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z" />,
   chevron: <path d="M9 6l6 6-6 6" />,
+  wave: <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />,
 };
 const Svg = ({ d, size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
@@ -168,7 +171,7 @@ function Quiz({ items, dir, onDone, tl }) {
   );
 }
 
-export default function Learn({ lang, uid, getToken, onTutor, onLimit }) {
+export default function Learn({ lang, uid, getToken, onTutor, onVoiceTutor, onLimit }) {
   const tl = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
   const storeKey = `ahm-learn-${uid}`;
   const [store, setStore] = useState(null);
@@ -351,7 +354,7 @@ export default function Learn({ lang, uid, getToken, onTutor, onLimit }) {
     const tasks = [
       { k: "lesson", label: `${tl("taskLesson")} ${course.day}`, go: openLesson, icon: I.book },
       { k: "speak", label: tl("taskSpeak"), go: () => { setErr(""); setScreen("speak"); }, icon: I.mic },
-      { k: "tutor", label: tl("taskTutor"), go: () => { markTask("tutor"); onTutor(target, course.level); }, icon: I.chat },
+      { k: "tutor", label: tl("taskTutor"), go: () => { markTask("tutor"); onVoiceTutor(target, course.level); }, icon: I.wave },
     ];
     const doneCount = tasks.filter((x) => td[x.k]).length;
     body = (
@@ -383,7 +386,8 @@ export default function Learn({ lang, uid, getToken, onTutor, onLimit }) {
           <button className="cap" onClick={() => setScreen("letters")}><Svg d={I.abc} /><b>{tl("alphabet")}</b><span>{tl("alphabetSub")}</span></button>
           <button className="cap" onClick={openLesson}><Svg d={I.book} /><b>{tl("taskLesson")} {course.day}</b><span>{tl("lessonsSub")}</span></button>
           <button className="cap" onClick={() => setScreen("speak")}><Svg d={I.mic} /><b>{tl("taskSpeak")}</b><span>{tl("speakSub")}</span></button>
-          <button className="cap" onClick={() => { markTask("tutor"); onTutor(target, course.level); }}><Svg d={I.chat} /><b>{tl("taskTutor")}</b><span>{tl("tutorSub")}</span></button>
+          <button className="cap" onClick={() => { markTask("tutor"); onVoiceTutor(target, course.level); }}><Svg d={I.wave} /><b>{tl("taskTutor")}</b><span>{tl("voiceTutorSub")}</span></button>
+          <button className="cap" onClick={() => { markTask("tutor"); onTutor(target, course.level); }}><Svg d={I.chat} /><b>{tl("textTutor")}</b><span>{tl("tutorSub")}</span></button>
         </div>
         <div className="dash-links">
           <button onClick={() => setScreen("pick")}>{tl("change")}</button>

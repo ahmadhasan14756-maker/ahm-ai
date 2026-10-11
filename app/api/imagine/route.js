@@ -13,17 +13,18 @@ let ai;
 const gemini = () => (ai ||= new GoogleGenAI({ apiKey: serverEnv("GEMINI_API_KEY") }));
 
 const STYLES = {
-  photo: "ultra-realistic professional photograph, natural light, sharp focus, 35mm, high detail",
+  photo: "award-winning professional photograph, ultra realistic, natural cinematic light, sharp focus, shallow depth of field, 50mm lens, rich detail, 8k",
   art: "beautiful detailed digital illustration, rich colours, artstation quality",
   logo: "clean professional vector logo, flat design, simple shapes, centered on a plain background, no mockup, minimal text",
   "3d": "high-quality 3D render, soft studio lighting, octane render, detailed materials",
   poster: "professional graphic design poster, bold layout, striking composition, print quality",
 };
 
-const SYSTEM = `You write prompts for an image generator that only understands English.
+const SYSTEM = `You are an expert art director writing prompts for an image generator that only understands English.
 The user describes an image in Kurdish Sorani, Arabic or English.
 Return JSON: {"prompt": "...", "caption": "..."}
-- "prompt": one detailed English prompt (40–90 words): subject, setting, composition, lighting, colours, mood, camera/style details. Keep every detail the user asked for. If the user wants words on the image, put them in quotes and keep them very short.
+- "prompt": one detailed English prompt (50–100 words): main subject first, then setting, composition and camera angle, lighting, colour palette, mood, materials/textures and style details. Keep EVERY detail the user asked for (colours, count, positions, clothing, place). Translate Kurdish/Arabic place and object names correctly (e.g. Erbil citadel, Kurdish traditional clothes). The generator cannot write non-Latin letters: if the user wants Kurdish/Arabic text on the image, leave the text out and keep clean empty space for it. English words must be short and in quotes.
+- If earlier requests are given, the new request CHANGES that image: keep everything from before and apply the change.
 - "caption": one short friendly sentence in the user's language describing what you are drawing.
 Never include violence, nudity or real private people. If the request is not allowed, make a safe, related image instead.`;
 
@@ -34,6 +35,7 @@ export async function POST(req) {
     const idea = String(body?.prompt || "").trim().slice(0, 2000);
     if (!idea) return Response.json({ error: "bad_request" }, { status: 400 });
     const style = STYLES[body?.style] ? body.style : "photo";
+    const previous = (Array.isArray(body?.previous) ? body.previous : []).map((x) => String(x).slice(0, 400)).slice(-5);
 
     const profile = await getProfile(user);
     const usage = usageOf(profile);
@@ -46,7 +48,7 @@ export async function POST(req) {
         try {
           const r = await gemini().models.generateContent({
             model,
-            contents: [{ role: "user", parts: [{ text: `Style: ${STYLES[style]}\nRequest: ${idea}` }] }],
+            contents: [{ role: "user", parts: [{ text: `Style: ${STYLES[style]}\n${previous.length ? "Earlier requests for this image:\n- " + previous.join("\n- ") + "\n" : ""}Request: ${idea}` }] }],
             config: { systemInstruction: SYSTEM, responseMimeType: "application/json", ...(thinking ? { thinkingConfig: thinking } : {}) },
           });
           const j = JSON.parse(r.text || "{}");
