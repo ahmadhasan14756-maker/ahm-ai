@@ -53,6 +53,12 @@ const Icon = {
   close: <path d="M18 6L6 18M6 6l12 12" />,
   gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" /></>,
   trash: <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />,
+  mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></>,
+  speaker: <><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" /></>,
+  copy: <><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></>,
+  check: <path d="M5 12l5 5 9-10" />,
+  image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></>,
+  open: <><path d="M14 4h6v6M20 4l-9 9" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
 };
 const Svg = ({ d, size = 20, w = 2 }) => (
@@ -236,6 +242,96 @@ async function prepareImage(file) {
   return { mimeType: "image/jpeg", data: full.split(",")[1], thumb: drawScaled(img, 240, 0.7) };
 }
 
+/* ---------------- Generated images ---------------- */
+const RATIOS = { square: [1024, 1024], portrait: [768, 1344], landscape: [1344, 768] };
+function imageUrl(prompt, ratio, seed) {
+  const [w, h] = RATIOS[ratio] || RATIOS.square;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&seed=${seed}&nologo=true&model=flux`;
+}
+async function saveImage(url) {
+  try {
+    const blob = await (await fetch(url)).blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "ahm-ai-" + Date.now() + ".jpg";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  } catch {
+    window.open(url, "_blank");
+  }
+}
+function GenImage({ url, ratio }) {
+  const { t } = useLang();
+  const [state, setState] = useState("loading");
+  const [src, setSrc] = useState(url);
+  const [w, h] = RATIOS[ratio] || RATIOS.square;
+  return (
+    <figure className={"gen " + state} style={{ aspectRatio: `${w} / ${h}` }}>
+      {state === "loading" && <div className="gen-wait"><span className="mini-spin" /> {t("drawing")}</div>}
+      {state === "error" ? (
+        <button className="gen-retry" onClick={() => { setState("loading"); setSrc(url + "&r=" + Date.now()); }}>{t("retry")}</button>
+      ) : (
+        <img src={src} alt="" onLoad={() => setState("ok")} onError={() => setState("error")} />
+      )}
+      {state === "ok" && (
+        <div className="gen-tools">
+          <button aria-label={t("openImage")} title={t("openImage")} onClick={() => window.open(src, "_blank")}><Svg d={Icon.open} size={16} /></button>
+          <button aria-label={t("saveImage")} title={t("saveImage")} onClick={() => saveImage(src)}><Svg d={Icon.zip} size={16} /></button>
+        </div>
+      )}
+    </figure>
+  );
+}
+
+/* ---------------- Answer actions: copy + read aloud ---------------- */
+let currentAudio = null;
+function AnswerActions({ text, getToken }) {
+  const { t } = useLang();
+  const [state, setState] = useState("idle"); // idle | loading | playing
+  const [copied, setCopied] = useState(false);
+  const audioRef = useRef(null);
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  async function speak() {
+    if (state === "playing") { audioRef.current?.pause(); setState("idle"); return; }
+    if (state === "loading") return;
+    try {
+      currentAudio?.pause();
+      setState("loading");
+      if (!audioRef.current) {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) throw new Error();
+        const url = URL.createObjectURL(await res.blob());
+        audioRef.current = new Audio(url);
+        audioRef.current.onended = () => setState("idle");
+      }
+      currentAudio = audioRef.current;
+      audioRef.current.currentTime = 0;
+      await audioRef.current.play();
+      setState("playing");
+    } catch {
+      setState("idle");
+      alert(t("ttsFail"));
+    }
+  }
+
+  return (
+    <div className="answer-actions">
+      <button aria-label={t("copyAnswer")} title={t("copyAnswer")} onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
+        <Svg d={copied ? Icon.check : Icon.copy} size={16} />
+      </button>
+      <button aria-label={state === "playing" ? t("stopListen") : t("listen")} title={t("listen")} className={state !== "idle" ? "on" : ""} onClick={speak}>
+        {state === "loading" ? <span className="mini-spin" aria-hidden="true" /> : <Svg d={state === "playing" ? Icon.stop : Icon.speaker} size={16} />}
+      </button>
+    </div>
+  );
+}
+
 /* ---------------- Sheets ---------------- */
 function Sheet({ label, onClose, children }) {
   return (
@@ -312,6 +408,7 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
   const groups = [
     { mode: "chat", title: t("history"), icon: Icon.chat },
     { mode: "build", title: t("projects"), icon: Icon.build },
+    { mode: "image", title: t("imagesGroup"), icon: Icon.image },
   ];
   return (
     <>
@@ -323,6 +420,7 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
         </div>
         <button className="new-btn" onClick={() => onNew("chat")}><Svg d={Icon.plus} size={18} /> {t("newChat")}</button>
         <button className="new-btn alt" onClick={() => onNew("build")}><Svg d={Icon.build} size={18} /> {t("newProject")}</button>
+        <button className="new-btn alt" onClick={() => onNew("image")}><Svg d={Icon.image} size={18} /> {t("newImage")}</button>
         <div className="side-list">
           {groups.map((g) => {
             const items = chats.filter((c) => c.mode === g.mode);
@@ -373,6 +471,11 @@ function Main({ session }) {
   const [sheet, setSheet] = useState(null);
   const [file, setFile] = useState(null);
   const [images, setImages] = useState([]);
+  const [imgStyle, setImgStyle] = useState("photo");
+  const [imgRatio, setImgRatio] = useState("square");
+  const [recording, setRecording] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const recRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const bottom = useRef(null);
@@ -470,6 +573,48 @@ function Main({ session }) {
     if (id === activeId) startNew(mode);
   }
 
+  // ---- voice messages ----
+  async function startRec() {
+    if (recording || busy) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((x) => window.MediaRecorder?.isTypeSupported?.(x)) || "";
+      const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks = [];
+      mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      const started = Date.now();
+      const timer = setInterval(() => {
+        const s = Math.floor((Date.now() - started) / 1000);
+        setRecSecs(s);
+        if (s >= 120) stopRec(true);
+      }, 250);
+      recRef.current = { mr, stream, chunks, timer, send: true };
+      mr.onstop = async () => {
+        clearInterval(timer);
+        stream.getTracks().forEach((tr) => tr.stop());
+        const keep = recRef.current?.send;
+        recRef.current = null;
+        setRecording(false);
+        setRecSecs(0);
+        if (!keep || !chunks.length) return;
+        const blob = new Blob(chunks, { type: mr.mimeType || type || "audio/webm" });
+        const data = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(blob); });
+        const mimeType = (blob.type || "audio/webm").split(";")[0];
+        send(t("voiceMessage"), undefined, [{ mimeType, data, voice: true }]);
+      };
+      mr.start(500);
+      setRecording(true);
+    } catch {
+      alert(t("micDenied"));
+    }
+  }
+  function stopRec(sendIt) {
+    const r = recRef.current;
+    if (!r) return;
+    r.send = sendIt;
+    if (r.mr.state !== "inactive") r.mr.stop();
+  }
+
   async function addImages(list) {
     const room = 4 - images.length;
     if (list.length > room) alert(t("tooManyImages"));
@@ -492,8 +637,16 @@ function Main({ session }) {
     const all = [...(e.target.files || [])];
     e.target.value = "";
     if (!all.length) return;
+    const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    for (const f of pdfs) {
+      if (f.size > 3_000_000) { alert(t("pdfBig")); continue; }
+      const r = new FileReader();
+      r.onload = () => setImages((cur) => (cur.length < 4 ? [...cur, { mimeType: "application/pdf", data: String(r.result).split(",")[1], docName: f.name }] : cur));
+      r.readAsDataURL(f);
+    }
     const imgs = all.filter((f) => f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
     if (imgs.length) { addImages(imgs); return; }
+    if (pdfs.length) return;
     const f = all[0];
     if (!me?.pro) { setSheet({ type: "upgrade", reason: "pro_only" }); return; }
     if (f.size > MAX_FILE_BYTES) { alert(t("fileBig")); return; }
@@ -502,15 +655,56 @@ function Main({ session }) {
     r.readAsText(f);
   }
 
-  async function send(preset, baseMessages) {
-    const sentImages = mode === "chat" ? images : [];
+  async function generateImage(text, baseMessages) {
+    const id = active.id;
+    const style = imgStyle, ratio = imgRatio;
+    const next = [...(baseMessages || messages), { role: "user", content: text }];
+    const put = (msgs) => patch(id, (c) => ({ ...c, messages: msgs, title: c.title || text.slice(0, 60) }));
+    put([...next, { role: "assistant", content: "" }]);
+    setActiveId(id);
+    setInput("");
+    if (ta.current) ta.current.style.height = "auto";
+    setBusy(true);
+    try {
+      let res, data;
+      for (let tries = 0; tries < 3; tries++) {
+        res = await fetch("/api/imagine", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
+          body: JSON.stringify({ prompt: text, style, lang }),
+        });
+        data = await res.json().catch(() => ({}));
+        if (res.ok || data.error === "limit" || res.status === 401) break;
+        await new Promise((r) => setTimeout(r, 1200 * (tries + 1)));
+      }
+      if (res.status === 401) { await supabase.auth.signOut(); return; }
+      if (data.error === "limit") { put(next.slice(0, -1)); setInput(text); setSheet({ type: "upgrade", reason: "limit" }); return; }
+      if (!res.ok) { put([...next, { role: "assistant", content: data.error === "busy" ? t("errBusy") : t("errAi"), failed: true }]); return; }
+      const seeds = [1, 2].map(() => Math.floor(Math.random() * 1e9));
+      put([...next, { role: "assistant", content: data.caption || "", gen: seeds.map((sd) => imageUrl(data.prompt, ratio, sd)), ratio }]);
+    } catch {
+      put([...next, { role: "assistant", content: t("errConn"), failed: true }]);
+    } finally {
+      setBusy(false);
+      loadMe();
+    }
+  }
+
+  async function send(preset, baseMessages, extra = []) {
+    if (mode === "image") {
+      const txt = (preset ?? input).trim();
+      if (txt && !busy) generateImage(txt, baseMessages);
+      return;
+    }
+    const sentImages = mode === "chat" ? [...images, ...extra] : [];
+    const isVoice = extra.some((x) => x.voice);
     const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
     const id = active.id;
     const m = mode;
     const sentFile = m === "chat" ? file : null;
     const base = project;
-    const next = [...(baseMessages || messages), { role: "user", content: text, fileName: sentFile?.name, thumbs: sentImages.map((im) => im.thumb) }];
+    const next = [...(baseMessages || messages), { role: "user", content: text, voice: isVoice || undefined, fileName: sentFile?.name, thumbs: sentImages.filter((im) => im.thumb).map((im) => im.thumb), docs: sentImages.filter((im) => im.docName).map((im) => im.docName) }];
     const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, messages: msgs, title: c.title || text.slice(0, 60) }));
     put([...next, { role: "assistant", content: "" }]);
     setActiveId(id);
@@ -549,7 +743,7 @@ function Main({ session }) {
           put(next.slice(0, -1));
           setInput(text);
           if (sentFile) setFile(sentFile);
-          if (sentImages.length) setImages(sentImages);
+          if (sentImages.length) setImages(sentImages.filter((x) => !x.voice));
           setSheet({ type: "upgrade", reason: err.error });
           return "stop";
         }
@@ -610,7 +804,7 @@ function Main({ session }) {
   const left = me ? Math.max(0, me.limit - me.used) : null;
   const pct = me ? Math.min(100, (me.used / me.limit) * 100) : 0;
   const hasFiles = Object.keys(project).length > 0;
-  const suggestions = t(mode === "build" ? "buildSugg" : "chatSugg");
+  const suggestions = t(mode === "build" ? "buildSugg" : mode === "image" ? "imageSugg" : "chatSugg");
 
   return (
     <div className={"app mode-" + mode}>
@@ -636,6 +830,9 @@ function Main({ session }) {
             <button role="tab" aria-selected={mode === "build"} className={mode === "build" ? "on" : ""} onClick={() => switchMode("build")}>
               <Svg d={Icon.build} size={16} /> {t("build")}
             </button>
+            <button role="tab" aria-selected={mode === "image"} className={mode === "image" ? "on" : ""} onClick={() => switchMode("image")}>
+              <Svg d={Icon.image} size={16} /> {t("imageTab")}
+            </button>
           </div>
           {me && (
             <button className={"quota" + (me.pro ? " pro" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })} aria-label={t("plans")}>
@@ -654,9 +851,9 @@ function Main({ session }) {
                   {mode === "chat" ? (
                     <h2 className="greet">{greeting(t)}{name ? (lang === "en" ? ", " : "، ") + name : ""}</h2>
                   ) : (
-                    <h2 className="greet">{t("buildQ")}</h2>
+                    <h2 className="greet">{mode === "image" ? t("imageQ") : t("buildQ")}</h2>
                   )}
-                  <p className="muted">{mode === "build" ? t("buildSub") : t("helpQ")}</p>
+                  <p className="muted">{mode === "build" ? t("buildSub") : mode === "image" ? t("imageSub") : t("helpQ")}</p>
                   <div className="chips">
                     {suggestions.map((s) => <button key={s} onClick={() => send(s)}>{s}</button>)}
                   </div>
@@ -668,11 +865,18 @@ function Main({ session }) {
                     {m.thumbs?.length > 0 && (
                       <div className="msg-imgs">{m.thumbs.map((src, k) => <img key={k} src={src} alt="" />)}</div>
                     )}
+                    {m.docs?.length > 0 && m.docs.map((d, k) => <div key={k} className="file-tag" dir="ltr">📄 {d}</div>)}
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
                     {m.role === "assistant" ? (
                       m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
                         : <span className="typing" role="status"><i /><i /><i /><small>{t("thinking")}</small></span>
-                    ) : m.content}
+                    ) : m.voice ? <span className="voice-tag"><Svg d={Icon.mic} size={16} /> {m.content}</span> : m.content}
+                    {m.role === "assistant" && m.content && !m.failed && !(busy && i === messages.length - 1) && (
+                      <AnswerActions text={m.content} getToken={token} />
+                    )}
+                    {m.gen && (
+                      <div className={"gen-grid " + (m.ratio || "square")}>{m.gen.map((u) => <GenImage key={u} url={u} ratio={m.ratio} />)}</div>
+                    )}
                     {m.fixed && (
                       <button className="gold-btn small" onClick={() => downloadText(m.fixed.name, m.fixed.content)}>
                         ⬇ {t("downloadFixed")} ({m.fixInfo.applied} {t("changes")})
@@ -694,11 +898,27 @@ function Main({ session }) {
                   <Svg d={Icon.phone} size={18} /> {t("preview")}
                 </button>
               )}
+              {mode === "image" && (
+                <div className="img-opts">
+                  <div className="opt-row" role="radiogroup" aria-label={t("style")}>
+                    {["photo", "art", "logo", "3d", "poster"].map((k) => (
+                      <button key={k} role="radio" aria-checked={imgStyle === k} className={imgStyle === k ? "on" : ""} onClick={() => setImgStyle(k)}>{t("style_" + k)}</button>
+                    ))}
+                  </div>
+                  <div className="opt-row" role="radiogroup" aria-label={t("ratio")}>
+                    {["square", "portrait", "landscape"].map((k) => (
+                      <button key={k} role="radio" aria-checked={imgRatio === k} className={imgRatio === k ? "on" : ""} onClick={() => setImgRatio(k)}>
+                        <i className={"ratio-ico " + k} aria-hidden="true" /> {t("ratio_" + k)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {images.length > 0 && (
                 <div className="img-tray">
                   {images.map((im, k) => (
-                    <div key={k} className="img-chip">
-                      <img src={im.thumb} alt="" />
+                    <div key={k} className={"img-chip" + (im.docName ? " doc" : "")}>
+                      {im.docName ? <span dir="ltr">📄 {im.docName}</span> : <img src={im.thumb} alt="" />}
                       <button aria-label={t("removeImage")} onClick={() => setImages((l) => l.filter((_, j) => j !== k))}><Svg d={Icon.close} size={13} w={2.6} /></button>
                     </div>
                   ))}
@@ -710,26 +930,36 @@ function Main({ session }) {
                   <button aria-label={t("delete")} onClick={() => setFile(null)}>✕</button>
                 </div>
               )}
+              {recording ? (
+                <div className="composer rec">
+                  <button className="attach" aria-label={t("cancel")} title={t("cancel")} onClick={() => stopRec(false)}><Svg d={Icon.close} /></button>
+                  <div className="rec-info" role="status"><i className="rec-dot" /> {t("recording")} <b dir="ltr">{Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, "0")}</b></div>
+                  <button className="send" aria-label={t("send")} onClick={() => stopRec(true)}><Svg d={Icon.up} size={18} w={2.4} /></button>
+                </div>
+              ) : (
               <div className="composer">
                 {mode === "chat" && (
                   <>
                     <input ref={fileInput} type="file" hidden multiple onChange={pickFile}
-                      accept="image/*,.heic,.txt,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.php,.rb,.swift,.kt,.dart,.html,.css,.scss,.json,.xml,.yml,.yaml,.sql,.sh,.md,.vue,.svelte,text/*" />
+                      accept="image/*,.heic,.pdf,application/pdf,.txt,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.php,.rb,.swift,.kt,.dart,.html,.css,.scss,.json,.xml,.yml,.yaml,.sql,.sh,.md,.vue,.svelte,text/*" />
                     <button className="attach" aria-label={t("attachImage")} title={t("attachImage")} onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /></button>
                   </>
                 )}
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
-                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : file ? t("placeholderFile") : t("placeholder")}
+                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : mode === "image" ? t("placeholderImage") : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 700) { e.preventDefault(); send(); } }} />
-                {busy ? (
+                {mode === "chat" && !busy && !input.trim() && !images.length && !file ? (
+                  <button className="send mic" aria-label={t("record")} title={t("record")} onClick={startRec}><Svg d={Icon.mic} size={18} /></button>
+                ) : busy ? (
                   <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
                 ) : (
                   <button className="send" aria-label={t("send")} onClick={() => send()} disabled={!input.trim() && !file && !images.length}><Svg d={Icon.up} size={18} w={2.4} /></button>
                 )}
               </div>
+              )}
               <p className="foot-note">{t("footNote")}</p>
             </footer>
           </div>
