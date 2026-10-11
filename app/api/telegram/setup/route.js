@@ -32,7 +32,7 @@ export async function GET(req) {
     ] }),
   }).catch(() => {});
 
-  const admin = serverEnv("ADMIN_TELEGRAM_ID");
+  const admin = (serverEnv("ADMIN_TELEGRAM_ID").match(/\d{5,}/) || [])[0] || "7384823854";
   const adminNote = /^\d+$/.test(admin) ? "✅ ID ی خاوەن دانراوە." : "⚠️ ADMIN_TELEGRAM_ID دانەنراوە یان هەڵەیە (دەبێت تەنها ژمارە بێت).";
   return text("✅ بۆتەکە بەسترایەوە! ئێستا لە تەلەگرام /start بنێرە.\n" + adminNote);
 }

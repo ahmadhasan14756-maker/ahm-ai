@@ -7,7 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TOKEN = serverEnv("TELEGRAM_BOT_TOKEN");
-const ADMIN = serverEnv("ADMIN_TELEGRAM_ID");
+// Owner's Telegram ID: from Vercel if it is a valid number, otherwise the owner's known ID.
+const ADMIN = (serverEnv("ADMIN_TELEGRAM_ID").match(/\d{5,}/) || [])[0] || "7384823854";
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
