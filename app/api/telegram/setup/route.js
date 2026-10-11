@@ -16,10 +16,21 @@ export async function GET(req) {
   const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: `${url.origin}/api/telegram`, secret_token: webhookSecret(), allowed_updates: ["message"] }),
+    body: JSON.stringify({ url: `${url.origin}/api/telegram`, secret_token: webhookSecret(), allowed_updates: ["message", "callback_query"] }),
   });
   const data = await res.json().catch(() => ({}));
   if (!data.ok) return text("❌ هەڵە لە تەلەگرامەوە: " + (data.description || "نەزانراو"), 502);
+
+  await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ commands: [
+      { command: "start", description: "دەستپێکردن و نرخەکان" },
+      { command: "myid", description: "ID ی تەلەگرامەکەت" },
+      { command: "stats", description: "ئامار (تەنها خاوەن)" },
+      { command: "users", description: "بەکارهێنەران (تەنها خاوەن)" },
+    ] }),
+  }).catch(() => {});
 
   const admin = serverEnv("ADMIN_TELEGRAM_ID");
   const adminNote = /^\d+$/.test(admin) ? "✅ ID ی خاوەن دانراوە." : "⚠️ ADMIN_TELEGRAM_ID دانەنراوە یان هەڵەیە (دەبێت تەنها ژمارە بێت).";

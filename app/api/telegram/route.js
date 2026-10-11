@@ -22,6 +22,25 @@ async function tg(method, payload) {
 }
 const send = (chat_id, text) => tg("sendMessage", { chat_id, text, parse_mode: "HTML", disable_web_page_preview: true });
 
+// iPhone keyboards often turn "/stats" into "Stats/" or "/Stats" — accept all of them, and the buttons.
+const ALIASES = { starts: "stats", stat: "stats", "ئامار": "stats", "📊": "stats", "👥": "users", "بەکارهێنەران": "users", "❓": "help", "یارمەتی": "help", miyd: "myid" };
+function normCmd(text) {
+  const t = (text || "").trim();
+  const first = t.split(/\s+/)[0] || "";
+  const looksCmd = first.startsWith("/") || first.endsWith("/");
+  let word = first.replace(/\//g, "").toLowerCase();
+  if (ALIASES[word]) return { cmd: "/" + ALIASES[word], rest: t.split(/\s+/).slice(1) };
+  const button = Object.keys(ALIASES).find((k) => t.startsWith(k) && !/^[a-z]/.test(k));
+  if (button) return { cmd: "/" + ALIASES[button], rest: [] };
+  return looksCmd ? { cmd: "/" + word, rest: t.split(/\s+/).slice(1) } : null;
+}
+
+const ADMIN_KEYBOARD = {
+  keyboard: [[{ text: "📊 ئامار" }, { text: "👥 بەکارهێنەران" }], [{ text: "❓ یارمەتی" }]],
+  resize_keyboard: true,
+  is_persistent: true,
+};
+
 const fmtDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "-");
 
 const PLAN_LINES = () => PAID_PLANS.map((p) => `• <b>$${p.price}</b> ← ${p.limit} پرسیار بۆ یەک مانگ`).join("\n");
@@ -40,7 +59,10 @@ ${PLAN_LINES()}
 
 دوای پشتڕاستکردنەوە، هەژمارەکەت دەبێتە Pro و ئاگادارت دەکەینەوە. ✅`;
 
-const ADMIN_HELP = `<b>فەرمانەکانی بەڕێوەبەر:</b>
+const ADMIN_HELP = `👑 <b>تۆ خاوەنی بۆتەکەیت.</b>
+دوگمەکانی خوارەوە بەکاربهێنە، یان:
+
+<b>فەرمانەکان:</b>
 <code>/pro email 5</code> — پلانی $5 بۆ ٣٠ ڕۆژ (هەروەها 10 یان 25)
 <code>/remove email</code> — لابردنی Pro
 <code>/check email</code> — بینینی دۆخی بەکارهێنەر
@@ -52,8 +74,8 @@ async function findByEmail(email) {
   return data;
 }
 
-async function handleAdmin(chatId, text) {
-  const [cmd, arg1, arg2, arg3] = text.trim().split(/\s+/);
+async function handleAdmin(chatId, cmd, rest) {
+  const [arg1, arg2, arg3] = rest;
   const db = adminDb();
 
   if (cmd === "/pro") {
@@ -61,17 +83,10 @@ async function handleAdmin(chatId, text) {
     if (!arg1 || !EMAIL_RE.test(arg1) || !plan) {
       return send(chatId, "بەم شێوەیە بنووسە: <code>/pro email 5</code>\n(ژمارەکە نرخی پلانەکەیە: 5 یان 10 یان 25)");
     }
-    const days = Math.max(1, Math.min(3650, parseInt(arg3 || "30", 10) || 30));
-    const p = await findByEmail(arg1);
-    if (!p) return send(chatId, `❌ ئەم ئیمەیڵە تۆمار نەکراوە: ${esc(arg1)}\nبەکارهێنەر دەبێت سەرەتا لە ئەپەکەدا خۆی تۆمار بکات.`);
-    const now = new Date();
-    const until = new Date(now.getTime() + days * 86400000).toISOString();
-    await db.from("profiles").update({ plan: plan.id, plan_until: until, used: 0, period_key: "paid:" + now.toISOString() }).eq("id", p.id);
-    await send(chatId, `✅ <b>${esc(p.email)}</b> ← پلانی <b>$${plan.price}</b> (${plan.limit} پرسیار) تا <b>${fmtDate(until)}</b>`);
-    if (p.telegram_chat_id) {
-      await send(p.telegram_chat_id, `🎉 پیرۆزە! هەژمارەکەت (<b>${esc(p.email)}</b>) بوو بە <b>Pro</b>\n${plan.limit} پرسیار تا <b>${fmtDate(until)}</b>.\nئەپەکە دابخە و بیکەرەوە.`);
-    }
-    return;
+    const found = await findByEmail(arg1);
+    if (!found) return send(chatId, `❌ ئەم ئیمەیڵە تۆمار نەکراوە: ${esc(arg1)}\nبەکارهێنەر دەبێت سەرەتا لە ئەپەکەدا خۆی تۆمار بکات.`);
+    const r = await activate(found.id, plan.price);
+    return send(chatId, `✅ <b>${esc(r.p.email)}</b> ← پلانی <b>$${plan.price}</b> (${plan.limit} پرسیار) تا <b>${fmtDate(r.until)}</b>`);
   }
 
   if (cmd === "/remove") {
@@ -113,7 +128,22 @@ async function handleAdmin(chatId, text) {
     return send(chatId, `<b>دوایین بەکارهێنەران:</b>\n${lines.join("\n") || "هیچ"}`);
   }
 
-  return send(chatId, ADMIN_HELP);
+  return tg("sendMessage", { chat_id: chatId, text: ADMIN_HELP, parse_mode: "HTML", reply_markup: ADMIN_KEYBOARD });
+}
+
+// Owner taps a button under a Pro request → activate the plan, no typing needed.
+async function activate(profileId, price) {
+  const plan = planByPrice(price);
+  const db = adminDb();
+  const { data: p } = await db.from("profiles").select("*").eq("id", profileId).maybeSingle();
+  if (!p || !plan) return null;
+  const now = new Date();
+  const until = new Date(now.getTime() + 30 * 86400000).toISOString();
+  await db.from("profiles").update({ plan: plan.id, plan_until: until, used: 0, period_key: "paid:" + now.toISOString() }).eq("id", p.id);
+  if (p.telegram_chat_id) {
+    await send(p.telegram_chat_id, `🎉 پیرۆزە! هەژمارەکەت (<b>${esc(p.email)}</b>) بوو بە <b>Pro</b>\n${plan.limit} پرسیار تا <b>${fmtDate(until)}</b>.\nئەپەکە دابخە و بیکەرەوە.`);
+  }
+  return { p, plan, until };
 }
 
 export async function POST(req) {
@@ -121,24 +151,68 @@ export async function POST(req) {
     return new Response("forbidden", { status: 403 });
   }
   const update = await req.json().catch(() => null);
+
+  // ---- button taps (owner activating a plan) ----
+  const cb = update?.callback_query;
+  if (cb) {
+    try {
+      const isAdmin = ADMIN && String(cb.from?.id) === ADMIN;
+      const [kind, id, price] = String(cb.data || "").split(":");
+      if (!isAdmin) {
+        await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "⛔" });
+      } else if (kind === "p") {
+        const r = await activate(id, price);
+        await tg("answerCallbackQuery", { callback_query_id: cb.id, text: r ? "✅" : "❌" });
+        if (r && cb.message) {
+          await tg("editMessageText", {
+            chat_id: cb.message.chat.id, message_id: cb.message.message_id, parse_mode: "HTML",
+            text: `✅ چالاک کرا: <b>${esc(r.p.email)}</b>\nپلانی <b>$${r.plan.price}</b> (${r.plan.limit} پرسیار) تا <b>${fmtDate(r.until)}</b>`,
+          });
+        }
+      } else if (kind === "x" && cb.message) {
+        await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "❌" });
+        await tg("editMessageText", { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: "❌ ڕەتکرایەوە." });
+        if (id && /^-?\d+$/.test(id)) await send(id, "❌ ببورە، پارەدانەکەت پشتڕاست نەکرایەوە. ئەگەر هەڵەیەک هەیە، پەیوەندیمان پێوە بکە.");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return Response.json({ ok: true });
+  }
+
   const msg = update?.message;
   if (!msg) return Response.json({ ok: true });
 
   const chatId = msg.chat.id;
   const fromId = String(msg.from?.id || "");
+  const isAdmin = !!ADMIN && fromId === ADMIN;
   const text = (msg.text || msg.caption || "").trim();
   const who = msg.from?.username ? "@" + msg.from.username : esc(msg.from?.first_name || "بەکارهێنەر");
+  const c = msg.text ? normCmd(text) : null;
 
   try {
-    if (text === "/myid") return send(chatId, `ID ی تۆ: <code>${fromId}</code>`).then(() => Response.json({ ok: true }));
-
-    if (ADMIN && fromId === ADMIN && text.startsWith("/") && text !== "/start") {
-      await handleAdmin(chatId, text);
+    if (c?.cmd === "/myid") {
+      await send(chatId, `ID ی تۆ: <code>${fromId}</code>` + (isAdmin ? "\n👑 تۆ خاوەنی بۆتەکەیت." : ""));
       return Response.json({ ok: true });
     }
 
-    if (text === "/start" || text === "/help") {
-      await send(chatId, fromId === ADMIN ? WELCOME() + "\n\n" + ADMIN_HELP : WELCOME());
+    if (c?.cmd === "/start" || c?.cmd === "/help") {
+      if (isAdmin) {
+        await send(chatId, WELCOME());
+        await handleAdmin(chatId, "/help", []);
+      } else {
+        await send(chatId, WELCOME());
+      }
+      return Response.json({ ok: true });
+    }
+
+    if (c && isAdmin) {
+      await handleAdmin(chatId, c.cmd, c.rest);
+      return Response.json({ ok: true });
+    }
+
+    if (c && !isAdmin && ["/stats", "/users", "/pro", "/remove", "/check"].includes(c.cmd)) {
+      await send(chatId, `⛔ ئەم فەرمانە تەنها بۆ خاوەنی بۆتەکەیە.\nID ی تۆ: <code>${fromId}</code>`);
       return Response.json({ ok: true });
     }
 
@@ -148,11 +222,10 @@ export async function POST(req) {
         await tg("forwardMessage", { chat_id: ADMIN, from_chat_id: chatId, message_id: msg.message_id });
         await send(ADMIN, `🧾 پسوولەیەک لە ${who} (<code>${chatId}</code>)`);
       }
-      const email = text.match(EMAIL_RE)?.[0];
-      if (!email) await send(chatId, "✅ وێنەکە گەیشت. ئێستا ئەو <b>ئیمەیڵە</b> بنووسە کە لە ئەپەکەدا پێی تۆمار بوویت.");
+      if (!text.match(EMAIL_RE)) await send(chatId, "✅ وێنەکە گەیشت. ئێستا ئەو <b>ئیمەیڵە</b> بنووسە کە لە ئەپەکەدا پێی تۆمار بوویت.");
     }
 
-    // A buyer sent their email → link it and tell the owner
+    // A buyer sent their email → link it and send the owner one-tap buttons
     const email = text.match(EMAIL_RE)?.[0]?.toLowerCase();
     if (email) {
       const p = await findByEmail(email);
@@ -162,10 +235,20 @@ export async function POST(req) {
         await adminDb().from("profiles").update({ telegram_chat_id: chatId }).eq("id", p.id);
         await send(chatId, "✅ وەرگیرا! دوای پشتڕاستکردنەوەی پارەدانەکە، هەژمارەکەت دەبێتە Pro و ئاگادارت دەکەینەوە.");
         if (ADMIN) {
-          await send(ADMIN, `💰 داواکاری Pro لە ${who}\nئیمەیڵ: <b>${esc(email)}</b>\n\nبۆ چالاککردن یەکێک لەمانە کۆپی بکە (بەپێی ئەو پارەیەی هاتووە):\n<code>/pro ${esc(email)} 5</code>\n<code>/pro ${esc(email)} 10</code>\n<code>/pro ${esc(email)} 25</code>`);
+          await tg("sendMessage", {
+            chat_id: ADMIN,
+            parse_mode: "HTML",
+            text: `💰 <b>داواکاری Pro</b> لە ${who}\nئیمەیڵ: <b>${esc(email)}</b>\n\nبەپێی ئەو پارەیەی هاتووە، دوگمەیەک دابگرە:`,
+            reply_markup: {
+              inline_keyboard: [
+                PAID_PLANS.map((pl) => ({ text: `✅ $${pl.price}`, callback_data: `p:${p.id}:${pl.price}` })),
+                [{ text: "❌ ڕەتکردنەوە", callback_data: `x:${chatId}` }],
+              ],
+            },
+          });
         }
       }
-    } else if (!msg.photo && !msg.document && text && !text.startsWith("/")) {
+    } else if (!msg.photo && !msg.document && text) {
       await send(chatId, "بۆ وەرگرتنی Pro، وێنەی پسوولە و ئیمەیڵەکەت بنێرە. بۆ زانیاری زیاتر /start بنووسە.");
     }
   } catch (e) {
