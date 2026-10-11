@@ -587,3 +587,12 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .pe-card .side-del { opacity: 1; }
 .pe-msg { font-size: 14px; margin: 8px 0; }
 .gold-btn:disabled { opacity: .6; }
+
+/* Selectable plans */
+.plan.pick { position: relative; cursor: pointer; font: inherit; color: inherit; text-align: start; width: 100%; -webkit-tap-highlight-color: transparent; transition: border-color .15s, background .15s, transform .1s; }
+.plan.pick:active { transform: scale(.98); }
+.plan.pick.sel { border-color: var(--gold); background: rgba(217,164,65,.08); box-shadow: 0 0 0 1px var(--gold) inset; }
+.plan-check { position: absolute; inset-inline-end: 12px; bottom: 12px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; font-size: 13px; font-weight: 700; color: var(--gold-ink); }
+.plan.pick.sel .plan-check { background: var(--gold); border-color: var(--gold); }
+.pe-star { background: none; border: 1px solid var(--line-strong); border-radius: 10px; width: 40px; height: 40px; color: var(--muted); font-size: 18px; flex: none; }
+.pe-star.on { color: var(--gold-ink); background: var(--gold); border-color: var(--gold); }

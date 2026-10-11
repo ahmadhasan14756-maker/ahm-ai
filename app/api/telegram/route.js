@@ -60,6 +60,20 @@ ${PLAN_LINES(st)}
 
 دوای پشتڕاستکردنەوە، هەژمارەکەت دەبێتە Pro و ئاگادارت دەکەینەوە. ✅`;
 
+// Sent when the user tapped "Buy" on a specific plan in the app (t.me/bot?start=<planId>).
+const CHOSEN = (st, p) => `سڵاو! 👋 تۆ پلانی <b>${esc(p.name)}</b>ت هەڵبژارد:
+
+⭐ <b>$${p.price}</b> ← ${p.limit} پرسیار بۆ ${p.days} ڕۆژ
+
+💳 ${esc(st.payment || process.env.PAYMENT_INFO || "ژمارەی FIB بەم زووانە دادەنرێت.")}
+
+<b>هەنگاوەکان:</b>
+١. <b>$${p.price}</b> بە FIB بنێرە.
+٢. وێنەی پسوولەکە (screenshot) لێرە بنێرە.
+٣. ئەو ئیمەیڵە بنووسە کە لە ئەپەکەدا پێی تۆمار بوویت.
+
+دوای پشتڕاستکردنەوە، هەژمارەکەت دەبێتە ${esc(p.name)} و ئاگادارت دەکەینەوە. ✅`;
+
 const ADMIN_HELP = `👑 <b>تۆ خاوەنی بۆتەکەیت.</b>
 دوگمەکانی خوارەوە بەکاربهێنە، یان:
 
@@ -198,6 +212,19 @@ export async function POST(req) {
     if (c?.cmd === "/myid") {
       await send(chatId, `ID ی تۆ: <code>${fromId}</code>` + (isAdmin ? "\n👑 تۆ خاوەنی بۆتەکەیت." : ""));
       return Response.json({ ok: true });
+    }
+
+    if (c?.cmd === "/start" && c.rest?.[0]) {
+      const st = await getSettings();
+      const plan = planById(st, c.rest[0]);
+      if (plan) {
+        await send(chatId, CHOSEN(st, plan));
+        if (!isAdmin) {
+          const who = msg.from?.username ? "@" + msg.from.username : esc(msg.from?.first_name || String(fromId));
+          await send(ADMIN, `🛒 ${who} پلانی <b>${esc(plan.name)}</b> ($${plan.price}) هەڵبژارد.`).catch(() => {});
+        }
+        return Response.json({ ok: true });
+      }
     }
 
     if (c?.cmd === "/start" || c?.cmd === "/help") {
