@@ -377,3 +377,28 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .img-chip.doc span { display: flex; align-items: center; height: 64px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
   font-size: 12.5px; font-family: var(--mono); color: var(--text-2); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seg.big button { padding: 6px 10px; }
+
+/* ---------- start screen: capability cards ---------- */
+.caps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 560px; margin: 0 auto; text-align: start; }
+.cap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; min-height: 104px; border-radius: 18px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text); text-align: start; transition: border-color .15s, background .15s; }
+.cap:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.cap svg { color: var(--gold); margin-bottom: 4px; }
+.cap b { font-weight: 600; font-size: 15px; }
+.cap span { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.cap.wide { grid-column: 1 / -1; min-height: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.cap.wide svg { margin: 0; }
+.cap.wide span { flex-basis: 100%; }
+@media (min-width: 700px) { .caps { grid-template-columns: repeat(3, minmax(0, 1fr)); } .cap.wide { grid-column: auto; flex-direction: column; align-items: flex-start; } .cap.wide span { flex-basis: auto; } }
+.auto-hint { color: var(--muted); font-size: 13px; margin: 18px auto 0; }
+.empty { padding-top: 8vh; }
+.tool-chip-row { display: flex; margin-bottom: 8px; }
+.tool-chip { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 12px; min-height: 34px; border-radius: 999px; border: 1px solid #4a3b1d;
+  background: rgba(217, 164, 65, .08); color: var(--gold-hi); font-size: 13px; }
+.tool-chip button { width: 28px; height: 28px; border-radius: 50%; border: 0; background: none; color: var(--gold-hi); display: grid; place-items: center; }
+.deciding { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; border-radius: 14px; border: 0;
+  background: #fff; color: #1f1f1f; font-weight: 600; font-size: 15.5px; }
+.google-btn:active { transform: translateY(1px); }
+.or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 18px 0 14px; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }

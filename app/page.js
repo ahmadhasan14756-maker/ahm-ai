@@ -3,11 +3,12 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "../lib/supabase";
-import { TELEGRAM_BOT } from "../lib/env";
+import { TELEGRAM_BOT, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/env";
 import { PAID_PLANS } from "../lib/plans";
 import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/builder";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
+import { quickGuess } from "../lib/intent";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
 const MAX_FILE_BYTES = 1_500_000;
@@ -81,9 +82,32 @@ function LangPicker() {
 }
 
 /* ---------------- Login / Sign up ---------------- */
+const GoogleLogo = () => (
+  <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+  </svg>
+);
+
 function Auth() {
   const { t } = useLang();
   const [mode, setMode] = useState("login");
+  const [googleOn, setGoogleOn] = useState(false);
+
+  // Show the Google button only when Google sign-in is switched on in Supabase.
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: SUPABASE_ANON_KEY } })
+      .then((r) => r.json())
+      .then((j) => setGoogleOn(!!j?.external?.google))
+      .catch(() => {});
+  }, []);
+
+  async function google() {
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+    if (error) setMsg(t("googleFail"));
+  }
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
@@ -126,7 +150,13 @@ function Auth() {
         <LangPicker />
         <img src="/logo.png" alt="AHM AI" className="auth-logo" />
         <p className="sub">{t("tagline")}</p>
-        <h2>{t(mode)}</h2>
+        {googleOn && mode !== "reset" && (
+          <>
+            <button className="google-btn" onClick={google}><GoogleLogo /> {t("google")}</button>
+            <div className="or"><span>{t("orEmail")}</span></div>
+          </>
+        )}
+        {!googleOn && <h2>{t(mode)}</h2>}
         <form onSubmit={submit}>
           <label className="field">
             <span>{t("email")}</span>
@@ -405,11 +435,7 @@ function Settings({ session, me, onClose, onPlans }) {
 /* ---------------- Sidebar (chat history) ---------------- */
 function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me }) {
   const { t } = useLang();
-  const groups = [
-    { mode: "chat", title: t("history"), icon: Icon.chat },
-    { mode: "build", title: t("projects"), icon: Icon.build },
-    { mode: "image", title: t("imagesGroup"), icon: Icon.image },
-  ];
+  const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image };
   return (
     <>
       <div className={"side-bg" + (open ? " open" : "")} onClick={onClose} aria-hidden="true" />
@@ -418,31 +444,22 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
           <div className="brand"><img src="/icon-192.png" alt="" aria-hidden="true" /><span className="brand-name">AHM <b>AI</b></span></div>
           <button className="icon-btn sm side-x" aria-label={t("close")} onClick={onClose}><Svg d={Icon.close} size={18} /></button>
         </div>
-        <button className="new-btn" onClick={() => onNew("chat")}><Svg d={Icon.plus} size={18} /> {t("newChat")}</button>
-        <button className="new-btn alt" onClick={() => onNew("build")}><Svg d={Icon.build} size={18} /> {t("newProject")}</button>
-        <button className="new-btn alt" onClick={() => onNew("image")}><Svg d={Icon.image} size={18} /> {t("newImage")}</button>
+        <button className="new-btn" onClick={() => onNew("auto")}><Svg d={Icon.plus} size={18} /> {t("newChat")}</button>
         <div className="side-list">
-          {groups.map((g) => {
-            const items = chats.filter((c) => c.mode === g.mode);
-            return (
-              <div key={g.mode} className="side-group">
-                <div className="side-title">{g.title}</div>
-                {!items.length && <div className="side-empty">{t("noHistory")}</div>}
-                {items.map((c) => (
-                  <div key={c.id} className={"side-item" + (c.id === activeId ? " on" : "")}>
-                    <button className="side-pick" onClick={() => onPick(c.id)}>
-                      <Svg d={g.icon} size={15} /><span dir="auto">{c.title || "…"}</span>
-                    </button>
-                    <button className="side-del" aria-label={t("delete")} onClick={() => onDelete(c.id)}><Svg d={Icon.trash} size={15} /></button>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
+          <div className="side-title">{t("recent")}</div>
+          {!chats.length && <div className="side-empty">{t("noHistory")}</div>}
+          {chats.map((c) => (
+            <div key={c.id} className={"side-item" + (c.id === activeId ? " on" : "")}>
+              <button className="side-pick" onClick={() => onPick(c.id)}>
+                <Svg d={iconOf[c.mode] || Icon.chat} size={15} /><span dir="auto">{c.title || "…"}</span>
+              </button>
+              <button className="side-del" aria-label={t("delete")} onClick={() => onDelete(c.id)}><Svg d={Icon.trash} size={15} /></button>
+            </div>
+          ))}
         </div>
         <button className="side-settings" onClick={onSettings}>
           <Svg d={Icon.gear} size={18} /> <span>{t("settings")}</span>
-          {me && <em>{me.pro ? `⭐ ${me.planName}` : t("free")}</em>}
+          {me && <em>{me.pro ? `⭐ ${me.planName}` : t("free")} · {Math.max(0, me.limit - me.used)}</em>}
         </button>
       </aside>
     </>
@@ -462,7 +479,7 @@ function Main({ session }) {
   const uid = session.user.id;
   const storeKey = `ahm-chats-${uid}`;
   const [chats, setChats] = useState([]);
-  const [draft, setDraft] = useState(() => blank("chat")); // saved only after the first message
+  const [draft, setDraft] = useState(() => blank("auto")); // saved only after the first message
   const [activeId, setActiveId] = useState(null);
   const [ready, setReady] = useState(false);
   const [input, setInput] = useState("");
@@ -471,6 +488,7 @@ function Main({ session }) {
   const [sheet, setSheet] = useState(null);
   const [file, setFile] = useState(null);
   const [images, setImages] = useState([]);
+  const [deciding, setDeciding] = useState(false);
   const [imgStyle, setImgStyle] = useState("photo");
   const [imgRatio, setImgRatio] = useState("square");
   const [recording, setRecording] = useState(false);
@@ -532,7 +550,7 @@ function Main({ session }) {
   function patch(id, fn) {
     setChats((list) => {
       const i = list.findIndex((c) => c.id === id);
-      if (i === -1) return [{ ...fn(id === draft.id ? draft : blank("chat")), updated: Date.now() }, ...list];
+      if (i === -1) return [{ ...fn(id === draft.id ? draft : blank("auto")), updated: Date.now() }, ...list];
       const next = [...list];
       next[i] = { ...fn(next[i]), updated: Date.now() };
       next.sort((a, b) => b.updated - a.updated);
@@ -546,7 +564,7 @@ function Main({ session }) {
     setActiveId(active.id);
   }
 
-  function startNew(m) {
+  function startNew(m = "auto") {
     if (busy) return;
     setDraft(blank(m));
     setActiveId(null);
@@ -555,11 +573,11 @@ function Main({ session }) {
     setShowPreview(false);
     setSideOpen(false);
   }
-  function switchMode(m) {
-    if (busy || m === mode) return;
-    const recent = chats.find((c) => c.mode === m);
-    if (recent) { setActiveId(recent.id); setShowPreview(false); }
-    else startNew(m);
+  // Start-screen cards pick a tool for the new chat (or "auto" lets the AI decide).
+  function chooseTool(m) {
+    setDraft((d) => ({ ...d, mode: m }));
+    setActiveId(null);
+    setTimeout(() => ta.current?.focus(), 50);
   }
   function pick(id) {
     if (busy) return;
@@ -655,11 +673,11 @@ function Main({ session }) {
     r.readAsText(f);
   }
 
-  async function generateImage(text, baseMessages) {
+  async function generateImage(text, baseMessages, keepMode = "image") {
     const id = active.id;
     const style = imgStyle, ratio = imgRatio;
     const next = [...(baseMessages || messages), { role: "user", content: text }];
-    const put = (msgs) => patch(id, (c) => ({ ...c, messages: msgs, title: c.title || text.slice(0, 60) }));
+    const put = (msgs) => patch(id, (c) => ({ ...c, mode: keepMode, messages: msgs, title: c.title || text.slice(0, 60) }));
     put([...next, { role: "assistant", content: "" }]);
     setActiveId(id);
     setInput("");
@@ -690,22 +708,51 @@ function Main({ session }) {
     }
   }
 
-  async function send(preset, baseMessages, extra = []) {
-    if (mode === "image") {
-      const txt = (preset ?? input).trim();
-      if (txt && !busy) generateImage(txt, baseMessages);
+  async function send(preset, baseMessages, extra = [], forced) {
+    const typed = (preset ?? input).trim();
+    const hasAttach = images.length || file || extra.length;
+    let target = forced || mode;
+
+    // New chat with no tool chosen: work out what the user wants.
+    if (target === "auto") {
+      if (!typed && !hasAttach) return;
+      if (busy) return;
+      target = "chat";
+      if (!hasAttach && typed) {
+        target = quickGuess(typed);
+        if (!target) {
+          setDeciding(true);
+          try {
+            const r = await fetch("/api/intent", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
+              body: JSON.stringify({ text: typed }),
+            });
+            target = (await r.json().catch(() => ({}))).mode || "chat";
+          } catch { target = "chat"; } finally { setDeciding(false); }
+        }
+      }
+      setDraft((d) => ({ ...d, mode: target }));
+    }
+    // In a normal chat, "draw me ..." makes a picture right inside the conversation.
+    if (target === "chat" && !hasAttach && typed && quickGuess(typed) === "image") {
+      if (!busy) generateImage(typed, baseMessages, "chat");
       return;
     }
-    const sentImages = mode === "chat" ? [...images, ...extra] : [];
+    if (target === "image") {
+      if (typed && !busy) generateImage(typed, baseMessages, "image");
+      return;
+    }
+    const sentImages = target === "chat" ? [...images, ...extra] : [];
     const isVoice = extra.some((x) => x.voice);
     const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
     const id = active.id;
-    const m = mode;
+    const m = target;
     const sentFile = m === "chat" ? file : null;
     const base = project;
     const next = [...(baseMessages || messages), { role: "user", content: text, voice: isVoice || undefined, fileName: sentFile?.name, thumbs: sentImages.filter((im) => im.thumb).map((im) => im.thumb), docs: sentImages.filter((im) => im.docName).map((im) => im.docName) }];
-    const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, messages: msgs, title: c.title || text.slice(0, 60) }));
+    const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, mode: m, messages: msgs, title: c.title || text.slice(0, 60) }));
     put([...next, { role: "assistant", content: "" }]);
     setActiveId(id);
     setInput("");
@@ -805,6 +852,8 @@ function Main({ session }) {
   const pct = me ? Math.min(100, (me.used / me.limit) * 100) : 0;
   const hasFiles = Object.keys(project).length > 0;
   const suggestions = t(mode === "build" ? "buildSugg" : mode === "image" ? "imageSugg" : "chatSugg");
+  const chatLike = mode === "chat" || mode === "auto";
+  const toolName = { chat: t("capChat"), build: t("capBuild"), image: t("capImage") }[mode];
 
   return (
     <div className={"app mode-" + mode}>
@@ -819,28 +868,8 @@ function Main({ session }) {
             <img src="/icon-192.png" alt="" aria-hidden="true" />
             <span className="brand-name">AHM <b>AI</b></span>
           </div>
-          <button className="icon-btn" aria-label={mode === "build" ? t("newProject") : t("newChat")} title={mode === "build" ? t("newProject") : t("newChat")} onClick={() => startNew(mode)}><Svg d={Icon.plus} /></button>
+          <button className="icon-btn" aria-label={t("newChat")} title={t("newChat")} onClick={() => startNew("auto")}><Svg d={Icon.plus} /></button>
         </header>
-
-        <div className="subbar">
-          <div className="seg big" role="tablist">
-            <button role="tab" aria-selected={mode === "chat"} className={mode === "chat" ? "on" : ""} onClick={() => switchMode("chat")}>
-              <Svg d={Icon.chat} size={16} /> {t("chat")}
-            </button>
-            <button role="tab" aria-selected={mode === "build"} className={mode === "build" ? "on" : ""} onClick={() => switchMode("build")}>
-              <Svg d={Icon.build} size={16} /> {t("build")}
-            </button>
-            <button role="tab" aria-selected={mode === "image"} className={mode === "image" ? "on" : ""} onClick={() => switchMode("image")}>
-              <Svg d={Icon.image} size={16} /> {t("imageTab")}
-            </button>
-          </div>
-          {me && (
-            <button className={"quota" + (me.pro ? " pro" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })} aria-label={t("plans")}>
-              <span>{me.pro ? `⭐ ${me.planName}` : t("free")} · {left} {t("left")}</span>
-              <i style={{ width: `${100 - pct}%` }} />
-            </button>
-          )}
-        </div>
 
         <div className="body">
           <div className="chat-col">
@@ -848,15 +877,28 @@ function Main({ session }) {
               {messages.length === 0 && (
                 <div className="empty">
                   <img src="/icon-192.png" alt="" aria-hidden="true" className="empty-logo" />
-                  {mode === "chat" ? (
-                    <h2 className="greet">{greeting(t)}{name ? (lang === "en" ? ", " : "، ") + name : ""}</h2>
+                  {mode === "auto" ? (
+                    <>
+                      <h2 className="greet">{greeting(t)}{name ? (lang === "en" ? ", " : "، ") + name : ""}</h2>
+                      <p className="muted">{t("helpQ")}</p>
+                      <div className="caps">
+                        <button className="cap" onClick={() => chooseTool("chat")}><Svg d={Icon.chat} /><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
+                        <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
+                        <button className="cap" onClick={() => chooseTool("image")}><Svg d={Icon.image} /><b>{t("capImage")}</b><span>{t("capImageSub")}</span></button>
+                        <button className="cap" onClick={startRec}><Svg d={Icon.mic} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
+                        <button className="cap wide" onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /><b>{t("capFiles")}</b><span>{t("capFilesSub")}</span></button>
+                      </div>
+                      <p className="auto-hint">{t("autoHint")}</p>
+                    </>
                   ) : (
-                    <h2 className="greet">{mode === "image" ? t("imageQ") : t("buildQ")}</h2>
+                    <>
+                      <h2 className="greet">{mode === "image" ? t("imageQ") : mode === "build" ? t("buildQ") : t("helpQ")}</h2>
+                      <p className="muted">{mode === "build" ? t("buildSub") : mode === "image" ? t("imageSub") : t("helpSub")}</p>
+                      <div className="chips">
+                        {suggestions.map((sg) => <button key={sg} onClick={() => send(sg)}>{sg}</button>)}
+                      </div>
+                    </>
                   )}
-                  <p className="muted">{mode === "build" ? t("buildSub") : mode === "image" ? t("imageSub") : t("helpQ")}</p>
-                  <div className="chips">
-                    {suggestions.map((s) => <button key={s} onClick={() => send(s)}>{s}</button>)}
-                  </div>
                 </div>
               )}
               {messages.map((m, i) => (
@@ -898,6 +940,15 @@ function Main({ session }) {
                   <Svg d={Icon.phone} size={18} /> {t("preview")}
                 </button>
               )}
+              {messages.length === 0 && mode !== "auto" && (
+                <div className="tool-chip-row">
+                  <span className="tool-chip">
+                    <Svg d={mode === "build" ? Icon.build : mode === "image" ? Icon.image : Icon.chat} size={15} /> {toolName}
+                    <button aria-label={t("close")} onClick={() => chooseTool("auto")}><Svg d={Icon.close} size={13} w={2.6} /></button>
+                  </span>
+                </div>
+              )}
+              {deciding && <div className="deciding" role="status"><span className="mini-spin" /> {t("deciding")}</div>}
               {mode === "image" && (
                 <div className="img-opts">
                   <div className="opt-row" role="radiogroup" aria-label={t("style")}>
@@ -938,7 +989,7 @@ function Main({ session }) {
                 </div>
               ) : (
               <div className="composer">
-                {mode === "chat" && (
+                {chatLike && (
                   <>
                     <input ref={fileInput} type="file" hidden multiple onChange={pickFile}
                       accept="image/*,.heic,.pdf,application/pdf,.txt,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.php,.rb,.swift,.kt,.dart,.html,.css,.scss,.json,.xml,.yml,.yaml,.sql,.sh,.md,.vue,.svelte,text/*" />
@@ -951,7 +1002,7 @@ function Main({ session }) {
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 700) { e.preventDefault(); send(); } }} />
-                {mode === "chat" && !busy && !input.trim() && !images.length && !file ? (
+                {chatLike && !busy && !deciding && !input.trim() && !images.length && !file ? (
                   <button className="send mic" aria-label={t("record")} title={t("record")} onClick={startRec}><Svg d={Icon.mic} size={18} /></button>
                 ) : busy ? (
                   <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
