@@ -8,6 +8,7 @@ import { PAID_PLANS } from "../lib/plans";
 import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/builder";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
+import Learn from "../components/Learn";
 import { quickGuess } from "../lib/intent";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
@@ -60,6 +61,7 @@ const Icon = {
   check: <path d="M5 12l5 5 9-10" />,
   image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></>,
   open: <><path d="M14 4h6v6M20 4l-9 9" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>,
+  learn: <><path d="M2 9l10-5 10 5-10 5z" /><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
 };
 const Svg = ({ d, size = 20, w = 2 }) => (
@@ -445,7 +447,7 @@ function Settings({ session, me, onClose, onPlans }) {
 }
 
 /* ---------------- Sidebar (chat history) ---------------- */
-function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me }) {
+function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn }) {
   const { t } = useLang();
   const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image };
   return (
@@ -457,11 +459,12 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
           <button className="icon-btn sm side-x" aria-label={t("close")} onClick={onClose}><Svg d={Icon.close} size={18} /></button>
         </div>
         <button className="new-btn" onClick={() => onNew("auto")}><Svg d={Icon.plus} size={18} /> {t("newChat")}</button>
+        <button className={"new-btn alt" + (learnOn ? " on" : "")} onClick={onLearn}><Svg d={Icon.learn} size={18} /> {t("learnLang")}</button>
         <div className="side-list">
           <div className="side-title">{t("recent")}</div>
           {!chats.length && <div className="side-empty">{t("noHistory")}</div>}
           {chats.map((c) => (
-            <div key={c.id} className={"side-item" + (c.id === activeId ? " on" : "")}>
+            <div key={c.id} className={"side-item" + (c.id === activeId && !learnOn ? " on" : "")}>
               <button className="side-pick" onClick={() => onPick(c.id)}>
                 <Svg d={iconOf[c.mode] || Icon.chat} size={15} /><span dir="auto">{c.title || "…"}</span>
               </button>
@@ -508,6 +511,7 @@ function Main({ session }) {
   const recRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
+  const [view, setView] = useState("chat"); // chat | learn
   const bottom = useRef(null);
   const ta = useRef(null);
   const fileInput = useRef(null);
@@ -578,6 +582,7 @@ function Main({ session }) {
 
   function startNew(m = "auto") {
     if (busy) return;
+    setView("chat");
     setDraft(blank(m));
     setActiveId(null);
     setInput("");
@@ -586,6 +591,25 @@ function Main({ session }) {
     setSideOpen(false);
   }
   // Start-screen cards pick a tool for the new chat (or "auto" lets the AI decide).
+  function openLearn() {
+    if (busy) return;
+    setView("learn");
+    setSideOpen(false);
+    setShowPreview(false);
+  }
+  // A tutor chat: the teacher speaks first, then corrects the learner as they talk.
+  function startTutor(target, level) {
+    const hello = {
+      en: "Hi! 👋 I'm your English teacher. Let's practise together. How are you today?",
+      ar: "مرحباً! 👋 أنا معلمك للغة العربية. لنتدرب معاً. كيف حالك اليوم؟",
+      ckb: "سڵاو! 👋 من مامۆستای زمانی کوردییەکەتم. با پێکەوە ڕاهێنان بکەین. ئەمڕۆ چۆنی؟",
+    }[target];
+    const names = { en: "English", ar: "العربية", ckb: "کوردی" };
+    setDraft({ ...blank("chat"), title: "🎓 " + names[target] + " · " + level, tutor: { target, level }, messages: [{ role: "assistant", content: hello }] });
+    setActiveId(null);
+    setView("chat");
+  }
+
   function chooseTool(m) {
     setDraft((d) => ({ ...d, mode: m }));
     setActiveId(null);
@@ -593,6 +617,7 @@ function Main({ session }) {
   }
   function pick(id) {
     if (busy) return;
+    setView("chat");
     setActiveId(id);
     setSideOpen(false);
     setShowPreview(false);
@@ -747,7 +772,7 @@ function Main({ session }) {
       setDraft((d) => ({ ...d, mode: target }));
     }
     // In a normal chat, "draw me ..." makes a picture right inside the conversation.
-    if (target === "chat" && !hasAttach && typed && quickGuess(typed) === "image") {
+    if (target === "chat" && !active.tutor && !hasAttach && typed && quickGuess(typed) === "image") {
       if (!busy) generateImage(typed, baseMessages, "chat");
       return;
     }
@@ -793,6 +818,7 @@ function Main({ session }) {
           file: sentFile || undefined,
           images: sentImages.length ? sentImages.map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
           project: m === "build" ? base : undefined,
+          tutor: active.tutor || undefined,
         }),
       });
       if (res.status === 401) { await supabase.auth.signOut(); return "stop"; }
@@ -869,7 +895,7 @@ function Main({ session }) {
 
   return (
     <div className={"app mode-" + mode}>
-      <Sidebar open={sideOpen} chats={chats} activeId={activeId} me={me}
+      <Sidebar open={sideOpen} chats={chats} activeId={activeId} me={me} onLearn={openLearn} learnOn={view === "learn"}
         onPick={pick} onNew={startNew} onDelete={remove} onClose={() => setSideOpen(false)}
         onSettings={() => { setSideOpen(false); setSheet({ type: "settings" }); }} />
 
@@ -883,6 +909,10 @@ function Main({ session }) {
           <button className="icon-btn" aria-label={t("newChat")} title={t("newChat")} onClick={() => startNew("auto")}><Svg d={Icon.plus} /></button>
         </header>
 
+        {view === "learn" ? (
+          <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor}
+            onLimit={() => setSheet({ type: "upgrade", reason: "limit" })} />
+        ) : (
         <div className="body">
           <div className="chat-col">
             <main>
@@ -898,7 +928,8 @@ function Main({ session }) {
                         <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("image")}><Svg d={Icon.image} /><b>{t("capImage")}</b><span>{t("capImageSub")}</span></button>
                         <button className="cap" onClick={startRec}><Svg d={Icon.mic} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
-                        <button className="cap wide" onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /><b>{t("capFiles")}</b><span>{t("capFilesSub")}</span></button>
+                        <button className="cap" onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /><b>{t("capFiles")}</b><span>{t("capFilesSub")}</span></button>
+                        <button className="cap learn-cap" onClick={openLearn}><Svg d={Icon.learn} /><b>{t("learnLang")}</b><span>{t("learnLangSub")}</span></button>
                       </div>
                       <p className="auto-hint">{t("autoHint")}</p>
                     </>
@@ -1034,6 +1065,7 @@ function Main({ session }) {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} />}

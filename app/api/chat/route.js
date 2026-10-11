@@ -162,6 +162,7 @@ export async function POST(req) {
     const messages = (Array.isArray(body.messages) ? body.messages : [])
       .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
       .slice(-MAX_MESSAGES);
+    while (messages.length && messages[0].role === "assistant") messages.shift(); // Gemini wants the user to speak first
     if (!messages.length || messages[messages.length - 1].role !== "user") {
       return Response.json({ error: "bad_request" }, { status: 400 });
     }
@@ -206,8 +207,18 @@ export async function POST(req) {
 
     const preferred = usage.pro ? serverEnv("GEMINI_MODEL_PRO") || serverEnv("GEMINI_MODEL") : serverEnv("GEMINI_MODEL");
     const models = [...new Set([preferred, ...FALLBACK_MODELS].filter(Boolean))];
+    const TUTOR_LANG = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
+    const tutor = body.tutor && TUTOR_LANG[body.tutor.target] ? body.tutor : null;
+    const TUTOR_PROMPT = tutor ? `
+
+LANGUAGE TEACHER MODE (this overrides the LANGUAGE rules above)
+- You are a warm, patient ${TUTOR_LANG[tutor.target]} conversation teacher. The learner's level is ${String(tutor.level).slice(0, 3)} (CEFR) and their own language is ${LANG_NAME[lang] || LANG_NAME.ckb}.
+- Reply mainly in ${TUTOR_LANG[tutor.target]}, using words and grammar that fit their level. Keep each reply short: 2–5 sentences, then ask ONE simple question to keep the conversation going.
+- If the learner's last message has mistakes, add a short section starting with "✏️" in their own language: show the corrected sentence and explain the mistake in one line. If there were no mistakes, praise them briefly.
+- For beginners (A0/A1) add the meaning in their own language in brackets after difficult sentences.
+- If they ask for help or a translation, give it, then continue the conversation.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : ""),
+      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + TUTOR_PROMPT,
       maxOutputTokens: file || build ? 32768 : 8192,
     };
     // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).
