@@ -2,7 +2,7 @@ import "./globals.css";
 import SWRegister from "./sw-register";
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://ahm-ai.vercel.app").replace(/\/$/, "");
-const DESC = "AHM AI — زیرەکی دەستکرد بە کوردی، عەرەبی و ئینگلیزی: پرسیار و وەڵام، دروستکردنی ماڵپەڕ و ئەپ، لۆگۆ و وێنە، خوێندنەوەی PDF، گفتوگۆی دەنگی و فێربوونی زمان. Kurdish AI assistant.";
+const DESC = "AHM AI — زیرەکی دەستکرد بە کوردی، عەرەبی و ئینگلیزی: پرسیار و وەڵام، دروستکردنی ماڵپەڕ و ئەپ، گفتوگۆی دەنگی و فێربوونی زمان. Kurdish AI assistant.";
 
 export const metadata = {
   metadataBase: new URL(SITE),

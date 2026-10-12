@@ -643,6 +643,70 @@ function Dashboard({ token, onClose, onPlans }) {
 }
 const dayOf = (iso) => new Date(new Date(iso).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
 
+// Which device is this? (decides which steps we show first)
+function deviceKind() {
+  if (typeof navigator === "undefined") return "pc";
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "ios";
+  if (/Android/.test(ua)) return "android";
+  return "pc";
+}
+
+function Steps({ items }) {
+  return <ol className="guide-steps">{items.map((x, i) => <li key={i}>{x}</li>)}</ol>;
+}
+
+// After "Download ZIP": how to open the files on a computer.
+function ZipGuide({ onClose }) {
+  const { t } = useLang();
+  const phone = deviceKind() !== "pc";
+  return (
+    <Sheet label={t("zipBtn")} onClose={onClose}>
+      <h3>✅ {t("zipDone")}</h3>
+      <div className="guide-card">
+        <div className="guide-title">💻 {t("onComputer")}</div>
+        <Steps items={[t("zipStep1"), t("zipStep2"), t("zipStep3")]} />
+      </div>
+      {phone && <p className="guide-note">📱 {t("zipPhoneNote")}</p>}
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+// After "Add to screen": the app has its own link; show the steps for this device (others one tap away).
+function ScreenGuide({ info, onClose }) {
+  const { t } = useLang();
+  const [dev, setDev] = useState(deviceKind());
+  const steps = {
+    ios: [t("scrOpen"), t("scrIos2"), t("scrIos3")],
+    android: [t("scrOpen"), t("scrAnd2")],
+    pc: [t("scrOpen"), t("scrPc2"), t("scrPc3")],
+  };
+  const names = { ios: "iPhone", android: "Android", pc: t("computer") };
+  return (
+    <Sheet label={t("screenBtn")} onClose={onClose}>
+      <h3>📲 {t("screenBtn")}</h3>
+      {info.error ? <p className="pe-msg">⚠️ {info.error}</p> : (
+        <>
+          <p className="muted">{t("scrIntro")}</p>
+          <div className="seg small guide-tabs" role="tablist">
+            {["ios", "android", "pc"].map((k) => (
+              <button key={k} role="tab" aria-selected={dev === k} className={dev === k ? "on" : ""} onClick={() => setDev(k)}>{names[k]}</button>
+            ))}
+          </div>
+          <div className="guide-card">
+            <Steps items={steps[dev]} />
+          </div>
+          <a className="green-btn" href={info.url} target="_blank" rel="noreferrer">🚀 {t("scrOpenBtn")}</a>
+          <div className="inv-link" dir="ltr">{info.url}</div>
+          <p className="guide-note">💡 {t("scrNote")}</p>
+        </>
+      )}
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
 function Published({ info, onClose }) {
   const { t } = useLang();
   const [copied, setCopied] = useState(false);
@@ -916,8 +980,6 @@ function Main({ session }) {
   const [file, setFile] = useState(null);
   const [images, setImages] = useState([]);
   const [deciding, setDeciding] = useState(false);
-  const [imgStyle, setImgStyle] = useState("photo");
-  const [imgRatio, setImgRatio] = useState("square");
   const [recording, setRecording] = useState(false);
   const [recSecs, setRecSecs] = useState(0);
   const recRef = useRef(null);
@@ -946,7 +1008,8 @@ function Main({ session }) {
   }
   const [gift, setGift] = useState(0);
   const [publishing, setPublishing] = useState(false);
-  async function publishSite() {
+  async function publishSite(next = "published") {
+    if (typeof next !== "string") next = "published"; // called from a button click
     setPublishing(true);
     try {
       const res = await fetch("/api/sites", {
@@ -957,7 +1020,7 @@ function Main({ session }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.id) {
         if (data.id !== active.siteId) patch(active.id, (c) => ({ ...c, siteId: data.id }));
-        setSheet({ type: "published", url: `${window.location.origin}/s/${data.id}`, updated: !!data.updated });
+        setSheet({ type: next, url: `${window.location.origin}/s/${data.id}`, updated: !!data.updated });
       } else {
         setSheet({ type: "published", error: { no_table: t("inviteSoon"), too_big: t("siteTooBig"), too_many: t("siteTooMany") }[data.error] || t("errGeneric") });
       }
@@ -1209,10 +1272,7 @@ function Main({ session }) {
     }
   }
 
-  function onPaste(e) {
-    const imgs = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
-    if (imgs.length) { e.preventDefault(); addImages(imgs); }
-  }
+  function onPaste() {} // sending images/PDF was removed
 
   function pickFile(e) {
     const all = [...(e.target.files || [])];
@@ -1236,60 +1296,6 @@ function Main({ session }) {
     r.readAsText(f);
   }
 
-  async function generateImage(text, baseMessages, keepMode = "image") {
-    const id = active.id;
-    const base = baseMessages || messages;
-    // Logos and posters are drawn as vector designs (exact text, also Kurdish); everything else as pictures.
-    const lastDesign = [...base].reverse().find((m) => m.designs || m.gen);
-    const wanted = /(لۆگۆ|logo|شعار|لوگو)/i.test(text) ? "logo" : /(پۆستەر|poster|ملصق|بوستر|بانەر|banner|flyer)/i.test(text) ? "poster" : null;
-    const kind = wanted || (lastDesign?.designs ? lastDesign.kind : null) || (["logo", "poster"].includes(imgStyle) ? imgStyle : null);
-    const style = kind ? kind : imgStyle, ratio = imgRatio;
-    // Earlier requests in this chat, so "make it blue" changes the last image instead of starting over.
-    const previous = lastDesign ? base.filter((m) => m.role === "user").map((m) => m.content).slice(-4) : [];
-    const next = [...base, { role: "user", content: text }];
-    const put = (msgs) => patch(id, (c) => ({ ...c, mode: keepMode, messages: msgs, title: c.title || text.slice(0, 60) }));
-    put([...next, { role: "assistant", content: "" }]);
-    setActiveId(id);
-    setInput("");
-    if (ta.current) ta.current.style.height = "auto";
-    setBusy(true);
-    try {
-      let res, data;
-      for (let tries = 0; tries < 3; tries++) {
-        res = await fetch(kind ? "/api/design" : "/api/imagine", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
-          body: JSON.stringify({ prompt: text, style, kind, previous, lang }),
-        });
-        data = await res.json().catch(() => ({}));
-        if (res.ok || data.error === "limit" || data.error === "unsafe" || res.status === 401) break;
-        await new Promise((r) => setTimeout(r, 1200 * (tries + 1)));
-      }
-      if (res.status === 401) { await supabase.auth.signOut(); return; }
-      if (data.error === "limit") { put(next.slice(0, -1)); setInput(text); showLimit(); return; }
-      if (!res.ok) { put([...next, { role: "assistant", content: data.error === "unsafe" ? t("unsafe") : data.error === "busy" ? t("errBusy") : t("errAi"), failed: data.error !== "unsafe" }]); return; }
-      if (kind) {
-        put([...next, { role: "assistant", content: data.caption || "", designs: data.designs, kind: data.kind }]);
-      } else {
-        const seeds = [1, 2].map(() => Math.floor(Math.random() * 1e9));
-        put([...next, { role: "assistant", content: data.caption || "", gen: seeds.map((sd) => imageUrl(data.prompt, ratio, sd)), ratio, prompt: data.prompt }]);
-      }
-    } catch {
-      put([...next, { role: "assistant", content: t("errConn"), failed: true }]);
-    } finally {
-      setBusy(false);
-      loadMe();
-    }
-  }
-
-  // Two more versions of the same picture (free: same description, new random seed).
-  function moreImages(index) {
-    patch(active.id, (c) => ({
-      ...c,
-      messages: c.messages.map((m, i) => (i === index && m.prompt ? { ...m, gen: [...m.gen, ...[1, 2].map(() => imageUrl(m.prompt, m.ratio, Math.floor(Math.random() * 1e9)))].slice(-8) } : m)),
-    }));
-  }
-
   // ---- hands-free voice conversation ----
   const [voice, setVoice] = useState(null); // { chatId, tutor, greeting }
   function openVoice(opts = {}) {
@@ -1311,7 +1317,7 @@ function Main({ session }) {
   async function send(preset, baseMessages, extra = [], forced) {
     const typed = (preset ?? input).trim();
     const hasAttach = images.length || file || extra.length;
-    let target = forced || mode;
+    let target = forced || (mode === "image" ? "chat" : mode); // image creation was removed
 
     // New chat with no tool chosen: work out what the user wants.
     if (target === "auto") {
@@ -1332,16 +1338,8 @@ function Main({ session }) {
           } catch { target = "chat"; } finally { setDeciding(false); }
         }
       }
+      if (target !== "build") target = "chat";
       setDraft((d) => ({ ...d, mode: target }));
-    }
-    // In a normal chat, "draw me ..." makes a picture right inside the conversation.
-    if (target === "chat" && !active.tutor && !hasAttach && typed && quickGuess(typed) === "image") {
-      if (!busy) generateImage(typed, baseMessages, "chat");
-      return;
-    }
-    if (target === "image") {
-      if (typed && !busy) generateImage(typed, baseMessages, "image");
-      return;
     }
     const sentImages = target === "chat" ? [...images, ...extra] : [];
     const isVoice = extra.some((x) => x.voice);
@@ -1450,7 +1448,8 @@ function Main({ session }) {
 
   const name = (session.user.email || "").split("@")[0].replace(/[._\d]+/g, " ").trim().split(" ")[0].replace(/^./, (c) => c.toUpperCase());
   const hasFiles = Object.keys(project).length > 0;
-  const suggestions = t(mode === "build" ? "buildSugg" : mode === "image" ? "imageSugg" : "chatSugg");
+  const canPreview = useMemo(() => hasFiles && !!buildPreview(project), [project]);
+  const suggestions = t(mode === "build" ? "buildSugg" : "chatSugg");
   const chatLike = mode === "chat" || mode === "auto";
   const toolName = { chat: t("capChat"), build: t("capBuild"), image: t("capImage") }[mode];
 
@@ -1526,17 +1525,15 @@ function Main({ session }) {
                       <div className="caps">
                         <button className="cap" onClick={() => chooseTool("chat")}><Svg d={Icon.chat} /><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
-                        <button className="cap" onClick={() => chooseTool("image")}><Svg d={Icon.image} /><b>{t("capImage")}</b><span>{t("capImageSub")}</span></button>
                         <button className="cap" onClick={() => openVoice()}><Svg d={Icon.wave} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
-                        <button className="cap" onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /><b>{t("capFiles")}</b><span>{t("capFilesSub")}</span></button>
                         <button className="cap learn-cap" onClick={openLearn}><Svg d={Icon.learn} /><b>{t("learnLang")}</b><span>{t("learnLangSub")}</span></button>
                       </div>
                       <p className="auto-hint">{t("autoHint")}</p>
                     </>
                   ) : (
                     <>
-                      <h2 className="greet">{mode === "image" ? t("imageQ") : mode === "build" ? t("buildQ") : t("helpQ")}</h2>
-                      <p className="muted">{mode === "build" ? t("buildSub") : mode === "image" ? t("imageSub") : t("helpSub")}</p>
+                      <h2 className="greet">{mode === "build" ? t("buildQ") : t("helpQ")}</h2>
+                      <p className="muted">{mode === "build" ? t("buildSub") : t("helpSub")}</p>
                       <div className="chips">
                         {suggestions.map((sg) => <button key={sg} onClick={() => send(sg)}>{sg}</button>)}
                       </div>
@@ -1559,10 +1556,19 @@ function Main({ session }) {
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !(busy && i === messages.length - 1) && (
                       <AnswerActions text={m.content} getToken={token} />
                     )}
+                    {mode === "build" && hasFiles && !busy && i === messages.length - 1 && m.role === "assistant" && !m.failed && (
+                      <div className="app-actions">
+                        <button className="green-btn" onClick={() => { downloadZip(project); setSheet({ type: "zipGuide" }); }}>⬇️ {t("zipBtn")}</button>
+                        {canPreview && (
+                          <button className="green-btn" disabled={publishing} onClick={() => publishSite("screen")}>
+                            {publishing ? <span className="mini-spin" /> : "📲"} {t("screenBtn")}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {m.gen && (
                       <>
                         <div className={"gen-grid " + (m.ratio || "square")}>{m.gen.map((u) => <GenImage key={u} url={u} ratio={m.ratio} />)}</div>
-                        {m.prompt && !busy && <button className="retry-btn" onClick={() => moreImages(i)}><Svg d={Icon.more} size={15} /> {t("moreImages")}</button>}
                       </>
                     )}
                     {m.designs && (
@@ -1592,28 +1598,12 @@ function Main({ session }) {
               {messages.length === 0 && mode !== "auto" && (
                 <div className="tool-chip-row">
                   <span className="tool-chip">
-                    <Svg d={mode === "build" ? Icon.build : mode === "image" ? Icon.image : Icon.chat} size={15} /> {toolName}
+                    <Svg d={mode === "build" ? Icon.build : Icon.chat} size={15} /> {toolName}
                     <button aria-label={t("close")} onClick={() => chooseTool("auto")}><Svg d={Icon.close} size={13} w={2.6} /></button>
                   </span>
                 </div>
               )}
               {deciding && <div className="deciding" role="status"><span className="mini-spin" /> {t("deciding")}</div>}
-              {mode === "image" && (
-                <div className="img-opts">
-                  <div className="opt-row" role="radiogroup" aria-label={t("style")}>
-                    {["photo", "art", "logo", "3d", "poster"].map((k) => (
-                      <button key={k} role="radio" aria-checked={imgStyle === k} className={imgStyle === k ? "on" : ""} onClick={() => setImgStyle(k)}>{t("style_" + k)}</button>
-                    ))}
-                  </div>
-                  <div className="opt-row" role="radiogroup" aria-label={t("ratio")}>
-                    {["square", "portrait", "landscape"].map((k) => (
-                      <button key={k} role="radio" aria-checked={imgRatio === k} className={imgRatio === k ? "on" : ""} onClick={() => setImgRatio(k)}>
-                        <i className={"ratio-ico " + k} aria-hidden="true" /> {t("ratio_" + k)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               {images.length > 0 && (
                 <div className="img-tray">
                   {images.map((im, k) => (
@@ -1638,15 +1628,8 @@ function Main({ session }) {
                 </div>
               ) : (
               <div className="composer">
-                {chatLike && (
-                  <>
-                    <input ref={fileInput} type="file" hidden multiple onChange={pickFile}
-                      accept="image/*,.heic,.pdf,application/pdf,.txt,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.php,.rb,.swift,.kt,.dart,.html,.css,.scss,.json,.xml,.yml,.yaml,.sql,.sh,.md,.vue,.svelte,text/*" />
-                    <button className="attach" aria-label={t("attachImage")} title={t("attachImage")} onClick={() => fileInput.current?.click()}><Svg d={Icon.clip} /></button>
-                  </>
-                )}
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
-                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : mode === "image" ? t("placeholderImage") : file ? t("placeholderFile") : t("placeholder")}
+                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}
@@ -1684,6 +1667,8 @@ function Main({ session }) {
           onLimit={() => showLimit()} />
       )}
       {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} />}
+      {sheet?.type === "screen" && <ScreenGuide info={sheet} onClose={() => setSheet(null)} />}
+      {sheet?.type === "zipGuide" && <ZipGuide onClose={() => setSheet(null)} />}
       {sheet?.type === "published" && <Published info={sheet} onClose={() => setSheet(null)} />}
       {sheet?.type === "invite" && <Invite token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "password" && <ChangePassword onClose={() => setSheet(null)} />}
