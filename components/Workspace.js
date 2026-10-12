@@ -84,7 +84,7 @@ function Desktop({ html, nonce, box }) {
   );
 }
 
-export default function Workspace({ files, setFiles, busy, t, onClose, onAsk }) {
+export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing }) {
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
   const [device, setDevice] = useState("iphone");
@@ -155,6 +155,11 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk }) 
           </button>
         </div>
         <div className="ws-actions">
+          {html && onPublish && (
+            <button className="publish-btn" disabled={busy || publishing} onClick={onPublish} title={t("publishHint")}>
+              <span aria-hidden="true">🌐</span> {publishing ? "…" : t("publish")}
+            </button>
+          )}
           <button className="icon-btn sm" aria-label={t("howToRun")} title={t("howToRun")} disabled={busy || !names.length} onClick={() => onAsk(t("howToRunAsk"))}>
             <Svg d={P.play} />
           </button>

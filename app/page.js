@@ -10,6 +10,7 @@ import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
 import Learn from "../components/Learn";
 import VoiceMode from "../components/VoiceMode";
+import Landing from "../components/Landing";
 import { quickGuess } from "../lib/intent";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
@@ -96,9 +97,9 @@ const GoogleLogo = () => (
   </svg>
 );
 
-function Auth() {
+function Auth({ initialMode = "login", onBack }) {
   const { t } = useLang();
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState(initialMode);
   const [googleOn, setGoogleOn] = useState(false);
   const [showPw, setShowPw] = useState(false);
 
@@ -118,6 +119,11 @@ function Auth() {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  async function askOwnerReset(addr) {
+    await fetch("/api/reset-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: addr }) }).catch(() => {});
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -139,8 +145,9 @@ function Auth() {
         if (!data?.session) setMsg(t("checkEmail")); // with confirmation off they are signed in straight away
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-        if (error) throw error;
-        setMsg(t("resetSent"));
+        if (error && /load failed|failed to fetch|network/i.test(error.message || "")) throw error;
+        if (error) { await askOwnerReset(email); setMsg(t("resetRequested")); } // e-mail couldn't be sent → the owner makes a new password
+        else { setMsg(t("resetSent")); setResetSent(true); }
       }
     } catch (err) {
       const m = err.message || "";
@@ -159,6 +166,7 @@ function Auth() {
     <div className="auth-wrap">
       <div className="glow" aria-hidden="true" />
       <div className="auth-card">
+        {onBack && <button type="button" className="auth-back" onClick={onBack}>{t("back")}</button>}
         <LangPicker />
         <img src="/logo.png" alt="AHM AI" className="auth-logo" />
         <p className="sub">{t("tagline")}</p>
@@ -190,11 +198,17 @@ function Auth() {
           )}
           <button type="submit" className="gold-btn" disabled={loading}>{loading ? "..." : t(mode)}</button>
         </form>
+        {mode === "signup" && <p className="agree">{t("agree")} <a href="/terms" target="_blank" rel="noreferrer">{t("terms")}</a> · <a href="/privacy" target="_blank" rel="noreferrer">{t("privacy")}</a></p>}
         {msg && <p className="msg">{msg}</p>}
         <div className="links">
           {mode !== "login" && <button onClick={() => { setMode("login"); setMsg(""); }}>{t("haveAccount")}</button>}
           {mode !== "signup" && <button onClick={() => { setMode("signup"); setMsg(""); }}>{t("noAccount")} <b>{t("signupLink")}</b></button>}
-          {mode === "login" && <button onClick={() => { setMode("reset"); setMsg(""); }}>{t("forgot")}</button>}
+          {mode === "login" && <button onClick={() => { setMode("reset"); setMsg(""); setResetSent(false); }}>{t("forgot")}</button>}
+          {mode === "reset" && resetSent && (
+            <button onClick={async () => { setLoading(true); await askOwnerReset(email); setLoading(false); setResetSent(false); setMsg(t("resetRequested")); }}>
+              {t("noEmailCame")}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -532,7 +546,7 @@ function Upgrade({ reason, me, onClose, onEdit }) {
   );
 }
 
-function Settings({ session, me, onClose, onPlans }) {
+function Settings({ session, me, onClose, onPlans, onPassword }) {
   const { t } = useLang();
   return (
     <Sheet label={t("settings")} onClose={onClose}>
@@ -551,9 +565,181 @@ function Settings({ session, me, onClose, onPlans }) {
           <div className="set-val gold">{me.unlimited ? "👑" : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</div>
         </button>
       )}
+      <button className="set-row set-btn" onClick={onPassword}>
+        <div className="set-label">🔐 {t("changePw")}</div>
+        <div className="set-val">›</div>
+      </button>
+      <div className="set-legal"><a href="/privacy" target="_blank" rel="noreferrer">{t("privacy")}</a><a href="/terms" target="_blank" rel="noreferrer">{t("terms")}</a></div>
       <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
         <Svg d={Icon.logout} size={18} /> {t("logout")}
       </button>
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+function Dashboard({ token, onClose, onPlans }) {
+  const { t, lang } = useLang();
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const [tip, setTip] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/stats", { headers: { Authorization: "Bearer " + (await token()) } });
+        if (res.ok) setD(await res.json()); else setErr(t("errGeneric"));
+      } catch { setErr(t("errNetwork")); }
+    })();
+  }, []);
+  const max = d ? Math.max(1, ...d.signups.map((x) => x.n)) : 1;
+  const fmtDay = (k) => new Date(k + "T12:00:00").toLocaleDateString(lang === "en" ? "en-GB" : lang === "ar" ? "ar-IQ" : "ckb-IQ", { day: "numeric", month: "short" });
+  const tiles = d ? [
+    [t("dUsers"), d.users], [t("dNewToday"), d.newToday], [t("dNew7"), d.new7],
+    [t("dPro"), d.pro], [t("dIncome"), "$" + d.income], [t("dQuestions"), d.questions.toLocaleString("en")],
+  ] : [];
+  return (
+    <Sheet label={t("dashboard")} onClose={onClose}>
+      <h3>📊 {t("dashboard")}</h3>
+      {err && <p className="pe-msg">⚠️ {err}</p>}
+      {!d && !err && <p className="muted">…</p>}
+      {d && (
+        <>
+          <div className="db-tiles">
+            {tiles.map(([label, val]) => <div key={label} className="db-tile"><b><bdi>{val}</bdi></b><span>{label}</span></div>)}
+          </div>
+          <div className="db-chart">
+            <div className="db-chart-title">{t("dSignups")}</div>
+            <div className="db-bars" dir="ltr" role="img" aria-label={t("dSignups")} onMouseLeave={() => setTip(null)}>
+              {d.signups.map((x, i) => (
+                <button key={x.day} type="button" className="db-bar-hit" onMouseEnter={() => setTip(i)} onFocus={() => setTip(i)} onClick={() => setTip(i)}
+                  aria-label={`${fmtDay(x.day)}: ${x.n}`}>
+                  <i className={"db-bar" + (tip === i ? " on" : "")} style={{ height: `${(x.n / max) * 100}%` }} />
+                </button>
+              ))}
+              {tip != null && (
+                <div className="db-tip" style={{ left: `${Math.min(88, Math.max(12, ((tip + 0.5) / d.signups.length) * 100))}%` }}>
+                  <b>{d.signups[tip].n}</b> · {fmtDay(d.signups[tip].day)}
+                </div>
+              )}
+            </div>
+            <div className="db-axis" dir="ltr"><span>{fmtDay(d.signups[0].day)}</span><span>{fmtDay(d.signups[d.signups.length - 1].day)}</span></div>
+          </div>
+          <div className="db-list-title">{t("dRecent")}</div>
+          <ul className="db-list">
+            {d.recent.map((u) => (
+              <li key={u.email}>
+                <span dir="ltr" className="db-email">{u.email}</span>
+                <span className="db-meta">{u.pro ? "⭐ " : ""}{u.q} {t("questions")} · {fmtDay(dayOf(u.created))}</span>
+              </li>
+            ))}
+          </ul>
+          {d.sites != null && <p className="muted">🌐 {t("dSites")}: {d.sites}</p>}
+          <button className="ghost-btn" onClick={onPlans}>✏️ {t("managePlans")}</button>
+        </>
+      )}
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+const dayOf = (iso) => new Date(new Date(iso).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+
+function Published({ info, onClose }) {
+  const { t } = useLang();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => { try { await navigator.clipboard.writeText(info.url); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
+  const share = async () => { try { await navigator.share({ title: "AHM AI", url: info.url }); } catch {} };
+  return (
+    <Sheet label={t("publish")} onClose={onClose}>
+      <h3>🌐 {info.error ? t("publish") : info.updated ? t("siteUpdated") : t("sitePublished")}</h3>
+      {info.error ? <p className="pe-msg">⚠️ {info.error}</p> : (
+        <>
+          <p className="muted">{t("siteHow")}</p>
+          <div className="inv-link" dir="ltr">{info.url}</div>
+          <div className="inv-actions">
+            <a className="gold-btn" href={info.url} target="_blank" rel="noreferrer">{t("siteOpen")}</a>
+            <button className="ghost-btn" onClick={typeof navigator !== "undefined" && navigator.share ? share : copy}>{copied ? "✓ " + t("copied") : t("inviteSend")}</button>
+          </div>
+        </>
+      )}
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+function Invite({ token, onClose }) {
+  const { t } = useLang();
+  const [info, setInfo] = useState(null);
+  const [err, setErr] = useState("");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/invite", { headers: { Authorization: "Bearer " + (await token()) } });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) setInfo(data); else setErr(data.error === "no_table" ? t("inviteSoon") : t("errGeneric"));
+      } catch { setErr(t("errNetwork")); }
+    })();
+  }, []);
+  const link = info ? `${window.location.origin}/?ref=${info.code}` : "";
+  const text = info ? t("inviteShareText").replace("{n}", info.perInvite) : "";
+  async function copy() {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+  }
+  async function share() {
+    try { await navigator.share({ title: "AHM AI", text, url: link }); } catch {}
+  }
+  return (
+    <Sheet label={t("invite")} onClose={onClose}>
+      <h3>🎁 {t("invite")}</h3>
+      {err && <p className="pe-msg">{err}</p>}
+      {!info && !err && <p className="muted">…</p>}
+      {info && (
+        <>
+          <p className="muted">{t("inviteHow").replace(/\{n\}/g, info.perInvite)}</p>
+          <div className="inv-link" dir="ltr">{link}</div>
+          <div className="inv-actions">
+            <button className="gold-btn" onClick={typeof navigator !== "undefined" && navigator.share ? share : copy}>{t("inviteSend")}</button>
+            <button className="ghost-btn" onClick={copy}>{copied ? "✓ " + t("copied") : t("copyLink")}</button>
+          </div>
+          <div className="inv-stats">
+            <div><b>{info.invites}</b><span>{t("inviteJoined")}</span></div>
+            <div><b>{info.bonus}</b><span>{t("inviteBonusLeft")}</span></div>
+          </div>
+        </>
+      )}
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+function ChangePassword({ onClose }) {
+  const { t } = useLang();
+  const [pw, setPw] = useState("");
+  const [show, setShow] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true); setMsg("");
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setBusy(false);
+    if (error) setMsg("⚠️ " + (/weak|at least|characters/i.test(error.message) ? t("errWeak") : /same|different/i.test(error.message) ? t("pwSame") : t("errGeneric")));
+    else { setMsg("✅ " + t("pwChanged")); setPw(""); }
+  }
+  return (
+    <Sheet label={t("changePw")} onClose={onClose}>
+      <h3>🔐 {t("changePw")}</h3>
+      <form onSubmit={save}>
+        <label className="field">
+          <span>{t("newPw")}</span>
+          <div className="pw-wrap">
+            <input type={show ? "text" : "password"} dir="ltr" value={pw} onChange={(e) => setPw(e.target.value)} required minLength={6} autoComplete="new-password" />
+            <button type="button" className="pw-eye" onClick={() => setShow(!show)}>{show ? t("hidePw") : t("showPw")}</button>
+          </div>
+        </label>
+        {msg && <p className="pe-msg">{msg}</p>}
+        <button type="submit" className="gold-btn" disabled={busy}>{busy ? "…" : t("save")}</button>
+      </form>
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
   );
@@ -648,6 +834,10 @@ function PlanEditor({ me, token, onSaved, onClose }) {
         </div>
       ))}
       {form.paid.length < 8 && <button className="ghost-btn" onClick={addPlan}><Svg d={Icon.plus} size={16} /> {t("addPlan")}</button>}
+      <label className="pe-row">
+        <span>{t("inviteBonusField")}</span>
+        <input type="number" inputMode="numeric" dir="ltr" value={form.inviteBonus ?? 10} onChange={(e) => setForm({ ...form, inviteBonus: e.target.value })} />
+      </label>
       <label className="pe-row col">
         <span>{t("waitHours")}</span>
         <input dir="ltr" inputMode="text" style={{ width: "100%" }} value={Array.isArray(form.cooldowns) ? form.cooldowns.join(", ") : form.cooldowns ?? ""}
@@ -666,7 +856,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
 }
 
 /* ---------------- Sidebar (chat history) ---------------- */
-function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback }) {
+function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard }) {
   const { t } = useLang();
   const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image };
   return (
@@ -691,6 +881,8 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
             </div>
           ))}
         </div>
+        {me?.owner && <button className="side-fb gift" onClick={onDashboard}>📊 <span>{t("dashboard")}</span></button>}
+        <button className="side-fb gift" onClick={onInvite}>🎁 <span>{t("invite")}</span></button>
         <button className="side-fb" onClick={onFeedback}>💬 <span>{t("feedback")}</span></button>
         <button className="side-settings" onClick={onSettings}>
           <Svg d={Icon.gear} size={18} /> <span>{t("settings")}</span>
@@ -752,6 +944,40 @@ function Main({ session }) {
     loadMe();
     setSheet({ type: "upgrade", reason });
   }
+  const [gift, setGift] = useState(0);
+  const [publishing, setPublishing] = useState(false);
+  async function publishSite() {
+    setPublishing(true);
+    try {
+      const res = await fetch("/api/sites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
+        body: JSON.stringify({ files: project, id: active.siteId, title: active.title }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.id) {
+        if (data.id !== active.siteId) patch(active.id, (c) => ({ ...c, siteId: data.id }));
+        setSheet({ type: "published", url: `${window.location.origin}/s/${data.id}`, updated: !!data.updated });
+      } else {
+        setSheet({ type: "published", error: { no_table: t("inviteSoon"), too_big: t("siteTooBig"), too_many: t("siteTooMany") }[data.error] || t("errGeneric") });
+      }
+    } catch { setSheet({ type: "published", error: t("errNetwork") }); }
+    setPublishing(false);
+  }
+  async function claimInvite() {
+    let ref = "";
+    try { ref = localStorage.getItem("ahm-ref") || ""; } catch {}
+    if (!ref) return;
+    try {
+      const res = await fetch("/api/invite", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ code: ref }) });
+      if (res.status >= 500 && res.status !== 501) return; // try again next time
+      const data = await res.json().catch(() => ({}));
+      try { localStorage.removeItem("ahm-ref"); } catch {}
+      if (data.ok) { setGift(data.bonus); loadMe(); }
+    } catch {}
+  }
+  useEffect(() => { claimInvite(); }, []);
+
   async function loadMe() {
     try {
       const res = await fetch("/api/me", { headers: { Authorization: "Bearer " + (await token()) } });
@@ -785,6 +1011,64 @@ function Main({ session }) {
       localStorage.setItem(storeKey, JSON.stringify(slim));
     } catch {}
   }, [chats, ready]);
+
+  // ---- chats saved on the account (same history on every device) ----
+  const synced = useRef({});      // chat id → "updated" value the server already has
+  const cloudOn = useRef(false);  // false until the first download worked (or if the table doesn't exist yet)
+  const delKey = `ahm-deleted-${uid}`;
+  const slimChat = (c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => (i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) });
+  const readDeleted = () => { try { return JSON.parse(localStorage.getItem(delKey) || "[]"); } catch { return []; } };
+
+  async function pullChats() {
+    try {
+      const res = await fetch("/api/chats", { headers: { Authorization: "Bearer " + (await token()) } });
+      if (!res.ok) return;
+      const { chats: remote } = await res.json();
+      const gone = new Set(readDeleted().map((d) => d.id));
+      setChats((local) => {
+        const byId = new Map(local.map((c) => [c.id, c]));
+        for (const r of remote || []) {
+          synced.current[r.id] = r.updated;
+          const mine = byId.get(r.id);
+          if (r.deleted) { if (mine && mine.updated <= r.updated) byId.delete(r.id); continue; }
+          if (gone.has(r.id) || !r.data?.messages) continue;
+          if (!mine || r.updated > mine.updated) byId.set(r.id, { ...r.data, id: r.id, updated: r.updated });
+        }
+        return [...byId.values()].sort((a, b) => b.updated - a.updated);
+      });
+      cloudOn.current = true;
+      setSyncTick((n) => n + 1);
+    } catch {}
+  }
+  const [syncTick, setSyncTick] = useState(0);
+  useEffect(() => { if (ready) pullChats(); }, [ready]);
+  useEffect(() => { // check for changes from other devices when the app comes back to the front
+    let last = Date.now();
+    const onShow = () => { if (document.visibilityState === "visible" && Date.now() - last > 30000) { last = Date.now(); pullChats(); } };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, []);
+  useEffect(() => { // upload changed chats a moment after the last change
+    if (!ready || !cloudOn.current) return;
+    const timer = setTimeout(async () => {
+      const dirty = chats.filter((c) => c.messages.length && synced.current[c.id] !== c.updated).slice(0, 20);
+      const deleted = readDeleted();
+      if (!dirty.length && !deleted.length) return;
+      try {
+        const res = await fetch("/api/chats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
+          body: JSON.stringify({ chats: dirty.map(slimChat), deleted }),
+        });
+        if (!res.ok) return;
+        for (const c of dirty) synced.current[c.id] = c.updated;
+        const sent = new Set(deleted.map((d) => d.id));
+        try { localStorage.setItem(delKey, JSON.stringify(readDeleted().filter((d) => !sent.has(d.id)))); } catch {}
+        if (chats.some((c) => c.messages.length && synced.current[c.id] !== c.updated)) setSyncTick((n) => n + 1); // more left
+      } catch {}
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [chats, ready, syncTick]);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
@@ -865,6 +1149,8 @@ function Main({ session }) {
   function remove(id) {
     if (!confirm(t("confirmDelete"))) return;
     setChats((l) => l.filter((c) => c.id !== id));
+    try { localStorage.setItem(delKey, JSON.stringify([...readDeleted().filter((d) => d.id !== id), { id, updated: Date.now() }].slice(-100))); } catch {}
+    setSyncTick((n) => n + 1);
     if (id === activeId) startNew(mode);
   }
 
@@ -1186,7 +1472,9 @@ function Main({ session }) {
       <Sidebar open={sideOpen} chats={chats} activeId={activeId} me={me} onLearn={openLearn} learnOn={view === "learn"}
         onPick={pick} onNew={startNew} onDelete={remove} onClose={() => setSideOpen(false)}
         onSettings={() => { setSideOpen(false); setSheet({ type: "settings" }); }}
-        onFeedback={() => { setSideOpen(false); setSheet({ type: "feedback" }); }} />
+        onFeedback={() => { setSideOpen(false); setSheet({ type: "feedback" }); }}
+        onInvite={() => { setSideOpen(false); setSheet({ type: "invite" }); }}
+        onDashboard={() => { setSideOpen(false); setSheet({ type: "dashboard" }); }} />
 
       <div className="main-col">
         <header>
@@ -1207,12 +1495,19 @@ function Main({ session }) {
                 <span aria-hidden="true">🖥️</span> {t("installPc")}
               </button>
             )}
+            {me?.owner && <button className="head-btn" onClick={() => setSheet({ type: "dashboard" })}><span aria-hidden="true">📊</span> {t("dashboard")}</button>}
             <button className="head-btn" onClick={() => setSheet({ type: "feedback" })}><span aria-hidden="true">💬</span> {t("feedback")}</button>
           </div>
           <button className="icon-btn new-chat-btn" aria-label={t("newChat")} title={t("newChat") + " (Ctrl+K)"} onClick={() => startNew("auto")}>
             <Svg d={Icon.plus} /><span className="new-chat-label">{t("newChat")}</span>
           </button>
         </header>
+        {gift > 0 && (
+          <div className="gift-bar" role="status">
+            🎁 {t("giftGot").replace("{n}", gift)}
+            <button aria-label={t("close")} onClick={() => setGift(0)}>×</button>
+          </div>
+        )}
 
         {view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
@@ -1374,7 +1669,7 @@ function Main({ session }) {
 
           {mode === "build" && (
             <div className={"preview-col" + (showPreview ? " open" : "")}>
-              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t}
+              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); send(q); }} />
             </div>
           )}
@@ -1388,27 +1683,89 @@ function Main({ session }) {
           onTurn={voiceTurn} onClose={() => { setVoice(null); loadMe(); }}
           onLimit={() => showLimit()} />
       )}
+      {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} />}
+      {sheet?.type === "published" && <Published info={sheet} onClose={() => setSheet(null)} />}
+      {sheet?.type === "invite" && <Invite token={token} onClose={() => setSheet(null)} />}
+      {sheet?.type === "password" && <ChangePassword onClose={() => setSheet(null)} />}
       {sheet?.type === "install" && <InstallHelp onClose={() => setSheet(null)} />}
       {sheet?.type === "feedback" && <Feedback token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} />}
       {sheet?.type === "settings" && (
-        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} />
+        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} />
       )}
     </div>
   );
 }
 
 /* ---------------- Root ---------------- */
+// Opened from the "reset password" e-mail? (read before the login library clears the address)
+const OPENED_FOR_RECOVERY = typeof window !== "undefined" && /type=recovery/.test(window.location.hash + window.location.search);
+
+function NewPassword({ onDone }) {
+  const { t } = useLang();
+  const [pw, setPw] = useState("");
+  const [show, setShow] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true); setMsg("");
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setBusy(false);
+    if (error) setMsg(/weak|at least|characters/i.test(error.message) ? t("errWeak") : t("errGeneric"));
+    else { setMsg("✅ " + t("pwChanged")); setTimeout(onDone, 900); }
+  }
+  return (
+    <div className="auth-wrap">
+      <div className="glow" aria-hidden="true" />
+      <div className="auth-card">
+        <img src="/logo.png" alt="AHM AI" className="auth-logo" />
+        <h2>{t("newPw")}</h2>
+        <form onSubmit={save}>
+          <label className="field">
+            <span>{t("password")}</span>
+            <div className="pw-wrap">
+              <input type={show ? "text" : "password"} dir="ltr" value={pw} onChange={(e) => setPw(e.target.value)} required minLength={6} autoComplete="new-password" autoFocus />
+              <button type="button" className="pw-eye" onClick={() => setShow(!show)}>{show ? t("hidePw") : t("showPw")}</button>
+            </div>
+          </label>
+          <button type="submit" className="gold-btn" disabled={busy}>{busy ? "..." : t("save")}</button>
+        </form>
+        {msg && <p className="msg">{msg}</p>}
+      </div>
+    </div>
+  );
+}
+
 function Root() {
   const [session, setSession] = useState(undefined);
+  useEffect(() => { // invite link: remember the code until the new account is ready
+    try {
+      const u = new URL(window.location.href);
+      const ref = (u.searchParams.get("ref") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12);
+      if (ref) { localStorage.setItem("ahm-ref", ref); u.searchParams.delete("ref"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+    } catch {}
+  }, []);
+  const [recovery, setRecovery] = useState(OPENED_FOR_RECOVERY);
+  const [authMode, setAuthMode] = useState(null); // null = landing page, "login" / "signup" = form
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
+      if (e === "PASSWORD_RECOVERY") setRecovery(true);
+      setSession(s);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
   if (session === undefined) return <div className="splash"><img src="/icon-192.png" alt="AHM AI" /></div>;
-  return session ? <Main session={session} /> : <Auth />;
+  if (session && recovery) return <NewPassword onDone={() => { setRecovery(false); history.replaceState(null, "", "/"); }} />;
+  if (session) return <Main session={session} />;
+  return authMode ? <Auth key={authMode} initialMode={authMode} onBack={() => setAuthMode(null)} /> : <Visitor onStart={setAuthMode} />;
+}
+
+function Visitor({ onStart }) {
+  const { lang } = useLang();
+  return <Landing lang={lang} picker={<LangPicker />} onStart={onStart} Svg={Svg} Icon={Icon} botUrl={BOT_URL} />;
 }
 
 export default function Home() {

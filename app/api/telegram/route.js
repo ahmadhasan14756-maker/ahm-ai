@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { serverEnv } from "../../../lib/env";
 import { webhookSecret } from "../../../lib/telegram";
 import { adminDb, isPaidActive, usageOf, getSettings } from "../../../lib/server";
@@ -82,12 +83,34 @@ const ADMIN_HELP = `👑 <b>تۆ خاوەنی بۆتەکەیت.</b>
 <code>/remove email</code> — لابردنی Pro
 <code>/check email</code> — بینینی دۆخی بەکارهێنەر
 <code>/stats</code> — ئامارەکان
-<code>/users</code> — دوایین ٢٠ بەکارهێنەر`;
+<code>/users</code> — دوایین ٢٠ بەکارهێنەر
+<code>/resetpass email</code> — وشەی نهێنی نوێ بۆ بەکارهێنەر
+<code>/unpublish id</code> — لابردنی ماڵپەڕێکی بڵاوکراوە`;
 
 async function findByEmail(email) {
   const { data } = await adminDb().from("profiles").select("*").eq("email", email.toLowerCase()).maybeSingle();
   return data;
 }
+
+// Gives a user a new temporary password (when they forgot theirs) and returns a ready message for the owner to send them.
+async function resetPassword(profileId) {
+  const db = adminDb();
+  const { data: p } = await db.from("profiles").select("id,email").eq("id", profileId).maybeSingle();
+  if (!p) return null;
+  const abc = "abcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = randomBytes(10);
+  const pass = "Ahm-" + [...bytes].map((b) => abc[b % abc.length]).join("");
+  const { error } = await db.auth.admin.updateUserById(p.id, { password: pass });
+  if (error) { console.error("resetPassword", error.message); return null; }
+  return { email: p.email, pass };
+}
+const resetText = (r) => `🔑 <b>وشەی نهێنی نوێ دروست کرا</b>
+👤 ${esc(r.email)}
+🔐 <code>${esc(r.pass)}</code>
+
+ئەم نامەیە کۆپی بکە و بە ئیمەیڵ بینێرە بۆ بەکارهێنەرەکە:
+<code>سڵاو! وشەی نهێنی نوێی AHM AI ـەکەت: ${esc(r.pass)}
+بەم وشەیە بچۆ ژوورەوە، پاشان لە ڕێکخستنەکان دەتوانیت بیگۆڕیت.</code>`;
 
 async function handleAdmin(chatId, cmd, rest) {
   const [arg1, arg2, arg3] = rest;
@@ -139,6 +162,20 @@ async function handleAdmin(chatId, cmd, rest) {
     );
   }
 
+  if (cmd === "/resetpass") {
+    const p = arg1 && (await findByEmail(arg1));
+    if (!p) return send(chatId, "بەم شێوەیە بنووسە: <code>/resetpass email</code>");
+    const r = await resetPassword(p.id);
+    return send(chatId, r ? resetText(r) : "❌ نەکرا. دووبارە هەوڵ بدەرەوە.");
+  }
+
+  if (cmd === "/unpublish") {
+    const id = String(arg1 || "").replace(/^.*\/s\//, "").replace(/[^a-z0-9]/gi, "");
+    if (!id) return send(chatId, "بەم شێوەیە بنووسە: <code>/unpublish id</code>");
+    const { data, error } = await db.from("sites").delete().eq("id", id).select("id");
+    return send(chatId, !error && data?.length ? `✅ ماڵپەڕی <b>${esc(id)}</b> لابرا.` : "❌ نەدۆزرایەوە.");
+  }
+
   if (cmd === "/users") {
     const { data } = await db.from("profiles").select("email,plan,plan_until,total_count").order("created_at", { ascending: false }).limit(20);
     const lines = (data || []).map((u) => `${isPaidActive(u) ? "⭐$" + priceOf(u.plan) : "▫️"} ${esc(u.email)} — ${u.total_count}`);
@@ -187,6 +224,10 @@ export async function POST(req) {
             text: `✅ چالاک کرا: <b>${esc(r.p.email)}</b>\nپلانی <b>$${r.plan.price}</b> (${r.plan.limit} پرسیار) تا <b>${fmtDate(r.until)}</b>`,
           });
         }
+      } else if (kind === "rp") {
+        const r = await resetPassword(id);
+        await tg("answerCallbackQuery", { callback_query_id: cb.id, text: r ? "✅" : "❌" });
+        if (r && cb.message) await tg("editMessageText", { chat_id: cb.message.chat.id, message_id: cb.message.message_id, parse_mode: "HTML", text: resetText(r) });
       } else if (kind === "x" && cb.message) {
         await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "❌" });
         await tg("editMessageText", { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: "❌ ڕەتکرایەوە." });
