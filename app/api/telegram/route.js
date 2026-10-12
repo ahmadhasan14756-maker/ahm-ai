@@ -79,7 +79,7 @@ const ADMIN_HELP = `👑 <b>تۆ خاوەنی بۆتەکەیت.</b>
 دوگمەکانی خوارەوە بەکاربهێنە، یان:
 
 <b>فەرمانەکان:</b>
-<code>/pro email 5</code> — پلانی $5 بۆ ٣٠ ڕۆژ (هەروەها 10 یان 25)
+<code>/pro email 6</code> — چالاککردنی پلان (ژمارەکە نرخی پلانەکەیە: 3، 6 یان 12)
 <code>/remove email</code> — لابردنی Pro
 <code>/check email</code> — بینینی دۆخی بەکارهێنەر
 <code>/stats</code> — ئامارەکان
