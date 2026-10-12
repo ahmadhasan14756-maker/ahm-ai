@@ -546,6 +546,33 @@ function Upgrade({ reason, me, onClose, onEdit }) {
   );
 }
 
+const THEME_COLOR = { a: "#08080a", b: "#f7f9f6", c: "#070d1f" };
+function currentTheme() {
+  if (typeof document === "undefined") return "b";
+  const t = document.documentElement.getAttribute("data-theme");
+  return t === "a" || t === "c" ? t : "b";
+}
+function ThemePicker() {
+  const { t } = useLang();
+  const [cur, setCur] = useState("b");
+  useEffect(() => setCur(currentTheme()), []);
+  function choose(k) {
+    document.documentElement.setAttribute("data-theme", k);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[k]);
+    try { localStorage.setItem("ahm-theme", k); } catch {}
+    setCur(k);
+  }
+  return (
+    <div className="theme-picks" role="radiogroup" aria-label={t("design")}>
+      {["b", "a", "c"].map((k) => (
+        <button key={k} type="button" role="radio" aria-checked={cur === k} className={"theme-pick" + (cur === k ? " on" : "")} onClick={() => choose(k)}>
+          <i className={"t-" + k} aria-hidden="true" /><span>{t("theme_" + k)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Settings({ session, me, onClose, onPlans, onPassword }) {
   const { t } = useLang();
   return (
@@ -554,6 +581,10 @@ function Settings({ session, me, onClose, onPlans, onPassword }) {
       <div className="set-row col">
         <div className="set-label"><Svg d={Icon.globe} size={18} /> {t("language")}</div>
         <LangPicker />
+      </div>
+      <div className="set-row col">
+        <div className="set-label">🎨 {t("design")}</div>
+        <ThemePicker />
       </div>
       <div className="set-row">
         <div className="set-label">{t("account")}</div>
@@ -1753,6 +1784,11 @@ function Visitor({ onStart }) {
   return <Landing lang={lang} picker={<LangPicker />} onStart={onStart} Svg={Svg} Icon={Icon} botUrl={BOT_URL} />;
 }
 
+function SyncThemeColor() { // keep the phone's status-bar color in step with the chosen design
+  useEffect(() => { document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[currentTheme()]); }, []);
+  return null;
+}
+
 export default function Home() {
-  return <LangProvider><Root /></LangProvider>;
+  return <LangProvider><SyncThemeColor /><Root /></LangProvider>;
 }

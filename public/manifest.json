@@ -8,8 +8,8 @@
   "orientation": "any",
   "dir": "rtl",
   "lang": "ckb",
-  "background_color": "#101114",
-  "theme_color": "#101114",
+  "background_color": "#f7f9f6",
+  "theme_color": "#0e3b2e",
   "icons": [
     {
       "src": "/icon-192.png",

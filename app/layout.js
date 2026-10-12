@@ -42,16 +42,18 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#101114",
+  themeColor: "#f7f9f6",
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="ckb" dir="rtl">
+    <html lang="ckb" dir="rtl" data-theme="b" suppressHydrationWarning>
       <head>
+        {/* pick the saved design before the page paints (no flash) */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem("ahm-theme");if(t!=="a"&&t!=="c")t="b";document.documentElement.setAttribute("data-theme",t);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",{a:"#08080a",b:"#f7f9f6",c:"#070d1f"}[t])}catch(e){}` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700&family=Michroma&family=IBM+Plex+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700&family=Michroma&family=IBM+Plex+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
       </head>
