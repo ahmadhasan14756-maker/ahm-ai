@@ -340,6 +340,24 @@ function downloadText(name, text) {
 }
 const fixedName = (n) => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(0, i) + "-fixed" + n.slice(i) : n + "-fixed"; };
 
+/* ---------------- Kurdistan flag band ---------------- */
+const SUN_RAYS = Array.from({ length: 21 }, (_, i) => {
+  const a = (i / 21) * Math.PI * 2 - Math.PI / 2, w = Math.PI / 21;
+  const p = (r, ang) => `${(12 + r * Math.cos(ang)).toFixed(2)},${(12 + r * Math.sin(ang)).toFixed(2)}`;
+  return `${p(11.5, a)} ${p(6.2, a - w)} ${p(6.2, a + w)}`;
+});
+function KurdFlag() {
+  return (
+    <div className="kurd-flag" aria-hidden="true">
+      <i className="kf-r" /><i className="kf-w" /><i className="kf-g" />
+      <svg className="kf-sun" viewBox="0 0 24 24">
+        {SUN_RAYS.map((pts, i) => <polygon key={i} points={pts} />)}
+        <circle cx="12" cy="12" r="6.4" />
+      </svg>
+    </div>
+  );
+}
+
 /* ---------------- Images ---------------- */
 function loadImage(file) {
   return new Promise((resolve, reject) => {
@@ -1428,7 +1446,20 @@ function Main({ session }) {
     }
   }
 
-  function onPaste() {} // sending images/PDF was removed
+  // Photos pasted into the message box are attached like gallery photos.
+  function onPaste(e) {
+    const imgs = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+    if (imgs.length) { e.preventDefault(); addImages(imgs); }
+  }
+
+  // Gallery button: photos only, in every section.
+  function pickPhotos(e) {
+    const all = [...(e.target.files || [])];
+    e.target.value = "";
+    const imgs = all.filter((f) => f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp|gif)$/i.test(f.name));
+    if (imgs.length) addImages(imgs);
+    else if (all.length) alert(t("imageFail"));
+  }
 
   function pickFile(e) {
     const all = [...(e.target.files || [])];
@@ -1480,7 +1511,7 @@ function Main({ session }) {
       if (!typed && !hasAttach) return;
       if (busy) return;
       target = "chat";
-      if (!hasAttach && typed) {
+      if (typed && !file && !extra.length) { // a photo + "build a site like this" still goes to build
         target = quickGuess(typed);
         if (!target) {
           setDeciding(true);
@@ -1497,7 +1528,7 @@ function Main({ session }) {
       if (target !== "build") target = "chat";
       setDraft((d) => ({ ...d, mode: target }));
     }
-    const sentImages = target === "chat" ? [...images, ...extra] : extra.filter((x) => x.voice); // voice works in every mode
+    const sentImages = [...images.filter((im) => !im.docName), ...extra]; // photos and voice work in every section
     const isVoice = extra.some((x) => x.voice);
     const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
@@ -1679,6 +1710,7 @@ function Main({ session }) {
             <Svg d={Icon.plus} /><span className="new-chat-label">{t("newChat")}</span>
           </button>
         </header>
+        <KurdFlag />
         {gift > 0 && (
           <div className="gift-bar" role="status">
             🎁 {t("giftGot").replace("{n}", gift)}
@@ -1809,6 +1841,9 @@ function Main({ session }) {
                 </div>
               ) : (
               <div className="composer">
+                <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={pickPhotos} />
+                <button className="attach gallery" aria-label={t("gallery")} title={t("gallery")} disabled={busy || images.length >= 4}
+                  onClick={() => fileInput.current?.click()}><Svg d={Icon.image} size={19} /></button>
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
                   placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}

@@ -953,3 +953,17 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .code-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 4px rgb(var(--gold-rgb) / .18); }
 .code-help { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
 .links button:disabled { opacity: .5; }
+
+/* ---------- Kurdistan flag band (under the header, full width) ---------- */
+.kurd-flag { position: relative; display: flex; flex-direction: column; height: 18px; flex-shrink: 0; overflow: visible; box-shadow: 0 1px 0 rgba(0,0,0,.06); }
+.kurd-flag i { flex: 1; display: block; }
+.kurd-flag .kf-r { background: #ed2024; }
+.kurd-flag .kf-w { background: #ffffff; }
+.kurd-flag .kf-g { background: #278e43; }
+.kurd-flag .kf-sun { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); fill: #febd11; }
+@media (min-width: 900px) { .kurd-flag { height: 15px; } .kurd-flag .kf-sun { width: 18px; height: 18px; } }
+
+/* ---------- gallery button in the message box ---------- */
+.composer .attach.gallery { border: 0; background: var(--surface-3); color: var(--text); width: 40px; height: 40px; cursor: pointer; }
+.composer .attach.gallery:hover { color: var(--gold-text); }
+.composer .attach.gallery:disabled { opacity: .4; }
