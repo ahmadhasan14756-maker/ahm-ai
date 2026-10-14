@@ -1,6 +1,8 @@
 // Diagnostic page: /api/health — shows which parts work (never shows the keys themselves).
 import { adminDb } from "../../../lib/server";
 import { serverEnv, SUPABASE_URL, SUPABASE_ANON_KEY } from "../../../lib/env";
+import { redis, hasRedis } from "../../../lib/redis";
+import { keyCount } from "../../../lib/gemini";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +16,13 @@ export async function GET() {
     service_key: kind(serverEnv("SUPABASE_SERVICE_ROLE_KEY")),
     gemini_key: kind(serverEnv("GEMINI_API_KEY")),
     model: serverEnv("GEMINI_MODEL") || "gemini-3.8-flash",
+    ai_keys: keyCount(),
   };
+  out.redis = !hasRedis() ? "missing" : (await redis("PING")) === "PONG" ? "ok" : "ERROR";
+  try {
+    const { error } = await adminDb().from("jobs").select("id", { head: true, count: "exact" });
+    out.jobs_table = error ? "missing" : "ok";
+  } catch { out.jobs_table = "missing"; }
 
   try {
     const { error, count } = await adminDb().from("profiles").select("*", { count: "exact", head: true });
