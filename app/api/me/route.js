@@ -1,5 +1,6 @@
 import { getUser, getProfile, usageOf, getSettings, isOwner, publicUsage } from "../../../lib/server";
 import { voiceInfo } from "../../../lib/voice";
+import { getNotice } from "../../../lib/notice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,5 +11,6 @@ export async function GET(req) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
   const [profile, settings] = await Promise.all([getProfile(user), getSettings()]);
   const usage = usageOf(profile, settings);
-  return Response.json({ email: user.email, ...publicUsage(usage), voice: await voiceInfo(user.id, usage, settings), plans: settings, owner: isOwner(user) });
+  const [voice, notice] = await Promise.all([voiceInfo(user.id, usage, settings), getNotice()]);
+  return Response.json({ email: user.email, ...publicUsage(usage), voice, notice, plans: settings, owner: isOwner(user) });
 }

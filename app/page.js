@@ -772,7 +772,7 @@ function WaitBox({ until }) {
   );
 }
 
-function Upgrade({ reason, me, onClose, onEdit }) {
+function Upgrade({ reason, me, onClose, onEdit, onNotice }) {
   const { t } = useLang();
   const text = { limit: t("upLimit"), pro_only: t("upPro"), info: t("upInfo"), voice: t("upVoice") }[reason] || "";
   const plans = me?.plans || DEFAULT_SETTINGS;
@@ -782,6 +782,7 @@ function Upgrade({ reason, me, onClose, onEdit }) {
   return (
     <Sheet label={t("plans")} onClose={onClose}>
       <h3>{t("plans")} <span className="gold brand-font">AHM AI</span></h3>
+      {me?.owner && <OwnerTools onPlans={onEdit} onNotice={onNotice} />}
       {me?.lockedUntil ? <WaitBox until={me.lockedUntil} /> : null}
       <p>{me?.lockedUntil ? t(me.lockReason === "week" ? "upWaitWeek" : "upWait").replace("{h}", me.windowHours || 5) : text}</p>
       <UsageBars me={me} />
@@ -817,7 +818,7 @@ function Upgrade({ reason, me, onClose, onEdit }) {
           {chosen ? <>{t("buy")} {chosen.name} · <span dir="ltr">${chosen.price}</span></> : t("buyTelegram")}
         </a>
       ) : <p className="muted">{t("botSoon")}</p>}
-      {me?.owner && <button className="ghost-btn" onClick={onEdit}>✏️ {t("managePlans")}</button>}
+
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
   );
@@ -891,7 +892,108 @@ function Settings({ session, me, onClose, onPlans, onPassword, update }) {
   );
 }
 
-function Dashboard({ token, onClose, onPlans }) {
+/* ---------------- Owner only: tools, announcements ---------------- */
+// Two big buttons the owner sees (never shown to other users).
+function OwnerTools({ onPlans, onNotice }) {
+  const { t } = useLang();
+  return (
+    <div className="owner-tools">
+      <button onClick={onPlans}>✏️ {t("editPlans")}</button>
+      <button onClick={onNotice}>📢 {t("noticeBtn")}</button>
+    </div>
+  );
+}
+
+// The owner writes in Kurdish → it is translated → sent to everyone (each sees their app language).
+function NoticeComposer({ token, onClose, onSent }) {
+  const { t } = useLang();
+  const [text, setText] = useState("");
+  const [tr, setTr] = useState(null); // { ckb, ar, en }
+  const [cur, setCur] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const call = async (body, method = "POST") => {
+    const res = await fetch("/api/admin/notice", { method, headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: method === "POST" ? JSON.stringify(body) : undefined });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || "err");
+    return j;
+  };
+  useEffect(() => { call(null, "GET").then((j) => setCur(j.notice)).catch(() => {}); }, []);
+  async function translate() {
+    setBusy("tr"); setMsg("");
+    try { setTr(await call({ translate: text })); } catch (e) { setMsg("⚠️ " + (e.message === "busy" ? t("errBusy") : t("errGeneric"))); }
+    setBusy("");
+  }
+  async function publish() {
+    setBusy("send"); setMsg("");
+    try { const j = await call({ publish: tr }); setCur(j.notice); setTr(null); setText(""); setMsg("✅ " + t("noticeSent")); onSent?.(); }
+    catch { setMsg("⚠️ " + t("errGeneric")); }
+    setBusy("");
+  }
+  async function clear() {
+    if (!confirm(t("noticeClearQ"))) return;
+    setBusy("clear");
+    try { await call({ clear: true }); setCur(null); setMsg("✅ " + t("noticeCleared")); onSent?.(); } catch { setMsg("⚠️ " + t("errGeneric")); }
+    setBusy("");
+  }
+  const L = [["ckb", "کوردی"], ["ar", "العربية"], ["en", "English"]];
+  return (
+    <Sheet label={t("noticeBtn")} onClose={onClose}>
+      <h3>📢 {t("noticeBtn")}</h3>
+      <p className="muted">{t("noticeHelp")}</p>
+      {cur && (
+        <div className="notice-cur">
+          <div className="notice-cur-head">{t("noticeNow")}</div>
+          <p dir="rtl">{cur.text?.ckb}</p>
+          <button className="ghost-btn danger" disabled={!!busy} onClick={clear}>🗑️ {t("noticeClear")}</button>
+        </div>
+      )}
+      {!tr ? (
+        <>
+          <textarea className="notice-input" rows={5} dir="rtl" placeholder={t("noticePh")} value={text} onChange={(e) => setText(e.target.value)} />
+          <button className="gold-btn" disabled={!text.trim() || !!busy} onClick={translate}>{busy === "tr" ? <span className="mini-spin" /> : "🌐"} {t("noticeTranslate")}</button>
+        </>
+      ) : (
+        <>
+          <p className="muted">{t("noticeCheck")}</p>
+          {L.map(([k, name]) => (
+            <label key={k} className="notice-lang">
+              <span>{name}</span>
+              <textarea rows={3} dir={k === "en" ? "ltr" : "rtl"} value={tr[k] || ""} onChange={(e) => setTr({ ...tr, [k]: e.target.value })} />
+            </label>
+          ))}
+          <button className="gold-btn" disabled={!tr.ckb?.trim() || !!busy} onClick={publish}>{busy === "send" ? <span className="mini-spin" /> : "📢"} {t("noticeSend")}</button>
+          <button className="ghost-btn" disabled={!!busy} onClick={() => setTr(null)}>✏️ {t("noticeBack")}</button>
+        </>
+      )}
+      {msg && <p className="pe-msg">{msg}</p>}
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+// What every user sees: the owner's announcement in their own app language, until they close it.
+function NoticeBar({ notice }) {
+  const { t, lang } = useLang();
+  const [hidden, setHidden] = useState(true);
+  useEffect(() => { try { setHidden(localStorage.getItem("ahm-notice-seen") === notice?.id); } catch { setHidden(false); } }, [notice?.id]);
+  if (!notice?.id || hidden) return null;
+  const text = notice.text?.[lang] || notice.text?.ckb || "";
+  if (!text) return null;
+  const close = () => { try { localStorage.setItem("ahm-notice-seen", notice.id); } catch {} setHidden(true); };
+  return (
+    <div className="notice-bar" role="status">
+      <span className="notice-ic" aria-hidden="true">📢</span>
+      <div className="notice-body" dir={lang === "en" ? "ltr" : "rtl"}>
+        <b>{t("noticeFrom")}</b>
+        <p>{text}</p>
+      </div>
+      <button className="notice-x" aria-label={t("close")} onClick={close}>×</button>
+    </div>
+  );
+}
+
+function Dashboard({ token, onClose, onPlans, onNotice }) {
   const { t, lang } = useLang();
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
@@ -948,9 +1050,9 @@ function Dashboard({ token, onClose, onPlans }) {
             ))}
           </ul>
           {d.sites != null && <p className="muted">🌐 {t("dSites")}: {d.sites}</p>}
-          <button className="ghost-btn" onClick={onPlans}>✏️ {t("managePlans")}</button>
         </>
       )}
+      <OwnerTools onPlans={onPlans} onNotice={onNotice} />
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
   );
@@ -1242,7 +1344,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
 }
 
 /* ---------------- Sidebar (chat history) ---------------- */
-function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard }) {
+function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard, onOwnerPlans, onNotice }) {
   const { t } = useLang();
   const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image, studio: Icon.image };
   return (
@@ -1268,6 +1370,8 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
           ))}
         </div>
         {me?.owner && <button className="side-fb gift" onClick={onDashboard}>📊 <span>{t("dashboard")}</span></button>}
+        {me?.owner && <button className="side-fb gift" onClick={onOwnerPlans}>✏️ <span>{t("editPlans")}</span></button>}
+        {me?.owner && <button className="side-fb gift" onClick={onNotice}>📢 <span>{t("noticeBtn")}</span></button>}
         <button className="side-fb gift" onClick={onInvite}>🎁 <span>{t("invite")}</span></button>
         <button className="side-fb" onClick={onFeedback}>💬 <span>{t("feedback")}</span></button>
         <button className="side-settings" onClick={onSettings}>
@@ -1377,6 +1481,14 @@ function Main({ session }) {
       if (res.ok) setMe(await res.json());
     } catch {}
   }
+
+  // Fresh plan numbers and announcements when the app comes back to the screen (at most once a minute).
+  const meAt = useRef(0);
+  useEffect(() => {
+    const onShow = () => { if (document.visibilityState === "visible" && Date.now() - meAt.current > 60000) { meAt.current = Date.now(); loadMe(); } };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, []);
 
   // load saved chats (and bring over chats saved by the older version)
   useEffect(() => {
@@ -2006,7 +2118,9 @@ function Main({ session }) {
         onSettings={() => { setSideOpen(false); setSheet({ type: "settings" }); }}
         onFeedback={() => { setSideOpen(false); setSheet({ type: "feedback" }); }}
         onInvite={() => { setSideOpen(false); setSheet({ type: "invite" }); }}
-        onDashboard={() => { setSideOpen(false); setSheet({ type: "dashboard" }); }} />
+        onDashboard={() => { setSideOpen(false); setSheet({ type: "dashboard" }); }}
+        onOwnerPlans={() => { setSideOpen(false); setSheet({ type: "admin" }); }}
+        onNotice={() => { setSideOpen(false); setSheet({ type: "notice" }); }} />
 
       <div className="main-col">
         <header>
@@ -2028,6 +2142,7 @@ function Main({ session }) {
               </button>
             )}
             {me?.owner && <button className="head-btn" onClick={() => setSheet({ type: "dashboard" })}><span aria-hidden="true">📊</span> {t("dashboard")}</button>}
+            {me?.owner && <button className="head-btn" onClick={() => setSheet({ type: "notice" })}><span aria-hidden="true">📢</span> {t("noticeBtn")}</button>}
             <button className="head-btn" onClick={() => setSheet({ type: "feedback" })}><span aria-hidden="true">💬</span> {t("feedback")}</button>
           </div>
           <button className="icon-btn new-chat-btn" aria-label={t("newChat")} title={t("newChat") + " (Ctrl+K)"} onClick={() => startNew("auto")}>
@@ -2035,6 +2150,7 @@ function Main({ session }) {
           </button>
         </header>
         <KurdFlag />
+        {me?.notice && <NoticeBar notice={me.notice} />}
         {update && !hideUpdate && (
           <div className="update-bar" role="status">
             <span>🎉 {t("updateReady")}</span>
@@ -2217,7 +2333,8 @@ function Main({ session }) {
           onTurn={voiceTurn} onClose={() => { setVoice(null); loadMe(); }}
           onLimit={(why) => showLimit(why === "voice" ? "voice" : "limit")} />
       )}
-      {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} />}
+      {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} />}
+      {sheet?.type === "notice" && me?.owner && <NoticeComposer token={token} onClose={() => setSheet(null)} onSent={loadMe} />}
       {sheet?.type === "screen" && <ScreenGuide info={sheet} onClose={() => setSheet(null)} />}
       {sheet?.type === "zipGuide" && <ZipGuide onClose={() => setSheet(null)} />}
       {sheet?.type === "published" && <Published info={sheet} onClose={() => setSheet(null)} />}
@@ -2226,7 +2343,7 @@ function Main({ session }) {
       {sheet?.type === "install" && <InstallHelp onClose={() => setSheet(null)} />}
       {sheet?.type === "feedback" && <Feedback token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
-      {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} />}
+      {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} />}
       {sheet?.type === "settings" && (
         <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update} />
       )}
