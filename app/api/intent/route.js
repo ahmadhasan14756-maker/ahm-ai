@@ -1,8 +1,8 @@
 // Works out what the user wants from their first message: a normal answer, a website/app/code project, or an image.
-import { GoogleGenAI } from "@google/genai";
 import { serverEnv } from "../../../lib/env";
 import { getUser } from "../../../lib/server";
 import { quickGuess } from "../../../lib/intent";
+import { gemini } from "../../../lib/gemini";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,8 +10,6 @@ export const maxDuration = 15;
 export const preferredRegion = "fra1";
 
 const MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"];
-let ai;
-const gemini = () => (ai ||= new GoogleGenAI({ apiKey: serverEnv("GEMINI_API_KEY") }));
 
 const SYSTEM = `Classify the user's message (Kurdish Sorani, Arabic or English, maybe Kurdish in Latin letters). Return JSON {"mode": "..."}.
 - "build": they want you to CREATE or CHANGE a whole website, web app, mobile app, game, program or multi-file code project for them.

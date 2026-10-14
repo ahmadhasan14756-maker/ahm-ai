@@ -1,16 +1,15 @@
 // Read an answer aloud: text → speech (Gemini TTS, free tier) → WAV audio.
-import { GoogleGenAI } from "@google/genai";
 import { serverEnv } from "../../../lib/env";
 import { getUser } from "../../../lib/server";
+import { gemini, keyCount } from "../../../lib/gemini";
 
+import { allow, tooMany } from "../../../lib/ratelimit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const preferredRegion = "fra1";
 
 const MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"];
-let ai;
-const gemini = () => (ai ||= new GoogleGenAI({ apiKey: serverEnv("GEMINI_API_KEY") }));
 
 // Remove things that should not be spoken: code, links, markdown symbols.
 function speakable(text) {
@@ -41,11 +40,14 @@ function wav(pcm, rate = 24000) {
 export async function POST(req) {
   const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!allow("tts:" + user.id, 30, 60000)) return tooMany();
   const text = speakable(body?.text);
   if (!text) return Response.json({ error: "empty" }, { status: 400 });
 
   let lastErr;
-  for (const model of MODELS) {
+  // every model is tried with each AI key (a busy key is skipped quickly)
+  const tries = MODELS.flatMap((model) => Array.from({ length: keyCount() }, () => model));
+  for (const model of tries) {
     try {
       const r = await gemini().models.generateContent({
         model,
@@ -63,6 +65,7 @@ export async function POST(req) {
     } catch (e) {
       lastErr = e;
       console.error("tts", model, String(e?.message || e).slice(0, 200));
+      if (!/429|RESOURCE_EXHAUSTED|quota/i.test(String(e?.message || ""))) continue;
     }
   }
   const busy = /429|RESOURCE_EXHAUSTED|quota/i.test(String(lastErr?.message || ""));

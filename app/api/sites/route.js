@@ -4,6 +4,7 @@ import { adminDb, getUser } from "../../../lib/server";
 import { buildPreview } from "../../../lib/builder";
 import { notifyOwner, escHtml } from "../../../lib/telegram";
 
+import { allow, tooMany } from "../../../lib/ratelimit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const preferredRegion = "fra1";
@@ -16,6 +17,7 @@ const newId = () => randomBytes(6).toString("base64url").replace(/[^A-Za-z0-9]/g
 export async function POST(req) {
   const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!allow("sites:" + user.id, 10, 60000)) return tooMany();
   const files = body?.files && typeof body.files === "object" ? Object.fromEntries(Object.entries(body.files).filter(([k, v]) => typeof k === "string" && typeof v === "string")) : null;
   const html = files && buildPreview(files);
   if (!html) return Response.json({ error: "no_html" }, { status: 400 });

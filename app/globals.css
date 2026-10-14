@@ -147,19 +147,38 @@ main > * { max-width: var(--col); margin-inline: auto; }
 .bubble { max-width: 100%; line-height: 1.9; font-size: 16px; overflow-wrap: anywhere; }
 .row.user .bubble { max-width: 82%; background: var(--surface-2); border-radius: 20px; padding: 10px 16px; white-space: pre-wrap; }
 .row.assistant .bubble { width: 100%; }
-.bubble p { margin: 0 0 12px; }
+.bubble p { margin: 0 0 14px; }
 .bubble p:last-child { margin-bottom: 0; }
-.bubble h1, .bubble h2, .bubble h3 { font-size: 17.5px; font-weight: 600; margin: 20px 0 8px; line-height: 1.6; }
-.bubble ul, .bubble ol { padding-inline-start: 22px; margin: 6px 0 12px; }
-.bubble li { margin: 4px 0; }
-.bubble li::marker { color: var(--muted); }
-.bubble strong { font-weight: 600; color: #fff; }
-.bubble a { color: var(--gold-text); text-underline-offset: 3px; }
-.bubble blockquote { margin: 10px 0; padding: 2px 14px; border-inline-start: 3px solid var(--line-strong); color: var(--text-2); }
-.bubble table { border-collapse: collapse; display: block; overflow-x: auto; margin: 10px 0; font-size: 14.5px; }
-.bubble th, .bubble td { border-bottom: 1px solid var(--line); padding: 8px 12px; text-align: start; }
-.bubble th { color: var(--text-2); font-weight: 600; }
-.bubble hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+/* headings: clear hierarchy, an accent bar on the main ones */
+.bubble h1 { font-size: 22px; font-weight: 800; line-height: 1.5; margin: 22px 0 10px; color: var(--text); }
+.bubble h2 { font-size: 19px; font-weight: 700; line-height: 1.55; margin: 22px 0 10px; color: var(--text); padding-inline-start: 12px; border-inline-start: 4px solid var(--gold); border-radius: 2px; }
+.bubble h3 { font-size: 17px; font-weight: 700; line-height: 1.6; margin: 18px 0 8px; color: var(--gold-text); }
+.bubble h4, .bubble h5, .bubble h6 { font-size: 16px; font-weight: 700; margin: 14px 0 6px; }
+.bubble > :first-child { margin-top: 0; }
+/* lists */
+.bubble ul, .bubble ol { padding-inline-start: 24px; margin: 8px 0 14px; }
+.bubble li { margin: 6px 0; padding-inline-start: 4px; }
+.bubble li::marker { color: var(--gold-text); }
+.bubble ol > li::marker { font-weight: 700; }
+.bubble li > p { margin: 0 0 6px; }
+/* emphasis: bold gets a soft marker-pen highlight */
+.bubble strong { font-weight: 700; color: var(--text); background: linear-gradient(transparent 62%, rgb(var(--gold-rgb) / .22) 0); padding: 0 1px; }
+.bubble em { color: var(--text-2); }
+.bubble a { color: var(--gold-text); text-underline-offset: 3px; font-weight: 600; }
+/* quotes become small cards */
+.bubble blockquote { margin: 12px 0; padding: 10px 16px; border-inline-start: 4px solid var(--gold); background: var(--surface-2); border-radius: 12px; color: var(--text-2); }
+.bubble blockquote p { margin: 0; }
+/* tables: rounded, header row, zebra rows */
+.bubble .table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 12px; }
+.bubble table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14.5px; }
+.bubble th, .bubble td { border-bottom: 1px solid var(--line); padding: 10px 14px; text-align: start; vertical-align: top; }
+.bubble th { background: var(--surface-2); color: var(--text); font-weight: 700; white-space: nowrap; }
+.bubble tr:last-child td { border-bottom: 0; }
+.bubble tbody tr:nth-child(even) td { background: var(--tint); }
+.bubble hr { border: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--line-strong), transparent); margin: 22px 0; }
+.bubble code.inline { background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px; padding: 1px 6px; font-size: .88em; }
+.row.assistant .bubble { font-size: 16px; line-height: 1.95; }
+@media (min-width: 900px) { .row.assistant .bubble { font-size: 16.5px; } }
 .bubble.failed { color: var(--danger); }
 .file-tag { font-size: 13px; color: var(--gold-text); margin-bottom: 4px; }
 .msg-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
@@ -911,3 +930,26 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .theme-pick .t-b::after { content: ""; position: absolute; }
 .theme-pick .t-a { background: radial-gradient(circle at 70% 40%, #e3ad45 0 16%, transparent 17%), #0b0b0d; }
 .theme-pick .t-c { background: radial-gradient(circle at 70% 40%, #60a5fa 0 10%, #8b5cf6 17%, transparent 18%), #070d1f; }
+
+/* AI voice reply (after the user sent a voice message) */
+.voice-reply { display: inline-flex; align-items: center; gap: 10px; margin: 2px 0 10px; padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); max-width: 100%; }
+.vr-play { width: 36px; height: 36px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--gold); color: var(--gold-ink); flex: none; }
+:root[data-theme="c"] .vr-play { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: #fff; }
+.vr-play .mini-spin { border-color: rgb(0 0 0 / .2); border-top-color: currentColor; }
+.vr-wave { display: flex; align-items: center; gap: 3px; height: 24px; direction: ltr; }
+.vr-wave i { width: 3px; border-radius: 3px; background: var(--line-strong); transition: background .2s; }
+.vr-wave i.done { background: var(--gold-text); }
+.voice-reply.on .vr-wave i:not(.done) { animation: vr-pulse 1s ease-in-out infinite; }
+.vr-wave i:nth-child(3n) { animation-delay: .15s !important; } .vr-wave i:nth-child(3n+1) { animation-delay: .3s !important; }
+@keyframes vr-pulse { 50% { opacity: .45; } }
+.vr-label { font-size: 15px; }
+@media (max-width: 380px) { .vr-wave i:nth-child(n+19) { display: none; } }
+:root:not([data-theme="a"]):not([data-theme="c"]) .row.user .voice-tag svg { color: #f6c855; }
+:root[data-theme="c"] .row.user .voice-tag svg { color: #fff; }
+
+/* e-mail code step */
+.code-ic { font-size: 46px; margin: 8px 0 6px; }
+.code-input { width: 100%; text-align: center; font-size: 30px; letter-spacing: 12px; font-weight: 700; padding: 14px 10px; border-radius: 16px; border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--text); font-family: var(--mono); }
+.code-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 4px rgb(var(--gold-rgb) / .18); }
+.code-help { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+.links button:disabled { opacity: .5; }

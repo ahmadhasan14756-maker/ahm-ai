@@ -1,16 +1,15 @@
 import { serverEnv } from "../../../lib/env";
-import { GoogleGenAI } from "@google/genai";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 import { SAFETY_RULES, GEMINI_SAFETY, REFUSAL, isSafetyStop } from "../../../lib/safety";
+import { gemini, keyCount } from "../../../lib/gemini";
 
+import { allow, tooMany } from "../../../lib/ratelimit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 // Run next to the database (Supabase is in Frankfurt) so each step is faster.
 export const preferredRegion = "fra1";
 
-let ai;
-const gemini = () => (ai ||= new GoogleGenAI({ apiKey: serverEnv("GEMINI_API_KEY") }));
 
 const LANG_NAME = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
 
@@ -120,6 +119,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
     let level = thinkingOk.get(model) ?? 0;
     let search = useSearch;
     let transientTries = 0;
+    let keyTries = 0;
     while (level < THINKING.length) {
       const config = { ...baseConfig };
       if (THINKING[level]) config.thinkingConfig = THINKING[level];
@@ -148,6 +148,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         console.error("gemini", model, level, errText(e));
         if (/SAFETY|PROHIBITED_CONTENT|BLOCKLIST/i.test(errText(e))) { yield (sentAny ? "\n\n" : "") + refusal; return; }
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
+        if (isRateLimit(e) && keyTries < keyCount() - 1) { keyTries++; continue; } // same model, another key
         if (isRateLimit(e) || isModelMissing(e)) break;
         if (isTransient(e) && transientTries < 2) { transientTries++; await sleep(700 * transientTries); continue; }
         if (search && isBadConfig(e)) { search = false; continue; }
@@ -163,6 +164,7 @@ export async function POST(req) {
   try {
     const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
     if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+    if (!allow("chat:" + user.id, 20, 60000)) return tooMany();
     if (!body) return Response.json({ error: "bad_request" }, { status: 400 });
 
     const messages = (Array.isArray(body.messages) ? body.messages : [])

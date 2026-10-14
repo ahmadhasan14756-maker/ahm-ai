@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { adminDb, getUser, getProfile, getSettings } from "../../../lib/server";
 import { notifyOwner, escHtml } from "../../../lib/telegram";
 
+import { allow, tooMany } from "../../../lib/ratelimit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const preferredRegion = "fra1";
@@ -29,6 +30,7 @@ async function ensureCode(db, profile) {
 export async function GET(req) {
   const user = await getUser(req);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!allow("invite:" + user.id, 10, 60000)) return tooMany();
   try {
     const db = adminDb();
     const [profile, settings] = await Promise.all([getProfile(user), getSettings()]);
@@ -43,6 +45,7 @@ export async function GET(req) {
 export async function POST(req) {
   const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!allow("invite:" + user.id, 10, 60000)) return tooMany();
   const code = String(body?.code || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
   if (!code) return Response.json({ error: "bad_request" }, { status: 400 });
   try {

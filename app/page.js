@@ -42,6 +42,7 @@ function LangProvider({ children }) {
 
 /* ---------------- icons ---------------- */
 const Icon = {
+  play: <path d="M8 5.5l11 6.5-11 6.5z" />,
   plus: <path d="M12 5v14M5 12h14" />,
   menu: <path d="M4 7h16M4 12h16M4 17h10" />,
   logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
@@ -97,7 +98,61 @@ const GoogleLogo = () => (
   </svg>
 );
 
-function Auth({ initialMode = "login", onBack }) {
+// "We sent a code to your e-mail": proves the e-mail is real before the account works.
+function CodeStep({ info, onBack, onRecovery, onAskOwner }) {
+  const { t } = useLang();
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [wait, setWait] = useState(60);
+  useEffect(() => { const id = setInterval(() => setWait((w) => (w > 0 ? w - 1 : 0)), 1000); return () => clearInterval(id); }, []);
+  async function verify(e) {
+    e?.preventDefault();
+    const token = code.replace(/\D/g, "");
+    if (token.length < 6) { setMsg(t("codeShort")); return; }
+    setBusy(true); setMsg("");
+    if (info.type === "recovery") onRecovery?.(true); // after this the "new password" screen opens
+    const { error } = await supabase.auth.verifyOtp({ email: info.email, token, type: info.type });
+    setBusy(false);
+    if (error) {
+      if (info.type === "recovery") onRecovery?.(false);
+      setMsg(/network|fetch/i.test(error.message) ? t("errNetwork") : t("codeWrong"));
+    }
+  }
+  async function resend() {
+    if (wait > 0) return;
+    setWait(60); setMsg("");
+    const { error } = info.type === "recovery"
+      ? await supabase.auth.resetPasswordForEmail(info.email, { redirectTo: window.location.origin })
+      : await supabase.auth.resend({ type: "signup", email: info.email });
+    setMsg(error ? (/rate|seconds/i.test(error.message) ? t("codeWaitMore") : t("errGeneric")) : "✅ " + t("codeResent"));
+  }
+  return (
+    <div className="auth-wrap">
+      <div className="glow" aria-hidden="true" />
+      <div className="auth-card">
+        <button type="button" className="auth-back" onClick={onBack}>{t("back")}</button>
+        <div className="code-ic" aria-hidden="true">✉️</div>
+        <h2>{t("codeTitle")}</h2>
+        <p className="sub">{t("codeSent")} <b dir="ltr">{info.email}</b></p>
+        <form onSubmit={verify}>
+          <input className="code-input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={10}
+            placeholder="••••••" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
+            aria-label={t("codeTitle")} />
+          <button type="submit" className="gold-btn" disabled={busy}>{busy ? "..." : t("codeVerify")}</button>
+        </form>
+        {msg && <p className="msg">{msg}</p>}
+        <p className="code-help">{t("codeSpam")}</p>
+        <div className="links">
+          <button onClick={resend} disabled={wait > 0}>{wait > 0 ? `${t("codeResend")} (${wait})` : t("codeResend")}</button>
+          {info.type === "recovery" && <button onClick={onAskOwner}>{t("noEmailCame")}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Auth({ initialMode = "login", onBack, onRecovery }) {
   const { t } = useLang();
   const [mode, setMode] = useState(initialMode);
   const [googleOn, setGoogleOn] = useState(false);
@@ -120,6 +175,7 @@ function Auth({ initialMode = "login", onBack }) {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [codeFor, setCodeFor] = useState(null); // { email, type: "signup" | "recovery" } → show the "enter the code" step
 
   async function askOwnerReset(addr) {
     await fetch("/api/reset-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: addr }) }).catch(() => {});
@@ -142,17 +198,21 @@ function Auth({ initialMode = "login", onBack }) {
           setMsg(t("errExists"));
           return;
         }
-        if (!data?.session) setMsg(t("checkEmail")); // with confirmation off they are signed in straight away
+        if (!data?.session) { setCodeFor({ email, type: "signup" }); setMsg(""); } // e-mail confirmation on → enter the code
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
         if (error && /load failed|failed to fetch|network/i.test(error.message || "")) throw error;
         if (error) { await askOwnerReset(email); setMsg(t("resetRequested")); } // e-mail couldn't be sent → the owner makes a new password
-        else { setMsg(t("resetSent")); setResetSent(true); }
+        else { setResetSent(true); setCodeFor({ email, type: "recovery" }); setMsg(""); }
       }
     } catch (err) {
       const m = err.message || "";
       if (m.includes("Invalid login")) setMsg(t("errLogin"));
-      else if (m.includes("Email not confirmed")) setMsg(t("errConfirm"));
+      else if (m.includes("Email not confirmed")) { // never entered the code: send a fresh one
+        await supabase.auth.resend({ type: "signup", email }).catch(() => {});
+        setCodeFor({ email, type: "signup" });
+        setMsg("");
+      }
       else if (m.includes("already registered")) { setMode("login"); setMsg(t("errExists")); }
       else if (m.includes("at least") || m.includes("weak")) setMsg(t("errWeak"));
       else if (/load failed|failed to fetch|network/i.test(m)) setMsg(t("errNetwork"));
@@ -160,6 +220,11 @@ function Auth({ initialMode = "login", onBack }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (codeFor) {
+    return <CodeStep info={codeFor} onBack={() => { setCodeFor(null); setMsg(""); }} onRecovery={onRecovery}
+      onAskOwner={async () => { await askOwnerReset(codeFor.email); setCodeFor(null); setMode("reset"); setMsg(t("resetRequested")); }} />;
   }
 
   return (
@@ -252,7 +317,7 @@ function CodeBlock({ className, children }) {
     </div>
   );
 }
-const MD = { code: CodeBlock, pre: ({ children }) => <>{children}</> };
+const MD = { code: CodeBlock, pre: ({ children }) => <>{children}</>, table: ({ children }) => <div className="table-wrap"><table>{children}</table></div> };
 
 const isRTL = (s) => /[؀-ۿ]/.test((s || "").slice(0, 200));
 
@@ -382,6 +447,64 @@ function DesignTile({ d, kind }) {
 
 /* ---------------- Answer actions: copy + read aloud ---------------- */
 let currentAudio = null;
+// iPhone only lets sound play by itself if an audio element was started during a tap.
+// We start a silent one when the user sends a voice message, then reuse it for the spoken answer.
+let unlockedAudio = null;
+const SILENT_WAV = "data:audio/wav;base64,UklGRmQGAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YUAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+function unlockAudio() {
+  try { const a = new Audio(SILENT_WAV); a.play().catch(() => {}); unlockedAudio = a; } catch {}
+}
+// The AI's answer as a voice message (after the user spoke): play/pause + progress, plays by itself the first time.
+function VoiceReply({ text, getToken, auto, onAutoDone }) {
+  const { t } = useLang();
+  const [state, setState] = useState("idle"); // idle | loading | playing | error
+  const [pos, setPos] = useState(0);
+  const audioRef = useRef(null);
+  const started = useRef(false);
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+  useEffect(() => { if (auto && !started.current) { started.current = true; onAutoDone?.(); toggle(); } }, [auto]);
+  async function toggle() {
+    const a = audioRef.current;
+    if (state === "playing" && a) { a.pause(); setState("idle"); return; }
+    if (state === "loading") return;
+    try {
+      if (!a) {
+        setState("loading");
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) throw new Error();
+        const audio = auto && unlockedAudio ? unlockedAudio : new Audio();
+        if (audio === unlockedAudio) unlockedAudio = null;
+        audio.src = URL.createObjectURL(await res.blob());
+        audio.ontimeupdate = () => setPos(audio.duration ? audio.currentTime / audio.duration : 0);
+        audio.onended = () => { setState("idle"); setPos(0); };
+        audioRef.current = audio;
+      }
+      currentAudio?.pause();
+      currentAudio = audioRef.current;
+      await audioRef.current.play();
+      setState("playing");
+    } catch {
+      setState("error");
+    }
+  }
+  const bars = [6, 11, 16, 9, 14, 20, 12, 7, 15, 18, 10, 6, 13, 17, 9, 12, 19, 8, 14, 10, 6, 12, 16, 9];
+  return (
+    <div className={"voice-reply" + (state === "playing" ? " on" : "")}>
+      <button className="vr-play" aria-label={state === "playing" ? t("stopListen") : t("listen")} onClick={toggle}>
+        {state === "loading" ? <span className="mini-spin" aria-hidden="true" /> : <Svg d={state === "playing" ? Icon.stop : Icon.play} size={16} />}
+      </button>
+      <div className="vr-wave" aria-hidden="true">
+        {bars.map((h, k) => <i key={k} style={{ height: h }} className={k / bars.length < pos ? "done" : ""} />)}
+      </div>
+      <span className="vr-label">{state === "error" ? "⚠️" : "🔊"}</span>
+    </div>
+  );
+}
+
 function AnswerActions({ text, getToken }) {
   const { t } = useLang();
   const [state, setState] = useState("idle"); // idle | loading | playing
@@ -1038,6 +1161,7 @@ function Main({ session }) {
     setSheet({ type: "upgrade", reason });
   }
   const [gift, setGift] = useState(0);
+  const [autoVoice, setAutoVoice] = useState(""); // "chatId:index" of a fresh voice reply that should start playing
   const [publishing, setPublishing] = useState(false);
   async function publishSite(next = "published") {
     if (typeof next !== "string") next = "published"; // called from a button click
@@ -1286,6 +1410,7 @@ function Main({ session }) {
   function stopRec(sendIt) {
     const r = recRef.current;
     if (!r) return;
+    if (sendIt) unlockAudio(); // this tap lets the spoken answer play by itself on iPhone
     r.send = sendIt;
     if (r.mr.state !== "inactive") r.mr.stop();
   }
@@ -1339,7 +1464,7 @@ function Main({ session }) {
     patch(voice.chatId, (c) => ({
       ...c,
       mode: c.mode === "auto" ? "chat" : c.mode,
-      messages: [...c.messages, { role: "user", content: heardText || t("voiceMessage"), voice: true }, { role: "assistant", content: answer }],
+      messages: [...c.messages, { role: "user", content: heardText || t("voiceMessage"), voice: true }, { role: "assistant", content: answer, voiceReply: true }],
       title: c.title || (heardText || t("voiceMessage")).slice(0, 60),
     }));
     setActiveId(voice.chatId);
@@ -1372,7 +1497,7 @@ function Main({ session }) {
       if (target !== "build") target = "chat";
       setDraft((d) => ({ ...d, mode: target }));
     }
-    const sentImages = target === "chat" ? [...images, ...extra] : [];
+    const sentImages = target === "chat" ? [...images, ...extra] : extra.filter((x) => x.voice); // voice works in every mode
     const isVoice = extra.some((x) => x.voice);
     const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
@@ -1438,6 +1563,7 @@ function Main({ session }) {
           showLimit(err.error);
           return "stop";
         }
+        if (err.error === "slow_down") { put([...next, { role: "assistant", content: t("slowDown"), failed: true }]); return "stop"; }
         if (err.error === "file_too_big") { put(next.slice(0, -1)); setInput(text); alert(t("fileBig")); return "stop"; }
         if (err.detail) console.error("server:", err.detail);
         return "retry";
@@ -1471,6 +1597,12 @@ function Main({ session }) {
           put([...next, { role: "assistant", content: clean(acc), fixed: applied ? { name: fixedName(sentFile.name), content: out } : null, fixInfo: { applied, failed } }]);
         }
         if (m === "build" && applyChanges(base, acc).changed && window.innerWidth < 900) setShowPreview(true);
+        if (isVoice && !ERR.test(acc)) {
+          const sp = split(acc);
+          const replyIndex = sp.msgs.length;
+          put([...sp.msgs, { role: "assistant", content: clean(sp.body), voiceReply: true }]);
+          setAutoVoice(`${id}:${replyIndex}`);
+        }
         if (ERR.test(acc)) { const sp = split(acc); put([...sp.msgs, { role: "assistant", content: clean(sp.body), failed: true }]); }
       }
     } catch (e) {
@@ -1599,6 +1731,9 @@ function Main({ session }) {
                       m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
                         : <span className="typing" role="status"><i /><i /><i /><small>{t("thinking")}</small></span>
                     ) : m.voice ? <span className="voice-tag"><Svg d={Icon.mic} size={16} /> {m.content}</span> : m.content}
+                    {m.voiceReply && m.content && !(busy && i === messages.length - 1) && (
+                      <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} />
+                    )}
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !(busy && i === messages.length - 1) && (
                       <AnswerActions text={m.content} getToken={token} />
                     )}
@@ -1680,10 +1815,10 @@ function Main({ session }) {
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 700) { e.preventDefault(); send(); } }} />
-                {chatLike && !busy && !deciding && !input.trim() && !images.length && !file ? (
+                {!busy && !deciding && !input.trim() && !images.length && !file ? (
                   <span className="send-pair">
                     <button className="send mic" aria-label={t("record")} title={t("record")} onClick={startRec}><Svg d={Icon.mic} size={18} /></button>
-                    <button className="send live" aria-label={t("liveVoice")} title={t("liveVoice")} onClick={() => openVoice()}><Svg d={Icon.wave} size={18} /></button>
+                    {chatLike && <button className="send live" aria-label={t("liveVoice")} title={t("liveVoice")} onClick={() => openVoice()}><Svg d={Icon.wave} size={18} /></button>}
                   </span>
                 ) : busy ? (
                   <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
@@ -1791,7 +1926,7 @@ function Root() {
   if (session === undefined) return <div className="splash"><img src="/icon-192.png" alt="AHM AI" /></div>;
   if (session && recovery) return <NewPassword onDone={() => { setRecovery(false); history.replaceState(null, "", "/"); }} />;
   if (session) return <Main session={session} />;
-  return authMode ? <Auth key={authMode} initialMode={authMode} onBack={() => setAuthMode(null)} /> : <Visitor onStart={setAuthMode} />;
+  return authMode ? <Auth key={authMode} initialMode={authMode} onBack={() => setAuthMode(null)} onRecovery={(on) => setRecovery(on !== false)} /> : <Visitor onStart={setAuthMode} />;
 }
 
 function Visitor({ onStart }) {

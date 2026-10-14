@@ -1,6 +1,7 @@
 // Chats saved on the account, so the same history shows on every phone and computer.
 import { adminDb, getUser } from "../../../lib/server";
 
+import { allow, tooMany } from "../../../lib/ratelimit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const preferredRegion = "fra1";
@@ -13,6 +14,7 @@ const validId = (id) => typeof id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(i
 export async function GET(req) {
   const user = await getUser(req);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!allow("chats:" + user.id, 60, 60000)) return tooMany();
   const { data, error } = await adminDb()
     .from("chats").select("id,data,deleted,updated_at")
     .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(MAX_CHATS);
@@ -26,6 +28,7 @@ export async function GET(req) {
 export async function POST(req) {
   const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!allow("chats:" + user.id, 60, 60000)) return tooMany();
   if (!body) return Response.json({ error: "bad_request" }, { status: 400 });
 
   const now = Date.now();
