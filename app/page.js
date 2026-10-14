@@ -12,6 +12,7 @@ import Learn from "../components/Learn";
 import VoiceMode from "../components/VoiceMode";
 import Landing from "../components/Landing";
 import { quickGuess } from "../lib/intent";
+import { useUpdateReady, refreshApp } from "../lib/update";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
 const MAX_FILE_BYTES = 1_500_000;
@@ -714,8 +715,9 @@ function ThemePicker() {
   );
 }
 
-function Settings({ session, me, onClose, onPlans, onPassword }) {
+function Settings({ session, me, onClose, onPlans, onPassword, update }) {
   const { t } = useLang();
+  const [loading, setLoading] = useState(false);
   return (
     <Sheet label={t("settings")} onClose={onClose}>
       <h3>{t("settings")}</h3>
@@ -737,6 +739,10 @@ function Settings({ session, me, onClose, onPlans, onPassword }) {
           <div className="set-val gold">{me.unlimited ? "👑" : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</div>
         </button>
       )}
+      <button className={"set-row set-btn refresh-row" + (update ? " new" : "")} disabled={loading} onClick={() => { setLoading(true); refreshApp(); }}>
+        <div className="set-label">🔄 {t("refreshApp")}</div>
+        <div className="set-val">{loading ? <span className="mini-spin" /> : update ? <em className="new-badge">{t("updateNew")}</em> : "›"}</div>
+      </button>
       <button className="set-row set-btn" onClick={onPassword}>
         <div className="set-label">🔐 {t("changePw")}</div>
         <div className="set-val">›</div>
@@ -1163,6 +1169,8 @@ function Main({ session }) {
   const bottom = useRef(null);
   const ta = useRef(null);
   const fileInput = useRef(null);
+  const update = useUpdateReady();
+  const [hideUpdate, setHideUpdate] = useState(false);
   const abortRef = useRef(null);
 
   const active = chats.find((c) => c.id === activeId) || draft;
@@ -1718,6 +1726,13 @@ function Main({ session }) {
           </button>
         </header>
         <KurdFlag />
+        {update && !hideUpdate && (
+          <div className="update-bar" role="status">
+            <span>🎉 {t("updateReady")}</span>
+            <button className="update-go" onClick={() => refreshApp()}>🔄 {t("refreshNow")}</button>
+            <button className="update-x" aria-label={t("close")} onClick={() => setHideUpdate(true)}>×</button>
+          </div>
+        )}
         {gift > 0 && (
           <div className="gift-bar" role="status">
             🎁 {t("giftGot").replace("{n}", gift)}
@@ -1900,7 +1915,7 @@ function Main({ session }) {
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} />}
       {sheet?.type === "settings" && (
-        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} />
+        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update} />
       )}
     </div>
   );

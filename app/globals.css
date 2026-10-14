@@ -967,3 +967,13 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .composer .attach.gallery { border: 0; background: var(--surface-3); color: var(--text); width: 40px; height: 40px; cursor: pointer; }
 .composer .attach.gallery:hover { color: var(--gold-text); }
 .composer .attach.gallery:disabled { opacity: .4; }
+
+/* ---------- "an update has come" bar + refresh row ---------- */
+.update-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 8px 16px 0; padding: 10px 12px 10px 14px; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(39,142,67,.14), rgb(var(--gold-rgb) / .16)); border: 1px solid rgba(39,142,67,.45); color: var(--text); font-size: 14px; line-height: 1.6; animation: upd-in .4s ease; }
+.update-bar > span { flex: 1 1 200px; }
+.update-go { border: 0; background: #278e43; color: #fff; border-radius: 10px; min-height: 38px; padding: 0 14px; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.update-x { background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+@keyframes upd-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.refresh-row.new { border-color: rgba(39,142,67,.6) !important; }
+.new-badge { display: inline-block; line-height: 1.7; white-space: nowrap; font-style: normal; background: #278e43; color: #fff; border-radius: 999px; padding: 2px 10px; font-size: 12.5px; font-weight: 700; }

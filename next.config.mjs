@@ -12,6 +12,8 @@ const security = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  // A new id on every deploy: open apps notice it and tell the user to refresh.
+  env: { NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || String(Date.now()) },
   async headers() {
     return [
       { source: "/((?!s/).*)", headers: security },
