@@ -1031,3 +1031,24 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .notice-body b { font-size: 12.5px; color: var(--gold-text); }
 .notice-body p { margin: 2px 0 0; font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice-x { background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+
+/* ---------- "Add to screen" guide ---------- */
+.a2-row .a2-go { color: #278e43; font-weight: 700; font-size: 13.5px; }
+.a2-row.done { opacity: 1; }
+.a2-hero { display: grid; place-items: center; margin: 4px 0 6px; }
+.a2-phone { width: 170px; height: 150px; border-radius: 26px; padding: 14px; box-sizing: border-box;
+  background: linear-gradient(160deg, #1d3d6b, #3b2a6b 55%, #7a3b5c); box-shadow: 0 18px 40px -20px rgba(0,0,0,.55); }
+.a2-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 14px; justify-items: center; }
+.a2-grid i { width: 38px; height: 38px; border-radius: 10px; opacity: .55; }
+.a2-app { display: flex; flex-direction: column; align-items: center; gap: 3px; animation: a2-pop 1.8s ease-in-out infinite; }
+.a2-app img { width: 42px; height: 42px; border-radius: 10px; box-shadow: 0 0 0 2px rgba(246,200,85,.9), 0 6px 16px rgba(0,0,0,.45); }
+.a2-app small { color: #fff; font-size: 9.5px; font-weight: 600; letter-spacing: .3px; }
+@keyframes a2-pop { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.a2-steps { list-style: none; padding: 0; margin: 10px 0 14px; display: grid; gap: 10px; }
+.a2-steps li { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; font-size: 14.5px; line-height: 1.7; }
+.a2-steps li b { flex: 0 0 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: var(--gold-ink); font-size: 14px; }
+.a2-arrow { text-align: center; font-size: 34px; animation: a2-bounce 1s ease-in-out infinite; }
+.a2-arrow.up { margin-bottom: 4px; }
+@keyframes a2-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
+.a2-arrow.up { animation-name: a2-bounce-up; }
+@keyframes a2-bounce-up { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }

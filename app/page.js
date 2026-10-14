@@ -703,6 +703,44 @@ function useInstall() {
   return { canPrompt: !!prompt, installed, install };
 }
 
+// "Put AHM AI on my screen": one tap where the browser allows it; otherwise clear steps for this device.
+function browserKind() {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return /CriOS/.test(ua) ? "ios-chrome" : /FxiOS|EdgiOS|OPiOS/.test(ua) ? "ios-other" : "ios-safari";
+  if (/Android/.test(ua)) return "android";
+  return /Safari/.test(ua) && !/Chrome|Chromium|Edg/.test(ua) ? "mac-safari" : "pc";
+}
+function InstallGuide({ onClose }) {
+  const { t } = useLang();
+  const kind = browserKind();
+  const steps = {
+    "ios-safari": [t("a2Ios1"), t("a2Ios2"), t("a2Ios3")],
+    "ios-chrome": [t("a2IosC1"), t("a2Ios2"), t("a2Ios3")],
+    "ios-other": [t("a2IosO1"), t("a2Ios1"), t("a2Ios2"), t("a2Ios3")],
+    android: [t("a2And1"), t("a2And2"), t("a2And3")],
+    "mac-safari": [t("a2Mac1"), t("a2Mac2")],
+    pc: [t("a2Pc1"), t("a2Pc2"), t("a2Pc3")],
+  }[kind];
+  return (
+    <Sheet label={t("addToScreen")} onClose={onClose}>
+      {kind === "ios-chrome" && <div className="a2-arrow up" aria-hidden="true">⬆️</div>}
+      <div className="a2-hero">
+        <div className="a2-phone">
+          <div className="a2-grid">
+            {["#7fb3ff", "#ffd36b", "#9be59b", "#ff9d9d", "#c7a6ff"].map((c, i) => <i key={i} style={{ background: c }} />)}
+            <span className="a2-app"><img src="/apple-touch-icon.png" alt="" /><small>AHM AI</small></span>
+          </div>
+        </div>
+      </div>
+      <h3>📲 {t("addToScreen")}</h3>
+      <p className="muted">{t("a2Why")}</p>
+      <ol className="a2-steps">{steps.map((x, i) => <li key={i}><b>{i + 1}</b><span>{x}</span></li>)}</ol>
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+      {kind === "ios-safari" && <div className="a2-arrow down" aria-hidden="true">⬇️</div>}
+    </Sheet>
+  );
+}
+
 function InstallHelp({ onClose }) {
   const { t } = useLang();
   return (
@@ -851,7 +889,7 @@ function ThemePicker() {
   );
 }
 
-function Settings({ session, me, onClose, onPlans, onPassword, update }) {
+function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide }) {
   const { t } = useLang();
   const [loading, setLoading] = useState(false);
   return (
@@ -878,6 +916,11 @@ function Settings({ session, me, onClose, onPlans, onPassword, update }) {
       <button className={"set-row set-btn refresh-row" + (update ? " new" : "")} disabled={loading} onClick={() => { setLoading(true); refreshApp(); }}>
         <div className="set-label">🔄 {t("refreshApp")}</div>
         <div className="set-val">{loading ? <span className="mini-spin" /> : update ? <em className="new-badge">{t("updateNew")}</em> : "›"}</div>
+      </button>
+      <button className={"set-row set-btn a2-row" + (inst?.installed ? " done" : "")} disabled={inst?.installed}
+        onClick={async () => { if (inst?.installed) return; if (await inst?.install?.()) return; onInstallGuide?.(); }}>
+        <div className="set-label">📲 {t("addToScreen")}</div>
+        <div className="set-val">{inst?.installed ? <em className="new-badge">✓ {t("installedYes")}</em> : <span className="a2-go">{t("a2Tap")}</span>}</div>
       </button>
       <button className="set-row set-btn" onClick={onPassword}>
         <div className="set-label">🔐 {t("changePw")}</div>
@@ -2341,11 +2384,13 @@ function Main({ session }) {
       {sheet?.type === "invite" && <Invite token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "password" && <ChangePassword onClose={() => setSheet(null)} />}
       {sheet?.type === "install" && <InstallHelp onClose={() => setSheet(null)} />}
+      {sheet?.type === "a2hs" && <InstallGuide onClose={() => setSheet(null)} />}
       {sheet?.type === "feedback" && <Feedback token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} />}
       {sheet?.type === "settings" && (
-        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update} />
+        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
+          inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} />
       )}
     </div>
   );
