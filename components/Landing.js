@@ -23,7 +23,8 @@ const COPY = {
     free: "بەخۆڕایی",
     q: "پرسیار",
     days: "ڕۆژ",
-    rounds: (h) => `کاتێک پرسیارەکان تەواو دەبن، دوای چاوەڕوانییەک (${h} کاتژمێر) هەموویان دەگەڕێنەوە.`,
+    rounds: (h) => `وەک Claude: پرسیارەکان هەر ${h} کاتژمێر جارێک نوێ دەبنەوە، لەگەڵ سنوورێکی هەفتانە.`,
+    h: " کاتژمێر", week: "لە هەفتەیەکدا",
     pay: "پارەدان بە FIB، لە ڕێگەی بۆتی تێلێگرامەوە.",
     endTitle: "ئامادەیت؟",
     endSub: "دروستکردنی هەژمار کەمتر لە خولەکێکی دەوێت.",
@@ -55,7 +56,8 @@ const COPY = {
     free: "مجاني",
     q: "سؤال",
     days: "يوم",
-    rounds: (h) => `عند انتهاء الأسئلة تعود كلها بعد فترة انتظار (${h} ساعة).`,
+    rounds: (h) => `مثل Claude: تتجدد الأسئلة كل ${h} ساعات، مع حد أسبوعي.`,
+    h: " ساعات", week: "أسبوعياً",
     pay: "الدفع عبر FIB من خلال بوت تيليغرام.",
     endTitle: "جاهز؟",
     endSub: "إنشاء الحساب يستغرق أقل من دقيقة.",
@@ -87,7 +89,8 @@ const COPY = {
     free: "Free",
     q: "questions",
     days: "days",
-    rounds: (h) => `When questions run out, they all come back after a wait (${h} hours).`,
+    rounds: (h) => `Like Claude: questions renew every ${h} hours, with a weekly limit.`,
+    h: "h", week: "a week",
     pay: "Pay with FIB through our Telegram bot.",
     endTitle: "Ready?",
     endSub: "Creating an account takes less than a minute.",
@@ -198,17 +201,19 @@ export default function Landing({ lang, picker, onStart, Svg, Icon, botUrl }) {
           <div className="ld-plan">
             <div className="ld-plan-name">{c.free}</div>
             <div className="ld-plan-price">$0</div>
-            <div className="ld-plan-q"><b>{freeN}</b> {c.q}</div>
+            <div className="ld-plan-q"><b>{freeN}</b> {c.q} / {plans?.windowHours || 5}{c.h}</div>
+            <div className="ld-plan-w">{plans?.freeWeekly ?? 60} {c.week}</div>
           </div>
           {(plans?.paid || []).map((p) => (
             <div key={p.id} className={"ld-plan" + (p.best ? " best" : "")}>
               <div className="ld-plan-name">{p.name}</div>
               <div className="ld-plan-price"><span dir="ltr">${p.price}</span><small> / {p.days} {c.days}</small></div>
-              <div className="ld-plan-q"><b>{p.limit}</b> {c.q}</div>
+              <div className="ld-plan-q"><b>{p.limit}</b> {c.q} / {plans?.windowHours || 5}{c.h}</div>
+              <div className="ld-plan-w">{p.weekly ?? p.limit * 4} {c.week}</div>
             </div>
           ))}
         </div>
-        <p className="ld-small">{c.rounds((plans?.cooldowns || [5, 7, 10, 24]).join(" → "))} {c.pay}</p>
+        <p className="ld-small">{c.rounds(plans?.windowHours || 5)} {c.pay}</p>
       </section>
 
       <section className="ld-end">

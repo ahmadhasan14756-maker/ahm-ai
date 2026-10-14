@@ -721,10 +721,42 @@ function InstallHelp({ onClose }) {
 function usageText(me, t) {
   if (!me) return "";
   if (me.unlimited) return "∞";
-  if (me.lockedUntil && new Date(me.lockedUntil) > new Date()) return "⏳ " + fmtClock(me.lockedUntil);
-  return `${Math.max(0, me.limit - me.used)} ${t("left")}`;
+  if (me.lockedUntil && new Date(me.lockedUntil) > new Date()) return "⏳ " + fmtWhen(me.lockedUntil);
+  return `${me.left ?? Math.max(0, me.limit - me.used)} ${t("left")}`;
 }
 const fmtClock = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+// Time today, or day + time when it is more than a day away (weekly limit).
+const fmtWhen = (iso) => (new Date(iso) - Date.now() > 20 * 3600e3
+  ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + " " + fmtClock(iso)
+  : fmtClock(iso));
+const fmtLeft = (iso, t) => {
+  const ms = Math.max(0, new Date(iso) - Date.now());
+  const d = Math.floor(ms / 864e5), h = Math.floor((ms % 864e5) / 3600e3), m = Math.ceil((ms % 3600e3) / 60000);
+  return d > 0 ? `${d} ${t("daysShort")} ${h} ${t("hours")}` : h > 0 ? `${h} ${t("hours")} ${m} ${t("minutes")}` : `${m} ${t("minutes")}`;
+};
+
+// Two bars like Claude: this window (5 hours) and this week.
+function UsageBars({ me }) {
+  const { t } = useLang();
+  if (!me || me.unlimited) return null;
+  const row = (label, used, limit, reset) => {
+    const pct = Math.min(100, Math.round((used / Math.max(1, limit)) * 100));
+    return (
+      <div className="ub-row">
+        <div className="ub-head"><span>{label}</span><b dir="ltr">{Math.min(used, limit)} / {limit}</b></div>
+        <div className="ub-bar"><i style={{ width: pct + "%" }} className={pct >= 100 ? "full" : pct >= 80 ? "high" : ""} /></div>
+        {reset && used > 0 && <div className="ub-reset">🔄 {t("resetsIn").replace("{t}", fmtLeft(reset, t))}</div>}
+      </div>
+    );
+  };
+  return (
+    <div className="usage-bars">
+      {row(t("thisWindow").replace("{h}", me.windowHours || 5), me.used || 0, me.limit, me.resetAt)}
+      {me.weekLimit && row(t("thisWeek"), me.weekUsed || 0, me.weekLimit, me.weekResetAt)}
+      {me.bonus > 0 && <div className="ub-reset">🎁 {t("bonusLeft").replace("{n}", me.bonus)}</div>}
+    </div>
+  );
+}
 
 function WaitBox({ until }) {
   const { t } = useLang();
@@ -732,11 +764,10 @@ function WaitBox({ until }) {
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id); }, []);
   const ms = new Date(until) - now;
   if (ms <= 0) return null;
-  const h = Math.floor(ms / 3600000), m = Math.ceil((ms % 3600000) / 60000);
   return (
     <div className="wait-box" role="status">
-      <div className="wait-time">⏳ {h > 0 && <>{h} {t("hours")} </>}{m} {t("minutes")}</div>
-      <div className="muted">{t("waitUntil")} <b dir="ltr">{fmtClock(until)}</b></div>
+      <div className="wait-time">⏳ {fmtLeft(until, t)}</div>
+      <div className="muted">{t("waitUntil")} <b dir="ltr">{fmtWhen(until)}</b></div>
     </div>
   );
 }
@@ -752,11 +783,13 @@ function Upgrade({ reason, me, onClose, onEdit }) {
     <Sheet label={t("plans")} onClose={onClose}>
       <h3>{t("plans")} <span className="gold brand-font">AHM AI</span></h3>
       {me?.lockedUntil ? <WaitBox until={me.lockedUntil} /> : null}
-      <p>{me?.lockedUntil ? t("upWait") : text}</p>
+      <p>{me?.lockedUntil ? t(me.lockReason === "week" ? "upWaitWeek" : "upWait").replace("{h}", me.windowHours || 5) : text}</p>
+      <UsageBars me={me} />
       <div className="plans">
         <div className={"plan" + (!me?.pro ? " current" : "")}>
           <div className="plan-price">{t("free")}</div>
-          <div className="plan-limit"><b>{plans.freeLimit}</b> {t("questions")}</div>
+          <div className="plan-limit"><b>{plans.freeLimit}</b> {t("perWindow").replace("{h}", plans.windowHours || 5)}</div>
+          <div className="plan-week"><b>{plans.freeWeekly ?? plans.freeLimit * 4}</b> {t("perWeek")}</div>
           <div className="plan-voice">🎤 <b>{plans.freeVoice ?? 10}</b> {t("voiceMin")}</div>
           <div className="plan-model">⚡ {t("modelFast")}</div>
           {!me?.pro && <div className="plan-tag">{t("currentPlan")}</div>}
@@ -768,7 +801,8 @@ function Upgrade({ reason, me, onClose, onEdit }) {
             <span className="plan-check" aria-hidden="true">{sel === p.id ? "✓" : ""}</span>
             <div className="plan-name">{p.name}</div>
             <div className="plan-price"><span dir="ltr">${p.price}</span><small> / {p.days} {t("days")}</small></div>
-            <div className="plan-limit"><b>{p.limit}</b> {t("questions")}</div>
+            <div className="plan-limit"><b>{p.limit}</b> {t("perWindow").replace("{h}", plans.windowHours || 5)}</div>
+            <div className="plan-week"><b>{p.weekly ?? p.limit * 4}</b> {t("perWeek")}</div>
             <div className="plan-voice">🎤 <b>{p.voice ?? 60}</b> {t("voiceMin")}</div>
             <div className="plan-model">🧠 {t("modelSmart")}</div>
             {me?.plan === p.id && <div className="plan-tag">{t("currentPlan")}</div>}
@@ -777,7 +811,7 @@ function Upgrade({ reason, me, onClose, onEdit }) {
       </div>
       {plans.payment && <p className="pay-info" dir="auto">💳 {plans.payment}</p>}
       {me?.voice?.limit != null && <p className="muted voice-today">🎤 {t("voiceToday").replace("{u}", Math.min(me.voice.used, me.voice.limit)).replace("{l}", me.voice.limit)}</p>}
-      <ul className="perks"><li>{t("perkModel")}</li><li>{t("perk1")}</li><li>{t("perk2")}</li><li>{t("roundsInfo").replace("{h}", (plans.cooldowns || [5, 7, 10, 24]).join(" → "))}</li></ul>
+      <ul className="perks"><li>{t("perkModel")}</li><li>{t("perk1")}</li><li>{t("perk2")}</li><li>{t("windowInfo").replace("{h}", plans.windowHours || 5)}</li></ul>
       {buyUrl ? (
         <a className="gold-btn" href={buyUrl} target="_blank" rel="noreferrer">
           {chosen ? <>{t("buy")} {chosen.name} · <span dir="ltr">${chosen.price}</span></> : t("buyTelegram")}
@@ -1139,7 +1173,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const setPlan = (i, k, v) => setForm((f) => ({ ...f, paid: f.paid.map((p, j) => (j === i ? { ...p, [k]: v } : p)) }));
-  const addPlan = () => setForm((f) => ({ ...f, paid: [...f.paid, { id: "p" + Date.now().toString(36), name: "Pro", price: 5, limit: 100, days: 30, voice: 60 }] }));
+  const addPlan = () => setForm((f) => ({ ...f, paid: [...f.paid, { id: "p" + Date.now().toString(36), name: "Pro", price: 5, limit: 100, weekly: 400, days: 30, voice: 60 }] }));
   const delPlan = (i) => setForm((f) => ({ ...f, paid: f.paid.filter((_, j) => j !== i) }));
   async function save() {
     setBusy(true); setMsg("");
@@ -1159,8 +1193,16 @@ function PlanEditor({ me, token, onSaved, onClose }) {
     <Sheet label={t("managePlans")} onClose={onClose}>
       <h3>⚙️ {t("managePlans")}</h3>
       <label className="pe-row">
-        <span>{t("freePerMonth")}</span>
+        <span>⏱️ {t("windowField")}</span>
+        <input type="number" inputMode="decimal" dir="ltr" value={form.windowHours ?? 5} onChange={(e) => setForm({ ...form, windowHours: e.target.value })} />
+      </label>
+      <label className="pe-row">
+        <span>{t("freePerMonth").replace("{h}", form.windowHours || 5)}</span>
         <input type="number" inputMode="numeric" dir="ltr" value={form.freeLimit} onChange={(e) => setForm({ ...form, freeLimit: e.target.value })} />
+      </label>
+      <label className="pe-row">
+        <span>{t("freeWeeklyField")}</span>
+        <input type="number" inputMode="numeric" dir="ltr" value={form.freeWeekly ?? 60} onChange={(e) => setForm({ ...form, freeWeekly: e.target.value })} />
       </label>
       <label className="pe-row">
         <span>🎤 {t("freeVoiceField")}</span>
@@ -1176,7 +1218,8 @@ function PlanEditor({ me, token, onSaved, onClose }) {
           </div>
           <div className="pe-grid">
             <label><span>{t("price")} $</span><input type="number" inputMode="decimal" dir="ltr" value={p.price} onChange={(e) => setPlan(i, "price", e.target.value)} /></label>
-            <label><span>{t("questions")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.limit} onChange={(e) => setPlan(i, "limit", e.target.value)} /></label>
+            <label><span>{t("perWindowShort").replace("{h}", form.windowHours || 5)}</span><input type="number" inputMode="numeric" dir="ltr" value={p.limit} onChange={(e) => setPlan(i, "limit", e.target.value)} /></label>
+            <label><span>{t("perWeekShort")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.weekly ?? p.limit * 4} onChange={(e) => setPlan(i, "weekly", e.target.value)} /></label>
             <label><span>{t("days")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.days} onChange={(e) => setPlan(i, "days", e.target.value)} /></label>
             <label><span>🎤 {t("voiceMinShort")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.voice ?? 60} onChange={(e) => setPlan(i, "voice", e.target.value)} /></label>
           </div>
@@ -1186,12 +1229,6 @@ function PlanEditor({ me, token, onSaved, onClose }) {
       <label className="pe-row">
         <span>{t("inviteBonusField")}</span>
         <input type="number" inputMode="numeric" dir="ltr" value={form.inviteBonus ?? 10} onChange={(e) => setForm({ ...form, inviteBonus: e.target.value })} />
-      </label>
-      <label className="pe-row col">
-        <span>{t("waitHours")}</span>
-        <input dir="ltr" inputMode="text" style={{ width: "100%" }} value={Array.isArray(form.cooldowns) ? form.cooldowns.join(", ") : form.cooldowns ?? ""}
-          onChange={(e) => setForm({ ...form, cooldowns: e.target.value })} placeholder="5, 7, 10, 24" />
-        <small className="muted">{t("waitHelp")}</small>
       </label>
       <label className="pe-row col">
         <span>{t("payInfo")}</span>

@@ -8,6 +8,6 @@ export const preferredRegion = "fra1";
 
 export async function GET(req) {
   if (!(await allow("plans:" + ipOf(req), 60, 60000))) return tooMany();
-  const { freeLimit, paid, cooldowns } = await getSettings();
-  return Response.json({ freeLimit, paid, cooldowns }, { headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } });
+  const { freeLimit, freeWeekly, windowHours, freeVoice, paid } = await getSettings();
+  return Response.json({ freeLimit, freeWeekly, windowHours, freeVoice, paid }, { headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } });
 }
