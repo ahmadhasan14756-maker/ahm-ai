@@ -1614,9 +1614,16 @@ function Main({ session }) {
     };
 
     try {
+      // When the AI is busy (many people at once), wait in line instead of failing:
+      // free AI limits refill every minute, so keep trying quietly for about a minute.
       let result = await attempt();
-      for (let tries = 1; result === "retry" && tries <= 2; tries++) {
-        await new Promise((r) => setTimeout(r, 1200 * tries)); // wait a moment, then quietly try again
+      const waits = [1500, 3000, 5000, 8000, 10000, 12000, 15000];
+      for (let tries = 0; result === "retry" && tries < waits.length && !ctrl.signal.aborted; tries++) {
+        const busyNow = /ERR:busy/.test(acc);
+        if (!busyNow && tries >= 2) break; // a real error: don't keep the user waiting
+        if (busyNow) put([...next, { role: "assistant", content: "", waiting: true }]);
+        await new Promise((r) => setTimeout(r, waits[tries]));
+        if (ctrl.signal.aborted) break;
         result = await attempt();
       }
       if (result === "retry") {
@@ -1761,7 +1768,7 @@ function Main({ session }) {
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
                     {m.role === "assistant" ? (
                       m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
-                        : <span className="typing" role="status"><i /><i /><i /><small>{t("thinking")}</small></span>
+                        : <span className="typing" role="status"><i /><i /><i /><small>{m.waiting ? t("queueWait") : t("thinking")}</small></span>
                     ) : m.voice ? <span className="voice-tag"><Svg d={Icon.mic} size={16} /> {m.content}</span> : m.content}
                     {m.voiceReply && m.content && !(busy && i === messages.length - 1) && (
                       <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} />
