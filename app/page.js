@@ -1394,6 +1394,19 @@ function Main({ session }) {
     abortRef.current = ctrl;
     let acc = "";
     const ERR = /\u0000ERR:(busy|ai)\s*$/;
+    // Voice message: the answer starts with ⟦what was said⟧ — that text goes into the user's bubble.
+    const HEARD = /^\s*⟦([^⟧]*)⟧[ \t]*\n?/;
+    const split = (txt) => {
+      if (!isVoice) return { body: txt, msgs: next };
+      const mm = txt.match(HEARD);
+      if (mm) {
+        const heard = mm[1].trim();
+        const mine = { ...next[next.length - 1], content: heard || next[next.length - 1].content };
+        return { body: txt.slice(mm[0].length).replace(/^\s+/, ""), msgs: [...next.slice(0, -1), mine] };
+      }
+      if (/^\s*⟦/.test(txt)) return { body: "", msgs: next }; // the words are still arriving
+      return { body: txt, msgs: next };
+    };
     const clean = (txt) => txt.replace(/\n*\u0000ERR:(busy|ai)\s*$/, (_m, k) => "\n\n" + (k === "busy" ? t("errBusy") : t("errAi")));
 
     // One request to the server. Returns "ok", "retry" (nothing arrived yet) or "stop".
@@ -1411,6 +1424,7 @@ function Main({ session }) {
           images: sentImages.length ? sentImages.map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
           project: m === "build" ? base : undefined,
           tutor: active.tutor || undefined,
+          voiceNote: isVoice || undefined,
         }),
       });
       if (res.status === 401) { await supabase.auth.signOut(); return "stop"; }
@@ -1436,7 +1450,8 @@ function Main({ session }) {
         acc += dec.decode(value, { stream: true });
         if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
         const ch = m === "build" ? applyChanges(base, acc) : null;
-        put([...next, { role: "assistant", content: clean(acc) }], ch?.changed ? { project: ch.files } : {});
+        const sp = split(acc);
+        put([...sp.msgs, { role: "assistant", content: clean(sp.body) }], ch?.changed ? { project: ch.files } : {});
       }
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
@@ -1456,7 +1471,7 @@ function Main({ session }) {
           put([...next, { role: "assistant", content: clean(acc), fixed: applied ? { name: fixedName(sentFile.name), content: out } : null, fixInfo: { applied, failed } }]);
         }
         if (m === "build" && applyChanges(base, acc).changed && window.innerWidth < 900) setShowPreview(true);
-        if (ERR.test(acc)) put([...next, { role: "assistant", content: clean(acc), failed: true }]);
+        if (ERR.test(acc)) { const sp = split(acc); put([...sp.msgs, { role: "assistant", content: clean(sp.body), failed: true }]); }
       }
     } catch (e) {
       if (e?.name === "AbortError") {

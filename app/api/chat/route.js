@@ -37,7 +37,7 @@ CODE
 - For a large project, give the file structure first, then each file.
 
 VOICE
-- If the user sends a voice message (audio), listen carefully, understand it in whatever language it is spoken (Kurdish Sorani, Arabic or English), and reply in that same language. Do not repeat the transcript unless asked.
+- If the user sends a voice message (audio), listen carefully, understand it in whatever language it is spoken (Kurdish Sorani, Arabic or English), and reply in that same language.
 
 PREDICTIONS
 - You cannot see the future. For predictions (sports, prices, exchange rates, markets, elections) give a careful, reasoned analysis: the main factors, the most likely outcome, rough probabilities, and clearly say it can be wrong. Never present a guess as certain. Do not give personal financial or betting advice.
@@ -224,6 +224,11 @@ LANGUAGE TEACHER MODE (this overrides the LANGUAGE rules above)
 - If the learner's last message has mistakes, add a short section starting with "✏️" in their own language: show the corrected sentence and explain the mistake in one line. If there were no mistakes, praise them briefly.
 - For beginners (A0/A1) add the meaning in their own language in brackets after difficult sentences.
 - If they ask for help or a translation, give it, then continue the conversation.` : "";
+    const NOTE_PROMPT = body.voiceNote && !body.voice ? `
+
+VOICE MESSAGE
+- The user's latest message is a voice recording. Start your reply with ONE line exactly like this: ⟦what the user said, written word for word in the language they spoke⟧ (Kurdish always in Arabic script). Nothing else on that line.
+- Then, on the next line, answer them normally in that same language (Markdown is fine).` : "";
     const VOICE_PROMPT = body.voice ? `
 
 VOICE CONVERSATION MODE (most important rules)
@@ -232,7 +237,7 @@ VOICE CONVERSATION MODE (most important rules)
 - Then your spoken reply: natural, warm, conversational, short (1–4 sentences, longer only if they asked for an explanation). No Markdown, no lists, no symbols, no emojis, no links, no code — only words that sound good when read aloud. Write numbers so they can be spoken.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + TUTOR_PROMPT + VOICE_PROMPT,
+      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
       maxOutputTokens: file || build ? 32768 : 8192,
       safetySettings: GEMINI_SAFETY,
     };
