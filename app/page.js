@@ -428,6 +428,52 @@ function GenImage({ url, ratio }) {
   );
 }
 
+/* ---------------- Studio pictures (Google image model) ---------------- */
+const text0 = (msgs, i) => [...msgs.slice(0, i)].reverse().find((x) => x.role === "user")?.content || "";
+// Saved chats keep only a small copy of each picture (phones have little storage).
+const slimStudio = (m) => (m.studio?.pics ? { ...m, studio: { ...m.studio, pics: m.studio.pics.map((p) => ({ thumb: p.thumb })) } } : m);
+function loadSrc(src) {
+  return new Promise((ok, bad) => { const img = new Image(); img.onload = () => ok(img); img.onerror = bad; img.src = src; });
+}
+async function shrinkPic(src) {
+  const img = await loadSrc(src);
+  return { full: drawScaled(img, 1600, 0.9), thumb: drawScaled(img, 520, 0.8) };
+}
+async function openPic(src) {
+  try { window.open(URL.createObjectURL(await (await fetch(src)).blob()), "_blank"); } catch { window.open(src, "_blank"); }
+}
+function StudioPic({ p, ratio }) {
+  const { t } = useLang();
+  const src = p.full || p.thumb;
+  const [w, h] = RATIOS[ratio] || RATIOS.square;
+  return (
+    <figure className="gen ok" style={{ aspectRatio: `${w} / ${h}` }}>
+      <img src={src} alt="" />
+      <div className="gen-tools">
+        <button aria-label={t("openImage")} title={t("openImage")} onClick={() => openPic(src)}><Svg d={Icon.open} size={16} /></button>
+        <button aria-label={t("saveImage")} title={t("saveImage")} onClick={() => saveImage(src)}><Svg d={Icon.zip} size={16} /></button>
+      </div>
+    </figure>
+  );
+}
+function StudioResult({ s, onMore, last }) {
+  const { t } = useLang();
+  return (
+    <div className="studio-res">
+      {s.designs && <div className={"design-grid " + s.task}>{s.designs.map((d, k) => <DesignTile key={k} d={d} kind={s.task} />)}</div>}
+      {s.pics && <div className={"gen-grid " + (s.ratio || "square") + (s.pics.length === 1 ? " one" : "")}>{s.pics.map((p, k) => <StudioPic key={k} p={p} ratio={s.ratio} />)}</div>}
+      {s.urls && <div className={"gen-grid " + (s.ratio || "square")}>{s.urls.map((u) => <GenImage key={u} url={u} ratio={s.ratio} />)}</div>}
+      {s.approx && <p className="studio-note">💡 {t("studioApprox")}</p>}
+      {last && (
+        <div className="studio-next">
+          <button onClick={onMore}>🔁 {t("studioMore")}</button>
+          <span>✏️ {t("studioEditHint")}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Vector designs (logos, posters) ---------------- */
 const svgUrl = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 function downloadBlob(blob, name) {
@@ -1100,7 +1146,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
 /* ---------------- Sidebar (chat history) ---------------- */
 function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard }) {
   const { t } = useLang();
-  const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image };
+  const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image, studio: Icon.image };
   return (
     <>
       <div className={"side-bg" + (open ? " open" : "")} onClick={onClose} aria-hidden="true" />
@@ -1170,6 +1216,8 @@ function Main({ session }) {
   const ta = useRef(null);
   const fileInput = useRef(null);
   const update = useUpdateReady();
+  const [studioKind, setStudioKind] = useState("auto");
+  const [studioRatio, setStudioRatio] = useState("square");
   const [hideUpdate, setHideUpdate] = useState(false);
   const abortRef = useRef(null);
 
@@ -1251,7 +1299,7 @@ function Main({ session }) {
   useEffect(() => {
     if (!ready) return;
     try {
-      const slim = chats.slice(0, 60).map((c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => (i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) }));
+      const slim = chats.slice(0, 60).map((c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => slimStudio(i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) }));
       localStorage.setItem(storeKey, JSON.stringify(slim));
     } catch {}
   }, [chats, ready]);
@@ -1260,7 +1308,7 @@ function Main({ session }) {
   const synced = useRef({});      // chat id → "updated" value the server already has
   const cloudOn = useRef(false);  // false until the first download worked (or if the table doesn't exist yet)
   const delKey = `ahm-deleted-${uid}`;
-  const slimChat = (c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => (i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) });
+  const slimChat = (c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => slimStudio(i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) });
   const readDeleted = () => { try { return JSON.parse(localStorage.getItem(delKey) || "[]"); } catch { return []; } };
 
   async function pullChats() {
@@ -1512,7 +1560,7 @@ function Main({ session }) {
   async function send(preset, baseMessages, extra = [], forced) {
     const typed = (preset ?? input).trim();
     const hasAttach = images.length || file || extra.length;
-    let target = forced || (mode === "image" ? "chat" : mode); // image creation was removed
+    let target = forced || (mode === "image" ? "studio" : mode); // old "image" chats open in the studio
 
     // New chat with no tool chosen: work out what the user wants.
     if (target === "auto") {
@@ -1533,12 +1581,14 @@ function Main({ session }) {
           } catch { target = "chat"; } finally { setDeciding(false); }
         }
       }
-      if (target !== "build") target = "chat";
+      if (target === "image") target = "studio";
+      if (target !== "build" && target !== "studio") target = "chat";
       setDraft((d) => ({ ...d, mode: target }));
     }
     const sentImages = [...images.filter((im) => !im.docName), ...extra]; // photos and voice work in every section
     const isVoice = extra.some((x) => x.voice);
-    const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.length ? t("describeImage") : "");
+    const photoCount = sentImages.filter((im) => !im.voice).length;
+    const text = (preset ?? input).trim() || (file ? t("fixFile") : target === "studio" && photoCount ? t(photoCount > 1 ? "studioMergeDefault" : "studioEditDefault") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
     const id = active.id;
     const m = target;
@@ -1556,6 +1606,7 @@ function Main({ session }) {
     if (m === "build") setShowPreview(false);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    if (m === "studio") return runStudio({ ctrl, next, put, sentImages, isVoice, text, typed: (preset ?? input).trim(), history: baseMessages || messages });
     let acc = "";
     const ERR = /\u0000ERR:(busy|ai)\s*$/;
     // Voice message: the answer starts with ⟦what was said⟧ — that text goes into the user's bubble.
@@ -1664,6 +1715,47 @@ function Main({ session }) {
     }
   }
 
+  // ---- design studio: logos, posters, pictures, photo edits and merges ----
+  async function runStudio({ ctrl, next, put, sentImages, isVoice, text, typed, history }) {
+    put([...next, { role: "assistant", content: "", studioWait: true }]);
+    try {
+      const previous = history.filter((x) => x.role === "user").map((x) => x.content).slice(-5);
+      const lastPic = [...history].reverse().find((x) => x.studio?.pics?.length)?.studio.pics[0];
+      const lastSrc = lastPic ? lastPic.full || lastPic.thumb : null;
+      const res = await fetch("/api/studio", {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
+        body: JSON.stringify({
+          lang, kind: studioKind, ratio: studioRatio, prompt: isVoice ? "" : typed || text, previous,
+          images: sentImages.map(({ mimeType, data }) => ({ mimeType, data })),
+          lastImage: lastSrc ? { mimeType: "image/jpeg", data: lastSrc.split(",")[1] } : undefined,
+        }),
+      });
+      if (res.status === 401) { await supabase.auth.signOut(); return; }
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (j.error === "limit") { put(next.slice(0, -1)); setInput(typed); showLimit(); return; }
+        const msg = j.error === "unsafe" ? t("unsafe") : j.error === "slow_down" ? t("slowDown") : j.error === "busy" ? t("errBusy") : t("errAi");
+        put([...next, { role: "assistant", content: msg, failed: j.error !== "unsafe" }]);
+        return;
+      }
+      const mine = isVoice && j.heard ? [...next.slice(0, -1), { ...next[next.length - 1], content: j.heard }] : next;
+      const studio = { task: j.task, ratio: j.ratio || "square", idea: j.idea || typed || j.heard || text };
+      if (j.designs) studio.designs = j.designs;
+      if (j.images) studio.pics = await Promise.all(j.images.map((src) => shrinkPic(src).catch(() => ({ full: src, thumb: src }))));
+      if (j.free) { const seed = Math.floor(Math.random() * 1e6); studio.urls = [0, 1].map((k) => imageUrl(j.prompt, studio.ratio, seed + k)); studio.approx = !!j.approx; }
+      put([...mine, { role: "assistant", content: j.caption || "✨", studio }]);
+    } catch (e) {
+      if (e?.name === "AbortError") put(next.slice(0, -1));
+      else put([...next, { role: "assistant", content: t("errConn"), failed: true }]);
+    } finally {
+      abortRef.current = null;
+      setBusy(false);
+      loadMe();
+    }
+  }
+
   function retry() {
     const idx = messages.map((x) => x.role).lastIndexOf("user");
     if (idx < 0 || busy) return;
@@ -1673,9 +1765,9 @@ function Main({ session }) {
   const name = (session.user.email || "").split("@")[0].replace(/[._\d]+/g, " ").trim().split(" ")[0].replace(/^./, (c) => c.toUpperCase());
   const hasFiles = Object.keys(project).length > 0;
   const canPreview = useMemo(() => hasFiles && !!buildPreview(project), [project]);
-  const suggestions = t(mode === "build" ? "buildSugg" : "chatSugg");
+  const suggestions = t(mode === "build" ? "buildSugg" : mode === "studio" ? "studioSugg" : "chatSugg");
   const chatLike = mode === "chat" || mode === "auto";
-  const toolName = { chat: t("capChat"), build: t("capBuild"), image: t("capImage") }[mode];
+  const toolName = { chat: t("capChat"), build: t("capBuild"), studio: t("capStudio"), image: t("capStudio") }[mode];
 
   // Computer keyboard shortcuts: Ctrl/⌘+K new chat, "/" type, Esc close.
   keys.current = { startNew, closeSheet: () => setSheet(null), focus: () => ta.current?.focus() };
@@ -1755,6 +1847,7 @@ function Main({ session }) {
                       <h2 className="greet">{greeting(t)}{name ? (lang === "en" ? ", " : "، ") + name : ""}</h2>
                       <p className="muted">{t("helpQ")}</p>
                       <div className="caps">
+                        <button className="cap studio-cap" onClick={() => chooseTool("studio")}><Svg d={Icon.image} /><b>{t("capStudio")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capStudioSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("chat")}><Svg d={Icon.chat} /><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
                         <button className="cap" onClick={() => openVoice()}><Svg d={Icon.wave} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
@@ -1764,8 +1857,8 @@ function Main({ session }) {
                     </>
                   ) : (
                     <>
-                      <h2 className="greet">{mode === "build" ? t("buildQ") : t("helpQ")}</h2>
-                      <p className="muted">{mode === "build" ? t("buildSub") : t("helpSub")}</p>
+                      <h2 className="greet">{mode === "build" ? t("buildQ") : mode === "studio" ? t("studioQ") : t("helpQ")}</h2>
+                      <p className="muted">{mode === "build" ? t("buildSub") : mode === "studio" ? t("studioSub") : t("helpSub")}</p>
                       <div className="chips">
                         {suggestions.map((sg) => <button key={sg} onClick={() => send(sg)}>{sg}</button>)}
                       </div>
@@ -1783,12 +1876,12 @@ function Main({ session }) {
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
                     {m.role === "assistant" ? (
                       m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
-                        : <span className="typing" role="status"><i /><i /><i /><small>{m.waiting ? t("queueWait") : t("thinking")}</small></span>
+                        : <span className="typing" role="status"><i /><i /><i /><small>{m.waiting ? t("queueWait") : m.studioWait ? t("studioWorking") : t("thinking")}</small></span>
                     ) : m.voice ? <span className="voice-tag"><Svg d={Icon.mic} size={16} /> {m.content}</span> : m.content}
                     {m.voiceReply && m.content && !(busy && i === messages.length - 1) && (
                       <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} />
                     )}
-                    {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !(busy && i === messages.length - 1) && (
+                    {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !m.studio && !(busy && i === messages.length - 1) && (
                       <AnswerActions text={m.content} getToken={token} />
                     )}
                     {mode === "build" && hasFiles && !busy && i === messages.length - 1 && m.role === "assistant" && !m.failed && (
@@ -1801,6 +1894,7 @@ function Main({ session }) {
                         )}
                       </div>
                     )}
+                    {m.studio && <StudioResult s={m.studio} last={i === messages.length - 1 && !busy} onMore={() => send(m.studio.idea || text0(messages, i))} />}
                     {m.gen && (
                       <>
                         <div className={"gen-grid " + (m.ratio || "square")}>{m.gen.map((u) => <GenImage key={u} url={u} ratio={m.ratio} />)}</div>
@@ -1833,9 +1927,23 @@ function Main({ session }) {
               {messages.length === 0 && mode !== "auto" && (
                 <div className="tool-chip-row">
                   <span className="tool-chip">
-                    <Svg d={mode === "build" ? Icon.build : Icon.chat} size={15} /> {toolName}
+                    <Svg d={mode === "build" ? Icon.build : mode === "studio" ? Icon.image : Icon.chat} size={15} /> {toolName}
                     <button aria-label={t("close")} onClick={() => chooseTool("auto")}><Svg d={Icon.close} size={13} w={2.6} /></button>
                   </span>
+                </div>
+              )}
+              {mode === "studio" && !recording && (
+                <div className="studio-opts" role="group">
+                  {[["auto", "✨"], ["image", "🖼️"], ["logo", "🔷"], ["poster", "📰"]].map(([k, ic]) => (
+                    <button key={k} className={studioKind === k ? "on" : ""} onClick={() => setStudioKind(k)}>{ic} {t("sk_" + k)}</button>
+                  ))}
+                  {(studioKind === "auto" || studioKind === "image") && (
+                    <span className="studio-ratio">
+                      {[["square", "⬜"], ["portrait", "📱"], ["landscape", "🖥️"]].map(([r, ic]) => (
+                        <button key={r} className={studioRatio === r ? "on" : ""} aria-label={t("sr_" + r)} title={t("sr_" + r)} onClick={() => setStudioRatio(r)}>{ic}</button>
+                      ))}
+                    </span>
+                  )}
                 </div>
               )}
               {deciding && <div className="deciding" role="status"><span className="mini-spin" /> {t("deciding")}</div>}
@@ -1867,7 +1975,7 @@ function Main({ session }) {
                 <button className="attach gallery" aria-label={t("gallery")} title={t("gallery")} disabled={busy || images.length >= 4}
                   onClick={() => fileInput.current?.click()}><Svg d={Icon.image} size={19} /></button>
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
-                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : file ? t("placeholderFile") : t("placeholder")}
+                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : mode === "studio" ? t("placeholderStudio") : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}

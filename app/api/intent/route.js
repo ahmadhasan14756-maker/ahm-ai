@@ -13,7 +13,7 @@ const MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-fl
 
 const SYSTEM = `Classify the user's message (Kurdish Sorani, Arabic or English, maybe Kurdish in Latin letters). Return JSON {"mode": "..."}.
 - "build": they want you to CREATE or CHANGE a whole website, web app, mobile app, game, program or multi-file code project for them.
-- "image": they want you to CREATE a picture: draw, generate, design a logo, poster, wallpaper, illustration, photo.
+- "image": they want you to CREATE or EDIT a picture: draw, generate, design a logo, poster, wallpaper, illustration, photo, or edit / merge photos.
 - "chat": everything else — questions, explanations, advice, translation, writing text, predictions, explaining or fixing a small piece of code, short code snippets.
 When unsure, answer "chat".`;
 
