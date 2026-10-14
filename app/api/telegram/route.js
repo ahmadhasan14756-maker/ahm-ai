@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { serverEnv } from "../../../lib/env";
 import { webhookSecret } from "../../../lib/telegram";
-import { adminDb, isPaidActive, usageOf, getSettings } from "../../../lib/server";
+import { adminDb, isPaidActive, usageOf, getSettings, dropProfile } from "../../../lib/server";
 import { planById, planByPrice } from "../../../lib/plans";
 
 export const runtime = "nodejs";
@@ -133,6 +133,7 @@ async function handleAdmin(chatId, cmd, rest) {
     const p = arg1 && (await findByEmail(arg1));
     if (!p) return send(chatId, "❌ نەدۆزرایەوە.");
     await db.from("profiles").update({ plan: "free", plan_until: null, used: 0, period_key: null }).eq("id", p.id);
+    await dropProfile(p.id);
     return send(chatId, `✅ Pro لە <b>${esc(p.email)}</b> لابرا.`);
   }
 
@@ -195,6 +196,7 @@ async function activate(profileId, planKey) {
   const now = new Date();
   const until = new Date(now.getTime() + plan.days * 86400000).toISOString();
   await db.from("profiles").update({ plan: plan.id, plan_until: until, used: 0, period_key: "paid:" + now.toISOString() }).eq("id", p.id);
+  await dropProfile(p.id);
   if (p.telegram_chat_id) {
     await send(p.telegram_chat_id, `🎉 پیرۆزە! هەژمارەکەت (<b>${esc(p.email)}</b>) بوو بە <b>Pro</b>\n${plan.limit} پرسیار تا <b>${fmtDate(until)}</b>.\nئەپەکە دابخە و بیکەرەوە.`);
   }
@@ -305,6 +307,7 @@ export async function POST(req) {
         await send(chatId, `❌ ئەم ئیمەیڵە لە ئەپەکەدا تۆمار نەکراوە: <b>${esc(email)}</b>\nسەرەتا لە ئەپەکەدا بەم ئیمەیڵە خۆت تۆمار بکە، پاشان دووبارە بینێرە.`);
       } else {
         await adminDb().from("profiles").update({ telegram_chat_id: chatId }).eq("id", p.id);
+        await dropProfile(p.id);
         await send(chatId, "✅ وەرگیرا! دوای پشتڕاستکردنەوەی پارەدانەکە، هەژمارەکەت دەبێتە Pro و ئاگادارت دەکەینەوە.");
         if (ADMIN) {
           await tg("sendMessage", {

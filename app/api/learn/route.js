@@ -48,7 +48,7 @@ export async function POST(req) {
   try {
     const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
     if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-    if (!allow("learn:" + user.id, 20, 60000)) return tooMany();
+    if (!(await allow("learn:" + user.id, 20, 60000))) return tooMany();
     if (!body) return Response.json({ error: "bad_request" }, { status: 400 });
 
     const target = NAME[body.target];

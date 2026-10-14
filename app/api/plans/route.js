@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const preferredRegion = "fra1";
 
 export async function GET(req) {
-  if (!allow("plans:" + ipOf(req), 60, 60000)) return tooMany();
+  if (!(await allow("plans:" + ipOf(req), 60, 60000))) return tooMany();
   const { freeLimit, paid, cooldowns } = await getSettings();
-  return Response.json({ freeLimit, paid, cooldowns }, { headers: { "Cache-Control": "public, max-age=60" } });
+  return Response.json({ freeLimit, paid, cooldowns }, { headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } });
 }

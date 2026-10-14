@@ -1,6 +1,8 @@
 // Owner dashboard numbers: users, new sign-ups, Pro, income, questions, sites, recent users.
 import { adminDb, getUser, isOwner, isPaidActive, getSettings } from "../../../../lib/server";
 import { planById } from "../../../../lib/plans";
+import { lineStats } from "../../../../lib/queue";
+import { hasRedis } from "../../../../lib/redis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +38,7 @@ export async function GET(req) {
   return Response.json({
     users: rows.length, newToday, new7, pro, income, questions,
     sites: sites.count ?? null,
+    line: await lineStats(), redis: hasRedis(),
     signups: days.map((d) => ({ day: d, n: perDay[d] })),
     recent: rows.slice(0, 12).map((r) => ({ email: r.email, created: r.created_at, pro: isPaidActive(r), plan: r.plan, q: r.total_count || 0 })),
   });

@@ -568,9 +568,9 @@ function unlockAudio() {
   try { const a = new Audio(SILENT_WAV); a.play().catch(() => {}); unlockedAudio = a; } catch {}
 }
 // The AI's answer as a voice message (after the user spoke): play/pause + progress, plays by itself the first time.
-function VoiceReply({ text, getToken, auto, onAutoDone }) {
+function VoiceReply({ text, getToken, auto, onAutoDone, onVoiceLimit }) {
   const { t } = useLang();
-  const [state, setState] = useState("idle"); // idle | loading | playing | error
+  const [state, setState] = useState("idle"); // idle | loading | playing | error | limit
   const [pos, setPos] = useState(0);
   const audioRef = useRef(null);
   const started = useRef(false);
@@ -588,6 +588,7 @@ function VoiceReply({ text, getToken, auto, onAutoDone }) {
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
           body: JSON.stringify({ text }),
         });
+        if (res.status === 429 && (await res.clone().json().catch(() => ({}))).error === "voice_limit") { setState("limit"); if (!auto) onVoiceLimit?.(); return; }
         if (!res.ok) throw new Error();
         const audio = auto && unlockedAudio ? unlockedAudio : new Audio();
         if (audio === unlockedAudio) unlockedAudio = null;
@@ -613,7 +614,8 @@ function VoiceReply({ text, getToken, auto, onAutoDone }) {
       <div className="vr-wave" aria-hidden="true">
         {bars.map((h, k) => <i key={k} style={{ height: h }} className={k / bars.length < pos ? "done" : ""} />)}
       </div>
-      <span className="vr-label">{state === "error" ? "⚠️" : "🔊"}</span>
+      <span className="vr-label">{state === "error" ? "⚠️" : state === "limit" ? "⏱️" : "🔊"}</span>
+      {state === "limit" && <button className="vr-limit" onClick={() => onVoiceLimit?.()}>{t("voiceLimit")}</button>}
     </div>
   );
 }
@@ -741,7 +743,7 @@ function WaitBox({ until }) {
 
 function Upgrade({ reason, me, onClose, onEdit }) {
   const { t } = useLang();
-  const text = { limit: t("upLimit"), pro_only: t("upPro"), info: t("upInfo") }[reason] || "";
+  const text = { limit: t("upLimit"), pro_only: t("upPro"), info: t("upInfo"), voice: t("upVoice") }[reason] || "";
   const plans = me?.plans || DEFAULT_SETTINGS;
   const [sel, setSel] = useState(() => (plans.paid.find((p) => p.id === me?.plan) || plans.paid.find((p) => p.best) || plans.paid[0])?.id);
   const chosen = plans.paid.find((p) => p.id === sel);
@@ -755,6 +757,8 @@ function Upgrade({ reason, me, onClose, onEdit }) {
         <div className={"plan" + (!me?.pro ? " current" : "")}>
           <div className="plan-price">{t("free")}</div>
           <div className="plan-limit"><b>{plans.freeLimit}</b> {t("questions")}</div>
+          <div className="plan-voice">🎤 <b>{plans.freeVoice ?? 10}</b> {t("voiceMin")}</div>
+          <div className="plan-model">⚡ {t("modelFast")}</div>
           {!me?.pro && <div className="plan-tag">{t("currentPlan")}</div>}
         </div>
         {plans.paid.map((p) => (
@@ -765,12 +769,15 @@ function Upgrade({ reason, me, onClose, onEdit }) {
             <div className="plan-name">{p.name}</div>
             <div className="plan-price"><span dir="ltr">${p.price}</span><small> / {p.days} {t("days")}</small></div>
             <div className="plan-limit"><b>{p.limit}</b> {t("questions")}</div>
+            <div className="plan-voice">🎤 <b>{p.voice ?? 60}</b> {t("voiceMin")}</div>
+            <div className="plan-model">🧠 {t("modelSmart")}</div>
             {me?.plan === p.id && <div className="plan-tag">{t("currentPlan")}</div>}
           </button>
         ))}
       </div>
       {plans.payment && <p className="pay-info" dir="auto">💳 {plans.payment}</p>}
-      <ul className="perks"><li>{t("perk1")}</li><li>{t("perk2")}</li><li>{t("roundsInfo").replace("{h}", (plans.cooldowns || [5, 7, 10, 24]).join(" → "))}</li></ul>
+      {me?.voice?.limit != null && <p className="muted voice-today">🎤 {t("voiceToday").replace("{u}", Math.min(me.voice.used, me.voice.limit)).replace("{l}", me.voice.limit)}</p>}
+      <ul className="perks"><li>{t("perkModel")}</li><li>{t("perk1")}</li><li>{t("perk2")}</li><li>{t("roundsInfo").replace("{h}", (plans.cooldowns || [5, 7, 10, 24]).join(" → "))}</li></ul>
       {buyUrl ? (
         <a className="gold-btn" href={buyUrl} target="_blank" rel="noreferrer">
           {chosen ? <>{t("buy")} {chosen.name} · <span dir="ltr">${chosen.price}</span></> : t("buyTelegram")}
@@ -868,6 +875,7 @@ function Dashboard({ token, onClose, onPlans }) {
   const tiles = d ? [
     [t("dUsers"), d.users], [t("dNewToday"), d.newToday], [t("dNew7"), d.new7],
     [t("dPro"), d.pro], [t("dIncome"), "$" + d.income], [t("dQuestions"), d.questions.toLocaleString("en")],
+    [t("dLive"), d.line ? `${d.line.active}/${d.line.slots} · ⏳${d.line.waiting}` : d.redis ? "0" : "—"],
   ] : [];
   return (
     <Sheet label={t("dashboard")} onClose={onClose}>
@@ -1131,7 +1139,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const setPlan = (i, k, v) => setForm((f) => ({ ...f, paid: f.paid.map((p, j) => (j === i ? { ...p, [k]: v } : p)) }));
-  const addPlan = () => setForm((f) => ({ ...f, paid: [...f.paid, { id: "p" + Date.now().toString(36), name: "Pro", price: 5, limit: 100, days: 30 }] }));
+  const addPlan = () => setForm((f) => ({ ...f, paid: [...f.paid, { id: "p" + Date.now().toString(36), name: "Pro", price: 5, limit: 100, days: 30, voice: 60 }] }));
   const delPlan = (i) => setForm((f) => ({ ...f, paid: f.paid.filter((_, j) => j !== i) }));
   async function save() {
     setBusy(true); setMsg("");
@@ -1154,6 +1162,10 @@ function PlanEditor({ me, token, onSaved, onClose }) {
         <span>{t("freePerMonth")}</span>
         <input type="number" inputMode="numeric" dir="ltr" value={form.freeLimit} onChange={(e) => setForm({ ...form, freeLimit: e.target.value })} />
       </label>
+      <label className="pe-row">
+        <span>🎤 {t("freeVoiceField")}</span>
+        <input type="number" inputMode="numeric" dir="ltr" value={form.freeVoice ?? 10} onChange={(e) => setForm({ ...form, freeVoice: e.target.value })} />
+      </label>
       {form.paid.map((p, i) => (
         <div key={p.id} className="pe-card">
           <div className="pe-head">
@@ -1166,6 +1178,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
             <label><span>{t("price")} $</span><input type="number" inputMode="decimal" dir="ltr" value={p.price} onChange={(e) => setPlan(i, "price", e.target.value)} /></label>
             <label><span>{t("questions")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.limit} onChange={(e) => setPlan(i, "limit", e.target.value)} /></label>
             <label><span>{t("days")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.days} onChange={(e) => setPlan(i, "days", e.target.value)} /></label>
+            <label><span>🎤 {t("voiceMinShort")}</span><input type="number" inputMode="numeric" dir="ltr" value={p.voice ?? 60} onChange={(e) => setPlan(i, "voice", e.target.value)} /></label>
           </div>
         </div>
       ))}
@@ -1273,7 +1286,7 @@ function Main({ session }) {
   const abortRef = useRef(null);
 
   const active = chats.find((c) => c.id === activeId) || draft;
-  const mode = active.mode;
+  const mode = active.mode === "studio" || active.mode === "image" ? "chat" : active.mode; // old design chats open as normal chats
   const messages = active.messages;
   const project = active.project || {};
 
@@ -1635,7 +1648,7 @@ function Main({ session }) {
   async function send(preset, baseMessages, extra = [], forced) {
     const typed = (preset ?? input).trim();
     const hasAttach = images.length || file || extra.length;
-    let target = forced || (mode === "image" ? "studio" : mode); // old "image" chats open in the studio
+    let target = forced || (mode === "image" || mode === "studio" ? "chat" : mode); // image/design section was removed
 
     // New chat with no tool chosen: work out what the user wants.
     if (target === "auto") {
@@ -1656,8 +1669,7 @@ function Main({ session }) {
           } catch { target = "chat"; } finally { setDeciding(false); }
         }
       }
-      if (target === "image") target = "studio";
-      if (target !== "build" && target !== "studio") target = "chat";
+      if (target !== "build") target = "chat";
       setDraft((d) => ({ ...d, mode: target }));
     }
     const sentImages = [...images.filter((im) => !im.docName), ...extra]; // photos and voice work in every section
@@ -1745,6 +1757,13 @@ function Main({ session }) {
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
+        // Place in the waiting line ("\u0000Q:3\n"): show it, keep it out of the answer.
+        const places = acc.match(/\u0000Q:(\d+)\n/g);
+        if (places) {
+          acc = acc.replace(/\u0000Q:\d+\n/g, "");
+          if (!acc) { put([...next, { role: "assistant", content: "", waiting: Number(places[places.length - 1].slice(3)) || true, pending }]); continue; }
+        }
+        if (/^\u0000(Q(:\d*)?)?$/.test(acc)) continue; // half of a place marker: wait for the rest
         if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
         const ch = m === "build" ? applyChanges(base, acc) : null;
         const sp = split(acc);
@@ -2008,7 +2027,6 @@ function Main({ session }) {
                       <h2 className="greet">{greeting(t)}{name ? (lang === "en" ? ", " : "، ") + name : ""}</h2>
                       <p className="muted">{t("helpQ")}</p>
                       <div className="caps">
-                        <button className="cap studio-cap" onClick={() => chooseTool("studio")}><Svg d={Icon.image} /><b>{t("capStudio")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capStudioSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("chat")}><Svg d={Icon.chat} /><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
                         <button className="cap" onClick={() => openVoice()}><Svg d={Icon.wave} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
@@ -2040,10 +2058,10 @@ function Main({ session }) {
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
                         {m.pending && !(busy && i === messages.length - 1) && <div className="away-note" role="status"><span className="mini-spin" /> {t("awayWorking")}</div>}
                       </>
-                        : <span className="typing" role="status"><i /><i /><i /><small>{m.waiting ? t("queueWait") : m.studioWait ? t("studioWorking") : m.pending && !busy ? t("awayWorking") : t("thinking")}</small></span>
+                        : <span className="typing" role="status"><i /><i /><i /><small>{typeof m.waiting === "number" ? t("queuePlace").replace("{n}", m.waiting) : m.waiting ? t("queueWait") : m.studioWait ? t("studioWorking") : m.pending && !busy ? t("awayWorking") : t("thinking")}</small></span>
                     ) : m.voice ? <span className="voice-tag"><Svg d={Icon.mic} size={16} /> {m.content}</span> : m.content}
                     {m.voiceReply && m.content && !(busy && i === messages.length - 1) && (
-                      <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} />
+                      <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} onVoiceLimit={() => showLimit("voice")} />
                     )}
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !m.studio && !(busy && i === messages.length - 1) && (
                       <AnswerActions text={m.content} getToken={token} />
@@ -2094,20 +2112,6 @@ function Main({ session }) {
                     <Svg d={mode === "build" ? Icon.build : mode === "studio" ? Icon.image : Icon.chat} size={15} /> {toolName}
                     <button aria-label={t("close")} onClick={() => chooseTool("auto")}><Svg d={Icon.close} size={13} w={2.6} /></button>
                   </span>
-                </div>
-              )}
-              {mode === "studio" && !recording && (
-                <div className="studio-opts" role="group">
-                  {[["auto", "✨"], ["image", "🖼️"], ["logo", "🔷"], ["poster", "📰"]].map(([k, ic]) => (
-                    <button key={k} className={studioKind === k ? "on" : ""} onClick={() => setStudioKind(k)}>{ic} {t("sk_" + k)}</button>
-                  ))}
-                  {(studioKind === "auto" || studioKind === "image") && (
-                    <span className="studio-ratio">
-                      {[["square", "⬜"], ["portrait", "📱"], ["landscape", "🖥️"]].map(([r, ic]) => (
-                        <button key={r} className={studioRatio === r ? "on" : ""} aria-label={t("sr_" + r)} title={t("sr_" + r)} onClick={() => setStudioRatio(r)}>{ic}</button>
-                      ))}
-                    </span>
-                  )}
                 </div>
               )}
               {deciding && <div className="deciding" role="status"><span className="mini-spin" /> {t("deciding")}</div>}
@@ -2174,7 +2178,7 @@ function Main({ session }) {
         <VoiceMode lang={lang} getToken={token} tutor={voice.tutor} greeting={voice.greeting}
           history={(chats.find((c) => c.id === voice.chatId) || (draft.id === voice.chatId ? draft : null))?.messages || []}
           onTurn={voiceTurn} onClose={() => { setVoice(null); loadMe(); }}
-          onLimit={() => showLimit()} />
+          onLimit={(why) => showLimit(why === "voice" ? "voice" : "limit")} />
       )}
       {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} />}
       {sheet?.type === "screen" && <ScreenGuide info={sheet} onClose={() => setSheet(null)} />}

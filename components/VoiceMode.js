@@ -15,6 +15,7 @@ const TX = {
   end: { ckb: "کۆتایی", ar: "إنهاء", en: "End" },
   mic: { ckb: "ڕێگە بە مایکرۆفۆن بدە لە ڕێکخستنەکانی مۆبایلەکەت، پاشان دووبارە هەوڵ بدەرەوە.", ar: "اسمح باستخدام الميكروفون من إعدادات الهاتف ثم حاول مجدداً.", en: "Allow the microphone in your phone settings, then try again." },
   error: { ckb: "پەیوەندی نەکرا. دابگرە بۆ دووبارە هەوڵدان.", ar: "تعذّر الاتصال. اضغط للمحاولة مجدداً.", en: "Couldn't connect. Tap to try again." },
+  voiceLimit: { ckb: "کاتی دەنگی ئەمڕۆت تەواو بوو. بۆ کاتی زیاتر پلانێکی Pro هەڵبژێرە.", ar: "انتهت دقائق الصوت لليوم. اختر خطة Pro لوقت أطول.", en: "Today's voice minutes are used up. Choose a Pro plan for more." },
   busy: { ckb: "ئێستا داواکاری زۆرە. کەمێکی تر هەوڵ بدەرەوە.", ar: "الضغط مرتفع الآن. حاول بعد قليل.", en: "Too many requests right now. Try again shortly." },
   teacher: { ckb: "مامۆستای زمان", ar: "معلم اللغة", en: "Language teacher" },
 };
@@ -193,6 +194,11 @@ export default function VoiceMode({ lang, getToken, history, tutor, greeting, on
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
         body: JSON.stringify({ text }),
       });
+      if (res.status === 429 && (await res.clone().json().catch(() => ({}))).error === "voice_limit") {
+        setMsg(tl("voiceLimit")); setPhase("error");
+        setTimeout(() => { onLimit?.("voice"); onClose(); }, 2500);
+        return;
+      }
       if (!res.ok) throw new Error();
       const url = URL.createObjectURL(await res.blob());
       const a = audioRef.current || new Audio();

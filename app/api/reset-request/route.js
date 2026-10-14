@@ -12,7 +12,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const recent = new Map(); // one request per e-mail every 10 minutes (per server instance)
 
 export async function POST(req) {
-  if (!allow("reset:" + ipOf(req), 5, 600000)) return tooMany();
+  if (!(await allow("reset:" + ipOf(req), 5, 600000))) return tooMany();
   const body = await req.json().catch(() => null);
   const email = String(body?.email || "").trim().toLowerCase().slice(0, 200);
   if (!EMAIL_RE.test(email)) return Response.json({ error: "bad_request" }, { status: 400 });

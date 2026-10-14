@@ -6,6 +6,8 @@ import { gemini, keyCount } from "../../../lib/gemini";
 import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
 import { saveJob, validJobId } from "../../../lib/jobs";
+import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
+import { randomUUID } from "crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -44,7 +46,7 @@ PREDICTIONS
 - You cannot see the future. For predictions (sports, prices, exchange rates, markets, elections) give a careful, reasoned analysis: the main factors, the most likely outcome, rough probabilities, and clearly say it can be wrong. Never present a guess as certain. Do not give personal financial or betting advice.
 
 NOT AVAILABLE IN AHM AI
-- In this chat you do not draw pictures. AHM AI has a separate "🎨 Design & images" section (دیزاین و وێنە) on the home screen that makes logos, posters and pictures, edits photos and merges two photos into one. If someone asks for these here, tell them kindly in one sentence to open that section, and you may suggest a good idea for it.
+- AHM AI does not create, draw or edit images, photos, logos or posters. If someone asks, say kindly in one sentence that this is not available in AHM AI, then offer a useful alternative: describe the idea in words, or build it as a simple web page (HTML/CSS) in the "Websites & apps" section.
 - Users cannot send PDF files: ask them to send a photo of the page or paste the text.
 
 PHOTOS
@@ -174,7 +176,7 @@ export async function POST(req) {
   try {
     const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
     if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-    if (!allow("chat:" + user.id, 20, 60000)) return tooMany();
+    if (!(await allow("chat:" + user.id, 20, 60000))) return tooMany();
     if (!body) return Response.json({ error: "bad_request" }, { status: 400 });
 
     const messages = (Array.isArray(body.messages) ? body.messages : [])
@@ -224,8 +226,14 @@ export async function POST(req) {
       return { role: m.role === "assistant" ? "model" : "user", parts };
     });
 
-    const preferred = usage.pro ? serverEnv("GEMINI_MODEL_PRO") || serverEnv("GEMINI_MODEL") : serverEnv("GEMINI_MODEL");
-    const models = [...new Set([preferred, ...FALLBACK_MODELS].filter(Boolean))];
+    // Like Claude's plans: Pro (and the owner) get the smartest model; free users get the fast, light model
+    // (it has its own free quota, so more people can be answered at the same time). Change in Vercel:
+    // GEMINI_MODEL_PRO, GEMINI_MODEL (Pro fallback), GEMINI_MODEL_FREE.
+    const proUser = usage.pro || usage.unlimited;
+    const preferred = proUser
+      ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")]
+      : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
+    const models = [...new Set([...preferred, ...(proUser ? FALLBACK_MODELS : [...FALLBACK_MODELS].reverse())].filter(Boolean))];
     const TUTOR_LANG = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
     const tutor = body.tutor && TUTOR_LANG[body.tutor.target] ? body.tutor : null;
     const TUTOR_PROMPT = tutor ? `
@@ -274,6 +282,11 @@ VOICE CONVERSATION MODE (most important rules)
     const work = (async () => {
       let full = "";
       if (jobId) await saveJob(user.id, jobId, "running");
+      // Wait in the fair line (Pro first). The app shows "you are number N".
+      const ticket = jobId || randomUUID();
+      const lastText = messages[messages.length - 1].content;
+      await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
+        { onPlace: (n) => send(`\u0000Q:${n}\n`) });
       try {
         for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
           if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
@@ -285,6 +298,7 @@ VOICE CONVERSATION MODE (most important rules)
         full += "\u0000ERR:ai";
         send("\u0000ERR:ai");
       } finally {
+        doneTurn(ticket);
         if (open && ctrl) { try { ctrl.close(); } catch {} }
         open = false;
       }

@@ -1,6 +1,6 @@
 // Invite friends: each person gets a link; when a NEW account signs up with it, both get bonus questions.
 import { randomBytes } from "crypto";
-import { adminDb, getUser, getProfile, getSettings } from "../../../lib/server";
+import { adminDb, getUser, getProfile, getSettings, dropProfile } from "../../../lib/server";
 import { notifyOwner, escHtml } from "../../../lib/telegram";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
@@ -18,6 +18,7 @@ async function ensureCode(db, profile) {
     const code = randomBytes(6).toString("base64url").replace(/[^A-Za-z0-9]/g, "").slice(0, 7).toLowerCase();
     if (code.length < 6) continue;
     const { error } = await db.from("profiles").update({ ref_code: code }).eq("id", profile.id).is("ref_code", null);
+    await dropProfile(profile.id);
     if (!error) {
       const { data } = await db.from("profiles").select("ref_code").eq("id", profile.id).maybeSingle();
       if (data?.ref_code) return data.ref_code;
@@ -30,7 +31,7 @@ async function ensureCode(db, profile) {
 export async function GET(req) {
   const user = await getUser(req);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-  if (!allow("invite:" + user.id, 10, 60000)) return tooMany();
+  if (!(await allow("invite:" + user.id, 10, 60000))) return tooMany();
   try {
     const db = adminDb();
     const [profile, settings] = await Promise.all([getProfile(user), getSettings()]);
@@ -45,7 +46,7 @@ export async function GET(req) {
 export async function POST(req) {
   const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-  if (!allow("invite:" + user.id, 10, 60000)) return tooMany();
+  if (!(await allow("invite:" + user.id, 10, 60000))) return tooMany();
   const code = String(body?.code || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
   if (!code) return Response.json({ error: "bad_request" }, { status: 400 });
   try {
@@ -62,8 +63,10 @@ export async function POST(req) {
       .update({ referred_by: friend.id, bonus: (me.bonus || 0) + gift }).eq("id", me.id).is("referred_by", null).select("id");
     if (error) throw error;
     if (!marked?.length) return Response.json({ ok: false, reason: "not_new" });
+    await dropProfile(me.id);
     const invites = (friend.invites || 0) + 1;
     await db.from("profiles").update({ invites, ...(invites <= MAX_INVITES ? { bonus: (friend.bonus || 0) + gift } : {}) }).eq("id", friend.id);
+    await dropProfile(friend.id);
     await notifyOwner(`🎁 <b>بانگهێشت</b>\n${escHtml(friend.email)} ← ${escHtml(me.email)}\nهەردووکیان ${gift} پرسیاری زیادەیان وەرگرت. (${invites} بانگهێشت)`);
     return Response.json({ ok: true, bonus: gift });
   } catch (e) {
