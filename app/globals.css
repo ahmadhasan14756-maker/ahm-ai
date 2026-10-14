@@ -997,3 +997,6 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .design figcaption { flex-wrap: wrap; }
 .design figcaption > span { flex: 1 1 60px; min-width: 0; }
 .gen-tools.static button { white-space: nowrap; padding: 0 8px; }
+.design-art { background: #fff; line-height: 0; }
+.design-art svg { display: block; width: 100%; height: auto; }
+.away-note { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); }

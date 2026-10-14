@@ -4,6 +4,8 @@ import { SAFETY_RULES, GEMINI_SAFETY, REFUSAL, isSafetyStop } from "../../../lib
 import { gemini, keyCount } from "../../../lib/gemini";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
+import { waitUntil } from "@vercel/functions";
+import { saveJob, validJobId } from "../../../lib/jobs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -108,7 +110,9 @@ const isTransient = (e) => /500|502|503|504|UNAVAILABLE|INTERNAL|overloaded|time
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Remember which "thinking" setting each model accepts, so later questions skip failed tries.
-const THINKING = [{ thinkingLevel: "minimal" }, { thinkingLevel: "low" }, null];
+// Deeper thinking = smarter answers. Code projects think the most, voice the least (it must be fast).
+const THINKING = [{ thinkingLevel: "medium" }, { thinkingLevel: "low" }, { thinkingLevel: "minimal" }, null];
+const START = { build: 0, file: 0, chat: 1, voice: 2 };
 const thinkingOk = new Map();
 
 /*
@@ -118,11 +122,11 @@ const thinkingOk = new Map();
   - unsupported setting → simpler setting
   - an error before any text was sent → start again quietly
 */
-async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb) {
+async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb, start = 1) {
   let lastErr = null;
   let sentAny = false;
   for (const model of models) {
-    let level = thinkingOk.get(model) ?? 0;
+    let level = Math.max(start, thinkingOk.get(model + ":" + start) ?? start);
     let search = useSearch;
     let transientTries = 0;
     let keyTries = 0;
@@ -132,7 +136,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       if (search) config.tools = [{ googleSearch: {} }];
       try {
         const stream = await gemini().models.generateContentStream({ model, contents, config });
-        thinkingOk.set(model, level);
+        thinkingOk.set(model + ":" + start, level);
         const sources = new Map();
         let stopped = false;
         for await (const chunk of stream) {
@@ -260,20 +264,36 @@ VOICE CONVERSATION MODE (most important rules)
       await chargeUsage(profile, usage);
     };
 
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang])) {
-            if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
-            controller.enqueue(encoder.encode(piece));
-          }
-        } catch (e) {
-          console.error(e);
-          controller.enqueue(encoder.encode("\u0000ERR:ai"));
-        } finally {
-          controller.close();
+    // The answer keeps being made even if the phone disconnects (user left the app);
+    // the full text is saved as a "job" so the app can show it when the user comes back.
+    const jobId = validJobId(body.jobId);
+    const startLevel = START[body.voice ? "voice" : build ? "build" : file ? "file" : "chat"];
+    let ctrl = null;
+    let open = true;
+    const send = (txt) => { if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; } };
+    const work = (async () => {
+      let full = "";
+      if (jobId) await saveJob(user.id, jobId, "running");
+      try {
+        for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
+          if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
+          full += piece;
+          send(piece);
         }
-      },
+      } catch (e) {
+        console.error(e);
+        full += "\u0000ERR:ai";
+        send("\u0000ERR:ai");
+      } finally {
+        if (open && ctrl) { try { ctrl.close(); } catch {} }
+        open = false;
+      }
+      if (jobId) await saveJob(user.id, jobId, "done", full);
+    })();
+    waitUntil(work);
+    const readable = new ReadableStream({
+      start(controller) { ctrl = controller; },
+      cancel() { open = false; }, // the phone left: keep working, stop sending
     });
 
     return new Response(readable, {

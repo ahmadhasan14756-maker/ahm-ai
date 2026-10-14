@@ -7,6 +7,7 @@ import { serverEnv } from "../../../lib/env";
 import { GEMINI_SAFETY } from "../../../lib/safety";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 import { allow, tooMany } from "../../../lib/ratelimit";
+import { saveJob, validJobId } from "../../../lib/jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,20 +46,42 @@ ${SAFETY_HINT}`;
 const SAFETY_HINT = `Never create sexual, nude or revealing content, gore, hateful symbols, or fake documents/IDs/money. Never put a real public figure into a fake or embarrassing scene. If asked, return {"blocked": true}.`;
 
 const SVG_KIND = {
-  logo: `LOGO. viewBox="0 0 1024 1024". A strong, simple, memorable mark (symbol or monogram) built from clean geometric shapes, plus the brand name as a wordmark, well balanced and centered with generous margins. Flat vector style, 2–4 harmonious colours, works on a plain background. Think like Pentagram / Paul Rand: one clear idea per design.`,
-  poster: `POSTER / SOCIAL POST. viewBox="0 0 1080 1350". A bold, modern graphic-design layout: strong headline, clear hierarchy, supporting text, decorative shapes, gradients or patterns, and a clear call to action if relevant. Professional print quality with good margins (at least 80px).`,
+  logo: `LOGO on a 1024×1024 canvas: viewBox="0 0 1024 1024".`,
+  poster: `POSTER / SOCIAL POST on a 1080×1350 canvas: viewBox="0 0 1080 1350".`,
 };
-const SVG_SYSTEM = (kind, lang) => `You are a world-class graphic designer. Create 3 clearly DIFFERENT, professional designs as standalone SVG code.
+// Three different creative directions, made at the same time (faster, and each one gets full attention).
+const DIRECTIONS = {
+  logo: [
+    "Direction A — MODERN MINIMAL MARK: one clever geometric symbol (negative space, a hidden meaning or a monogram from the name's first letters) above or beside a strong wordmark. 2 colours + white. Swiss precision, like Apple, Airbnb or Pentagram work.",
+    "Direction B — PREMIUM EMBLEM / BADGE: a circular or shield emblem with a rich gradient, fine inner ring, a central illustration built from shapes, and the name set large and bold inside or under it. Luxury feel, like a premium brand or sports club.",
+    "Direction C — BOLD TYPOGRAPHIC LOGO: the NAME itself is the hero — very large, heavy weight, with a creative detail (a letter replaced by a symbol, a colour block, a swoosh or a tagline bar). Vibrant modern palette on a soft coloured background, like Spotify, FedEx or Netflix style.",
+  ],
+  poster: [
+    "Direction A — BOLD MODERN: huge headline across the top half, strong colour-block background with a big gradient circle or wave, clear info block and a bright call-to-action pill.",
+    "Direction B — ELEGANT PREMIUM: dark rich background (deep green, navy or black) with gold/cream accents, thin decorative frame or ornaments, centered classic layout, refined and luxurious.",
+    "Direction C — FRESH & PLAYFUL: light bright background, large decorative shapes, patterns or confetti, diagonal energy, friendly colours, and a big rounded headline.",
+  ],
+};
+const SVG_SYSTEM = (kind, lang, direction) => `You are a world-class senior graphic designer (Pentagram / award-winning agency level). Create ONE outstanding, professional design as standalone SVG code.
 ${SVG_KIND[kind]}
+${direction}
 
-Rules:
-- Each design is one complete <svg xmlns="http://www.w3.org/2000/svg" ...> element with the viewBox above. No <image>, no <script>, no <foreignObject>, no external links, fonts or CSS imports.
-- Use <text> for words. Write every word EXACTLY as the user wrote it (same spelling and language). For Kurdish or Arabic text add direction="rtl" and use font-family="'Noto Kufi Arabic','Geeza Pro','Segoe UI',Tahoma,sans-serif". For Latin text use font-family="'Montserrat','Helvetica Neue',Arial,sans-serif". Keep text inside the canvas (estimate its width; use smaller sizes for long text).
-- Real design quality: deliberate palette, contrast, alignment, spacing, and visual hierarchy. Use <defs> with linearGradient/radialGradient, paths, circles and shapes. Avoid clip-art and generic templates.
-- If photos are attached, use them as inspiration (colours, subject, style). If there is an audio message, it is the request; write what was said in "heard".
-- If the user didn't give a name or text, invent a fitting short one in their language.
+TYPOGRAPHY (very important — the text must look big, bold and beautiful):
+- ${kind === "logo"
+    ? "The brand name is LARGE: font-size 110–170 (on the 1024 canvas), font-weight 800 or 900. A tagline (if any) is 40–56, weight 600. Never make the name smaller than 100."
+    : "The headline is HUGE: font-size 120–190 (on the 1080 canvas), font-weight 900, max 2–3 short lines. Sub-headline 52–72 weight 700. Details (date, place, phone) 38–48 weight 600. Nothing smaller than 34."}
+- For Kurdish or Arabic text: direction="rtl", font-family="'Noto Kufi Arabic','Vazirmatn',Tahoma,sans-serif". For Latin text: font-family="'Montserrat','Rubik','Helvetica Neue',Arial,sans-serif" (Latin may use letter-spacing 2–8 for elegance).
+- Use text-anchor="middle" centred on a clear x, and keep every line INSIDE the canvas with ≥70px margins: estimate width ≈ characters × font-size × 0.55 and lower the size if a line would be too wide; split long text into lines (separate <text> elements).
+- Strong contrast between text and background; for text on busy areas add a subtle shadow (a duplicate text offset by 3–4px in a darker colour, or paint-order="stroke" with stroke-width 6–10 in a dark colour).
+- Write every word EXACTLY as the user wrote it (same spelling and language). If the user didn't give a name/text, invent a fitting short one in ${LANG[lang]}.
+
+QUALITY:
+- One complete <svg xmlns="http://www.w3.org/2000/svg" ...> with the viewBox above. No <image>, no <script>, no <foreignObject>, no external links, fonts or CSS imports.
+- Deliberate palette (3–5 colours), real visual hierarchy, alignment, generous spacing, depth (linearGradient/radialGradient, soft shadows with filter feGaussianBlur/feDropShadow, layered shapes). Use smooth <path> curves for symbols/illustrations. No clip-art, no generic templates, no empty boring areas.
+- Give every id a unique prefix (e.g. "d1g1") so designs don't clash.
+- If photos are attached, use them as inspiration (colours, subject, style). If there is an audio message, it IS the request; write what was said in "heard".
 - If earlier requests are given, the new request is a CHANGE to that design: keep what they liked and apply the change.
-Return JSON: {"heard": "...or empty", "caption": one short sentence in ${LANG[lang]} describing the concepts, "designs": [{"name": 1–3 word concept name in ${LANG[lang]}, "svg": "<svg ...>...</svg>"}, … 3 items]}`;
+Return JSON: {"heard": "...or empty", "caption": one short sentence in ${LANG[lang]} describing the concept, "name": 1–3 word concept name in ${LANG[lang]}, "svg": "<svg ...>...</svg>"}`;
 
 function cleanSvg(svg) {
   let s = String(svg || "").trim();
@@ -113,6 +136,7 @@ async function drawWithGoogle(prompt, photos, ratio) {
 }
 
 export async function POST(req) {
+  let failJob = async () => {};
   try {
     const [user, body] = await Promise.all([getUser(req), req.json().catch(() => null)]);
     if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -133,6 +157,11 @@ export async function POST(req) {
     // The last picture made in this chat, so "make the sky darker" changes it.
     const last = body.lastImage && PHOTO.test(body.lastImage.mimeType) && typeof body.lastImage.data === "string" && body.lastImage.data.length < 2_500_000 ? body.lastImage : null;
     if (!idea && !audio && !photos.length) return Response.json({ error: "bad_request" }, { status: 400 });
+    // Saved as a job too, so the result still arrives if the user leaves the app while it is being made.
+    const jobId = validJobId(body.jobId);
+    const done = async (out) => { if (jobId) await saveJob(user.id, jobId, "done", JSON.stringify(out)); return Response.json(out); };
+    if (jobId) await saveJob(user.id, jobId, "running");
+    failJob = async (error) => { if (jobId) await saveJob(user.id, jobId, "done", JSON.stringify({ error })); };
 
     const profile = await getProfile(user);
     const usage = usageOf(profile, await getSettings());
@@ -149,7 +178,7 @@ export async function POST(req) {
       const editing = last && !photos.length && previous.length; // a change to the picture made before
       plan = await jsonCall(PLAN(lang, kind, photos.length > 0 || !!editing),
         [...(editing ? [{ inlineData: { mimeType: last.mimeType, data: last.data } }, { text: "(This is the picture you made last time.)" }] : []), ...media, { text: ask }],
-        { maxTokens: 2500 });
+        { maxTokens: 3000, think: "low" });
       if (!["logo", "poster", "image", "edit", "merge"].includes(plan.task)) plan.task = photos.length > 1 ? "merge" : photos.length ? "edit" : "image";
       if (plan.task === "edit" && !photos.length && editing) plan.useLast = true;
       if ((plan.task === "edit" || plan.task === "merge") && !photos.length && !plan.useLast) plan.task = "image";
@@ -158,11 +187,15 @@ export async function POST(req) {
     // 2a) Logos and posters: three vector designs.
     if (plan.task === "logo" || plan.task === "poster") {
       const brief = (previous.length ? `Earlier requests for this design:\n- ${previous.join("\n- ")}\n\nNew request: ` : "Request: ") + (plan.brief || idea || "(see the audio message)");
-      const out = await jsonCall(SVG_SYSTEM(plan.task, lang), [...(kind === plan.task ? media : photos.map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } }))), { text: brief }], { maxTokens: 24000 });
-      const designs = (out.designs || []).map((d) => ({ name: String(d.name || "").slice(0, 40), svg: cleanSvg(d.svg) })).filter((d) => d.svg).slice(0, 3);
+      const parts = [...(kind === plan.task ? media : photos.map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } }))), { text: brief }];
+      const results = await Promise.allSettled(DIRECTIONS[plan.task].map((dir) => jsonCall(SVG_SYSTEM(plan.task, lang, dir), parts, { maxTokens: 14000, think: "low" })));
+      const ok = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
+      if (results.some((r) => r.status === "rejected" && r.reason?.message === "unsafe") && !ok.length) throw new Error("unsafe");
+      if (!ok.length) throw new Error(results.find((r) => r.reason?.message === "busy") ? "busy" : "ai");
+      const designs = ok.map((d) => ({ name: String(d.name || "").slice(0, 40), svg: cleanSvg(d.svg) })).filter((d) => d.svg);
       if (!designs.length) throw new Error("ai");
       await chargeUsage(profile, usage);
-      return Response.json({ task: plan.task, heard: String(plan.heard || out.heard || "").slice(0, 600), caption: String(out.caption || plan.caption || "").slice(0, 300), designs, idea: plan.brief || idea });
+      return done({ task: plan.task, heard: String(plan.heard || ok[0].heard || "").slice(0, 600), caption: String(plan.caption || ok[0].caption || "").slice(0, 300), designs, idea: plan.brief || idea });
     }
 
     // 2b) Pictures, edits, merges.
@@ -171,14 +204,15 @@ export async function POST(req) {
     const google = await drawWithGoogle(prompt, inputs, ratio);
     await chargeUsage(profile, usage);
     const base = { task: plan.task, heard: String(plan.heard || "").slice(0, 600), caption: String(plan.caption || "").slice(0, 300), ratio, idea: plan.heard || idea };
-    if (google) return Response.json({ ...base, images: google });
+    if (google) return done({ ...base, images: google });
     // Free fallback: a new picture drawn from the full description.
     const desc = String((plan.task === "image" ? plan.prompt : plan.fallback || plan.prompt) || idea).slice(0, 900);
-    return Response.json({ ...base, free: true, approx: plan.task !== "image", prompt: desc });
+    return done({ ...base, free: true, approx: plan.task !== "image", prompt: desc });
   } catch (e) {
     console.error("studio", e?.message);
-    if (e?.message === "unsafe") return Response.json({ error: "unsafe" }, { status: 400 });
     const busy = e?.message === "busy";
+    await failJob(e?.message === "unsafe" ? "unsafe" : busy ? "busy" : "ai");
+    if (e?.message === "unsafe") return Response.json({ error: "unsafe" }, { status: 400 });
     return Response.json({ error: busy ? "busy" : "ai" }, { status: busy ? 503 : 502 });
   }
 }

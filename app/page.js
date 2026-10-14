@@ -391,7 +391,7 @@ async function prepareImage(file) {
 const RATIOS = { square: [1024, 1024], portrait: [768, 1344], landscape: [1344, 768] };
 function imageUrl(prompt, ratio, seed) {
   const [w, h] = RATIOS[ratio] || RATIOS.square;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&seed=${seed}&nologo=true&safe=true&model=flux`;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&seed=${seed}&nologo=true&safe=true&enhance=true&model=flux`;
 }
 async function saveImage(url) {
   try {
@@ -429,6 +429,7 @@ function GenImage({ url, ratio }) {
 }
 
 /* ---------------- Studio pictures (Google image model) ---------------- */
+const newJobId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12));
 const text0 = (msgs, i) => [...msgs.slice(0, i)].reverse().find((x) => x.role === "user")?.content || "";
 // Saved chats keep only a small copy of each picture (phones have little storage).
 const slimStudio = (m) => (m.studio?.pics ? { ...m, studio: { ...m.studio, pics: m.studio.pics.map((p) => ({ thumb: p.thumb })) } } : m);
@@ -494,16 +495,63 @@ async function svgToPng(svg, width = 2048) {
   c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
   return new Promise((r) => c.toBlob(r, "image/png"));
 }
+// Each design gets its own id prefix, so gradients of three designs on one page don't mix.
+let designSeq = 0;
+function scopeSvg(svg) {
+  const p = "s" + (++designSeq).toString(36) + "_";
+  return String(svg)
+    .replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, "")
+    .replace(/\bid="([^"]+)"/g, (_m, id) => `id="${p}${id}"`)
+    .replace(/url\(\s*#([^)\s]+)\s*\)/g, (_m, id) => `url(#${p}${id})`)
+    .replace(/(href\s*=\s*")#([^"]+)"/g, (_m, a, id) => `${a}#${p}${id}"`);
+}
+// The fonts a design uses are put inside the file, so the PNG/SVG looks exactly like on screen.
+const FONT_CSS = "https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700;800;900&family=Vazirmatn:wght@400;600;700;800;900&family=Montserrat:wght@400;600;700;800;900&family=Rubik:wght@400;600;700;800;900&display=swap";
+let fontFaceCache = null;
+async function embeddedFonts(svg) {
+  try {
+    if (!fontFaceCache) fontFaceCache = fetch(FONT_CSS).then((r) => r.text());
+    const css = await fontFaceCache;
+    const used = ["Noto Kufi Arabic", "Vazirmatn", "Montserrat", "Rubik"].filter((f) => svg.includes(f));
+    const blocks = css.split("@font-face").slice(1).map((b) => "@font-face" + b.slice(0, b.indexOf("}") + 1))
+      .filter((b) => used.some((f) => b.includes(`'${f}'`)) && /U\+0600|U\+0000-00FF/i.test(b)); // Arabic-script + basic Latin parts only
+    const parts = await Promise.all(blocks.map(async (b) => {
+      const url = /url\((https:[^)]+)\)/.exec(b)?.[1];
+      if (!url) return "";
+      const buf = await (await fetch(url)).arrayBuffer();
+      let bin = ""; const bytes = new Uint8Array(buf);
+      for (let k = 0; k < bytes.length; k += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(k, k + 0x8000));
+      return b.replace(url, "data:font/woff2;base64," + btoa(bin));
+    }));
+    return parts.join("\n");
+  } catch { return ""; }
+}
+async function svgWithFonts(svg) {
+  const css = await embeddedFonts(svg);
+  return css ? svg.replace(/<svg([^>]*)>/, `<svg$1><style>${css}</style>`) : svg;
+}
 function DesignTile({ d, kind }) {
   const { t } = useLang();
+  const html = useMemo(() => scopeSvg(d.svg), [d.svg]);
+  const [saving, setSaving] = useState("");
+  const save = async (type) => {
+    setSaving(type);
+    try {
+      const full = await svgWithFonts(d.svg);
+      if (type === "png") {
+        await new Promise((r) => setTimeout(r, 60));
+        downloadBlob(await svgToPng(full), "ahm-design.png");
+      } else downloadBlob(new Blob([full], { type: "image/svg+xml" }), "ahm-design.svg");
+    } finally { setSaving(""); }
+  };
   return (
     <figure className={"design " + (kind || "logo")}>
-      <img src={svgUrl(d.svg)} alt={d.name} />
+      <div className="design-art" role="img" aria-label={d.name} dangerouslySetInnerHTML={{ __html: html }} />
       <figcaption>
         <span>{d.name}</span>
         <div className="gen-tools static">
-          <button aria-label="PNG" title="PNG" onClick={async () => downloadBlob(await svgToPng(d.svg), "ahm-design.png")}><Svg d={Icon.zip} size={16} /> PNG</button>
-          <button aria-label="SVG" title="SVG" onClick={() => downloadBlob(new Blob([d.svg], { type: "image/svg+xml" }), "ahm-design.svg")}>SVG</button>
+          <button aria-label="PNG" title="PNG" disabled={!!saving} onClick={() => save("png")}>{saving === "png" ? <span className="mini-spin" /> : <Svg d={Icon.zip} size={16} />} PNG</button>
+          <button aria-label="SVG" title="SVG" disabled={!!saving} onClick={() => save("svg")}>{saving === "svg" ? <span className="mini-spin" /> : null}SVG</button>
         </div>
       </figcaption>
     </figure>
@@ -1216,6 +1264,9 @@ function Main({ session }) {
   const ta = useRef(null);
   const fileInput = useRef(null);
   const update = useUpdateReady();
+  const liveJobs = useRef(new Set());  // answers this page is receiving right now
+  const resuming = useRef(new Set());  // answers being fetched after the user came back
+  const chatsRef = useRef([]);
   const [studioKind, setStudioKind] = useState("auto");
   const [studioRatio, setStudioRatio] = useState("square");
   const [hideUpdate, setHideUpdate] = useState(false);
@@ -1375,6 +1426,30 @@ function Main({ session }) {
       return next;
     });
   }
+
+  // Like patch, but only for a chat that still exists (answers arriving later must not create empty chats).
+  function patchIf(id, fn) {
+    setChats((list) => {
+      const i = list.findIndex((c) => c.id === id);
+      if (i === -1) return list;
+      const next = [...list];
+      next[i] = { ...fn(next[i]), updated: Date.now() };
+      return next;
+    });
+  }
+  chatsRef.current = chats;
+
+  // When the app opens again (or comes back to the screen), collect answers that finished while away.
+  useEffect(() => {
+    if (!ready) return;
+    const scan = () => {
+      if (document.visibilityState === "hidden") return;
+      for (const c of chatsRef.current) for (const x of c.messages) if (x.pending?.job && !liveJobs.current.has(x.pending.job)) resumeJob(c.id, x.pending.job);
+    };
+    const first = setTimeout(scan, 1200);
+    document.addEventListener("visibilitychange", scan);
+    return () => { clearTimeout(first); document.removeEventListener("visibilitychange", scan); };
+  }, [ready]);
 
   // Edits made by hand in the code editor are saved into the current project.
   function setProjectFiles(files) {
@@ -1596,7 +1671,11 @@ function Main({ session }) {
     const base = project;
     const next = [...(baseMessages || messages), { role: "user", content: text, voice: isVoice || undefined, fileName: sentFile?.name, thumbs: sentImages.filter((im) => im.thumb).map((im) => im.thumb), docs: sentImages.filter((im) => im.docName).map((im) => im.docName) }];
     const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, mode: m, messages: msgs, title: c.title || text.slice(0, 60) }));
-    put([...next, { role: "assistant", content: "" }]);
+    // Every answer has a job id: if the phone leaves the app, the server keeps working and saves it.
+    const jobId = newJobId();
+    const pending = { job: jobId, kind: m, voice: isVoice || undefined };
+    liveJobs.current.add(jobId);
+    put([...next, { role: "assistant", content: "", pending }]);
     setActiveId(id);
     setInput("");
     setFile(null);
@@ -1606,7 +1685,8 @@ function Main({ session }) {
     if (m === "build") setShowPreview(false);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    if (m === "studio") return runStudio({ ctrl, next, put, sentImages, isVoice, text, typed: (preset ?? input).trim(), history: baseMessages || messages });
+    if (m === "studio") return runStudio({ ctrl, next, put, sentImages, isVoice, text, typed: (preset ?? input).trim(), history: baseMessages || messages, jobId, pending, chatId: id });
+    let keepPending = false;
     let acc = "";
     const ERR = /\u0000ERR:(busy|ai)\s*$/;
     // Voice message: the answer starts with ⟦what was said⟧ — that text goes into the user's bubble.
@@ -1640,6 +1720,7 @@ function Main({ session }) {
           project: m === "build" ? base : undefined,
           tutor: active.tutor || undefined,
           voiceNote: isVoice || undefined,
+          jobId,
         }),
       });
       if (res.status === 401) { await supabase.auth.signOut(); return "stop"; }
@@ -1667,7 +1748,7 @@ function Main({ session }) {
         if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
         const ch = m === "build" ? applyChanges(base, acc) : null;
         const sp = split(acc);
-        put([...sp.msgs, { role: "assistant", content: clean(sp.body) }], ch?.changed ? { project: ch.files } : {});
+        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending }], ch?.changed ? { project: ch.files } : {});
       }
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
@@ -1680,7 +1761,7 @@ function Main({ session }) {
       for (let tries = 0; result === "retry" && tries < waits.length && !ctrl.signal.aborted; tries++) {
         const busyNow = /ERR:busy/.test(acc);
         if (!busyNow && tries >= 2) break; // a real error: don't keep the user waiting
-        if (busyNow) put([...next, { role: "assistant", content: "", waiting: true }]);
+        if (busyNow) put([...next, { role: "assistant", content: "", waiting: true, pending }]);
         await new Promise((r) => setTimeout(r, waits[tries]));
         if (ctrl.signal.aborted) break;
         result = await attempt();
@@ -1706,18 +1787,99 @@ function Main({ session }) {
       if (e?.name === "AbortError") {
         if (!acc) put(next.slice(0, -1));
       } else {
-        put([...next, { role: "assistant", content: (acc ? clean(acc) + "\n\n" : "") + t("errConn"), failed: true }]);
+        // The connection broke (often: the user left the app). The server is still working — wait for it.
+        keepPending = true;
+        const sp = split(acc);
+        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending }]);
+        setTimeout(() => resumeJob(id, jobId), 1500);
       }
     } finally {
+      liveJobs.current.delete(jobId);
+      if (!keepPending) donePending(id, jobId);
       abortRef.current = null;
       setBusy(false);
       loadMe();
     }
   }
 
+  // Remove the "still working" mark from a finished answer.
+  function donePending(chatId, jobId) {
+    patchIf(chatId, (c) => ({ ...c, messages: c.messages.map((x) => (x.pending?.job === jobId ? (({ pending, ...rest }) => rest)(x) : x)) }));
+  }
+
+  // Turns a studio reply into what the chat shows.
+  async function studioMessage(j, fallbackIdea) {
+    const studio = { task: j.task, ratio: j.ratio || "square", idea: j.idea || fallbackIdea || j.heard || "" };
+    if (j.designs) studio.designs = j.designs;
+    if (j.images) studio.pics = await Promise.all(j.images.map((src) => shrinkPic(src).catch(() => ({ full: src, thumb: src }))));
+    if (j.free) { const seed = Math.floor(Math.random() * 1e6); studio.urls = [0, 1].map((k) => imageUrl(j.prompt, studio.ratio, seed + k)); studio.approx = !!j.approx; }
+    return { role: "assistant", content: j.caption || "✨", studio };
+  }
+
+  // An answer that was finished on the server while the user was away: fetch it and show it.
+  async function resumeJob(chatId, jobId) {
+    if (resuming.current.has(jobId) || liveJobs.current.has(jobId)) return;
+    resuming.current.add(jobId);
+    const fail = (txt) => patchIf(chatId, (c) => ({ ...c, messages: c.messages.map((x) => (x.pending?.job === jobId ? { role: "assistant", content: (x.content ? x.content + "\n\n" : "") + txt, failed: true } : x)) }));
+    try {
+      for (let i = 0; i < 90; i++) {
+        if (document.visibilityState === "hidden") { await new Promise((r) => setTimeout(r, 3000)); i--; continue; }
+        let j = {};
+        try {
+          const r = await fetch("/api/job?id=" + jobId, { headers: { Authorization: "Bearer " + (await token()) }, cache: "no-store" });
+          j = await r.json();
+        } catch {}
+        if (j.status === "done") {
+          const chat = chatsRef.current.find((c) => c.id === chatId);
+          const msg = chat?.messages.find((x) => x.pending?.job === jobId);
+          if (!msg) return;
+          const kind = msg.pending.kind;
+          if (kind === "studio") {
+            let out = {};
+            try { out = JSON.parse(j.result || "{}"); } catch {}
+            if (out.error) { fail(out.error === "unsafe" ? t("unsafe") : out.error === "busy" ? t("errBusy") : t("errAi")); return; }
+            const done = await studioMessage(out);
+            patchIf(chatId, (c) => {
+              const k = c.messages.findIndex((x) => x.pending?.job === jobId);
+              if (k < 0) return c;
+              const msgs = [...c.messages];
+              if (msg.pending.voice && out.heard && msgs[k - 1]?.role === "user") msgs[k - 1] = { ...msgs[k - 1], content: out.heard };
+              msgs[k] = done;
+              return { ...c, messages: msgs };
+            });
+            return;
+          }
+          let txt = String(j.result || "");
+          const bad = /\u0000ERR:(busy|ai)\s*$/.exec(txt);
+          txt = txt.replace(/\n*\u0000ERR:(busy|ai)\s*$/, "");
+          const heard = msg.pending.voice ? /^\s*⟦([^⟧]*)⟧[ \t]*\n?/.exec(txt) : null;
+          if (heard) txt = txt.slice(heard[0].length).replace(/^\s+/, "");
+          patchIf(chatId, (c) => {
+            const k = c.messages.findIndex((x) => x.pending?.job === jobId);
+            if (k < 0) return c;
+            const msgs = [...c.messages];
+            if (heard && msgs[k - 1]?.role === "user") msgs[k - 1] = { ...msgs[k - 1], content: heard[1].trim() || msgs[k - 1].content };
+            msgs[k] = bad && !txt.trim()
+              ? { role: "assistant", content: bad[1] === "busy" ? t("errBusy") : t("errAi"), failed: true }
+              : { role: "assistant", content: txt + (bad ? "\n\n" + (bad[1] === "busy" ? t("errBusy") : t("errAi")) : ""), voiceReply: msg.pending.voice || undefined };
+            const ch = kind === "build" ? applyChanges(c.project || {}, txt) : null;
+            return { ...c, messages: msgs, ...(ch?.changed ? { project: ch.files } : {}) };
+          });
+          return;
+        }
+        if (j.status === "unknown" && i >= 4) { fail(t("errConn")); return; } // nothing saved (e.g. update 3 not installed)
+        await new Promise((r) => setTimeout(r, i < 12 ? 2500 : 5000));
+      }
+      fail(t("errConn"));
+    } finally {
+      resuming.current.delete(jobId);
+    }
+  }
+
   // ---- design studio: logos, posters, pictures, photo edits and merges ----
-  async function runStudio({ ctrl, next, put, sentImages, isVoice, text, typed, history }) {
-    put([...next, { role: "assistant", content: "", studioWait: true }]);
+  async function runStudio({ ctrl, next, put, sentImages, isVoice, text, typed, history, jobId, pending, chatId }) {
+    put([...next, { role: "assistant", content: "", studioWait: true, pending }]);
+    let keepPending = false;
     try {
       const previous = history.filter((x) => x.role === "user").map((x) => x.content).slice(-5);
       const lastPic = [...history].reverse().find((x) => x.studio?.pics?.length)?.studio.pics[0];
@@ -1730,6 +1892,7 @@ function Main({ session }) {
           lang, kind: studioKind, ratio: studioRatio, prompt: isVoice ? "" : typed || text, previous,
           images: sentImages.map(({ mimeType, data }) => ({ mimeType, data })),
           lastImage: lastSrc ? { mimeType: "image/jpeg", data: lastSrc.split(",")[1] } : undefined,
+          jobId,
         }),
       });
       if (res.status === 401) { await supabase.auth.signOut(); return; }
@@ -1741,15 +1904,13 @@ function Main({ session }) {
         return;
       }
       const mine = isVoice && j.heard ? [...next.slice(0, -1), { ...next[next.length - 1], content: j.heard }] : next;
-      const studio = { task: j.task, ratio: j.ratio || "square", idea: j.idea || typed || j.heard || text };
-      if (j.designs) studio.designs = j.designs;
-      if (j.images) studio.pics = await Promise.all(j.images.map((src) => shrinkPic(src).catch(() => ({ full: src, thumb: src }))));
-      if (j.free) { const seed = Math.floor(Math.random() * 1e6); studio.urls = [0, 1].map((k) => imageUrl(j.prompt, studio.ratio, seed + k)); studio.approx = !!j.approx; }
-      put([...mine, { role: "assistant", content: j.caption || "✨", studio }]);
+      put([...mine, await studioMessage(j, typed || text)]);
     } catch (e) {
       if (e?.name === "AbortError") put(next.slice(0, -1));
-      else put([...next, { role: "assistant", content: t("errConn"), failed: true }]);
+      else { keepPending = true; setTimeout(() => resumeJob(chatId, jobId), 1500); } // left the app: the server keeps designing
     } finally {
+      liveJobs.current.delete(jobId);
+      if (!keepPending) donePending(chatId, jobId);
       abortRef.current = null;
       setBusy(false);
       loadMe();
@@ -1875,8 +2036,11 @@ function Main({ session }) {
                     {m.docs?.length > 0 && m.docs.map((d, k) => <div key={k} className="file-tag" dir="ltr">📄 {d}</div>)}
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
                     {m.role === "assistant" ? (
-                      m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
-                        : <span className="typing" role="status"><i /><i /><i /><small>{m.waiting ? t("queueWait") : m.studioWait ? t("studioWorking") : t("thinking")}</small></span>
+                      m.content ? <>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
+                        {m.pending && !(busy && i === messages.length - 1) && <div className="away-note" role="status"><span className="mini-spin" /> {t("awayWorking")}</div>}
+                      </>
+                        : <span className="typing" role="status"><i /><i /><i /><small>{m.waiting ? t("queueWait") : m.studioWait ? t("studioWorking") : m.pending && !busy ? t("awayWorking") : t("thinking")}</small></span>
                     ) : m.voice ? <span className="voice-tag"><Svg d={Icon.mic} size={16} /> {m.content}</span> : m.content}
                     {m.voiceReply && m.content && !(busy && i === messages.length - 1) && (
                       <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} />
