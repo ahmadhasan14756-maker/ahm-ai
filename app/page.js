@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabase";
 import { TELEGRAM_BOT, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/env";
 import { DEFAULT_SETTINGS } from "../lib/plans";
 import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/builder";
+import { importZip } from "../lib/zipimport";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
 import Learn from "../components/Learn";
@@ -1546,6 +1547,9 @@ function Main({ session }) {
   const bottom = useRef(null);
   const ta = useRef(null);
   const fileInput = useRef(null);
+  const zipInput = useRef(null);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [pendingImport, setPendingImport] = useState(null); // { id, text } — sent once the new chat is ready
   const update = useUpdateReady();
   const liveJobs = useRef(new Set());  // answers this page is receiving right now
   const resuming = useRef(new Set());  // answers being fetched after the user came back
@@ -1610,6 +1614,14 @@ function Main({ session }) {
       if (res.ok) setMe(await res.json());
     } catch {}
   }
+
+  // After a ZIP was opened: ask the AI to review and tidy the project (once the new chat is on screen).
+  useEffect(() => {
+    if (!pendingImport || busy || active.id !== pendingImport.id || !Object.keys(active.project || {}).length) return;
+    const p = pendingImport;
+    setPendingImport(null);
+    send(p.text, [], [], "build");
+  }, [pendingImport, active.id, busy]);
 
   // Fresh plan numbers and announcements when the app comes back to the screen (at most once a minute).
   const meAt = useRef(0);
@@ -1874,6 +1886,29 @@ function Main({ session }) {
     if (imgs.length) { e.preventDefault(); addImages(imgs); }
   }
 
+  // A project ZIP (from AHM AI or anywhere): open it, tidy the files, then let the AI review it and help finish.
+  async function pickZip(e) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || busy || zipBusy) return;
+    if (!/\.zip$/i.test(f.name) && f.type !== "application/zip" && f.type !== "application/x-zip-compressed") { alert(t("zipOnly")); return; }
+    setZipBusy(true);
+    try {
+      const r = await importZip(f);
+      const id = newId();
+      setChats((l) => [{ ...blank("build"), id, title: "📦 " + r.name, project: r.files, updated: Date.now() }, ...l]);
+      setView("chat");
+      setActiveId(id);
+      setShowPreview(false);
+      const notes = [r.stack && `${t("zipStack")}: ${r.stack}`, r.skipped.junk && `${r.skipped.junk} ${t("zipSkippedJunk")}`, r.skipped.cut + r.skipped.big && `${r.skipped.cut + r.skipped.big} ${t("zipSkippedBig")}`].filter(Boolean).join(" · ");
+      setPendingImport({ id, text: t("zipAnalyze").replace("{name}", r.name).replace("{n}", r.count) + (notes ? `\n(${notes})` : "") });
+    } catch (err) {
+      alert(err?.message === "too_big" ? t("zipTooBig") : err?.message === "empty" ? t("zipEmpty") : t("zipFail"));
+    } finally {
+      setZipBusy(false);
+    }
+  }
+
   // Gallery button: photos only, in every section.
   function pickPhotos(e) {
     const all = [...(e.target.files || [])];
@@ -2007,7 +2042,7 @@ function Main({ session }) {
           messages: next.map(({ role, content }) => ({ role, content })),
           file: sentFile || undefined,
           images: sentImages.length ? sentImages.map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
-          project: m === "build" ? base : undefined,
+          project: m === "build" ? Object.fromEntries(Object.entries(base).map(([k, v]) => [k, String(v).startsWith("data:") ? "data:" : v])) : undefined,
           tutor: active.tutor || undefined,
           voiceNote: isVoice || undefined,
           jobId,
@@ -2323,6 +2358,12 @@ function Main({ session }) {
                       <div className="chips">
                         {suggestions.map((sg) => <button key={sg} onClick={() => send(sg)}>{sg}</button>)}
                       </div>
+                      {mode === "build" && (
+                        <button className="zip-import-card" disabled={zipBusy} onClick={() => zipInput.current?.click()}>
+                          <span className="zic-ic">{zipBusy ? <span className="mini-spin" /> : "📦"}</span>
+                          <span><b>{t("zipImport")}</b><small>{t("zipImportSub")}</small></span>
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -2422,6 +2463,11 @@ function Main({ session }) {
               ) : (
               <div className="composer">
                 <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={pickPhotos} />
+                <input ref={zipInput} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden onChange={pickZip} />
+                {(mode === "build" || mode === "auto") && (
+                  <button className="attach gallery zip-btn" aria-label={t("zipImport")} title={t("zipImport")} disabled={busy || zipBusy}
+                    onClick={() => zipInput.current?.click()}>{zipBusy ? <span className="mini-spin" /> : "📦"}</button>
+                )}
                 <button className="attach gallery" aria-label={t("gallery")} title={t("gallery")} disabled={busy || images.length >= 4}
                   onClick={() => fileInput.current?.click()}><Svg d={Icon.image} size={19} /></button>
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}

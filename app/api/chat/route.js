@@ -83,6 +83,11 @@ FILE FORMAT (very important)
 - To delete a file, write an empty block: \`\`\`delete:old/file.js\`\`\` (on its own lines).
 - Use folders when it helps (src/, assets/, css/, js/ ...). Paths use forward slashes, no leading slash.
 - Output ONLY files that change. Never output partial files, "..." or "rest of code unchanged".
+- Files shown as "[image file — keep as is …]" are real images the user uploaded: use them by their path (e.g. <img src="images/logo.png">), never output or rewrite them.
+
+UPLOADED PROJECTS (the user brought a ZIP)
+- When the request says a ZIP was uploaded: first understand the whole project. If the structure is messy (files in odd places, missing index.html for a website, missing README.md, broken links between files), fix it with file blocks.
+- Then explain in the user's language, short and clear: what the project is, what already works, what is missing or broken, and give 3 numbered next steps you can do for them. Ask which one to start with.
 
 WHAT TO BUILD
 - Any language or stack the user asks for: websites (HTML/CSS/JS), Python, Node.js, PHP, Java, C#, Flutter, React, etc.
@@ -193,6 +198,8 @@ export async function POST(req) {
     const project =
       build && body.project && typeof body.project === "object"
         ? Object.entries(body.project).filter(([k, v]) => typeof k === "string" && typeof v === "string")
+            // images from an uploaded ZIP stay in the app; the AI only sees that they exist
+            .map(([k, v]) => (v.startsWith("data:") ? [k, `[image file — keep as is, refer to it by its path "${k}"]`] : [k, v]))
         : [];
 
     let total = 0;

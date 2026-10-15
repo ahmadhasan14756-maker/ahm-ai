@@ -232,7 +232,9 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
                   </div>
                 </div>
                 <div className="editor-body">
-                  <CodeEditor path={active} value={files[active] ?? ""} readOnly={busy} onChange={(v) => setFiles({ ...files, [active]: v })} />
+                  {String(files[active] ?? "").startsWith("data:image")
+                    ? <div className="ws-image"><img src={files[active]} alt={active} /></div>
+                    : <CodeEditor path={active} value={files[active] ?? ""} readOnly={busy} onChange={(v) => setFiles({ ...files, [active]: v })} />}
                 </div>
               </>
             ) : (
