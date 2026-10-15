@@ -889,7 +889,7 @@ function ThemePicker() {
   );
 }
 
-function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide }) {
+function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide, onAbout }) {
   const { t } = useLang();
   const [loading, setLoading] = useState(false);
   return (
@@ -926,10 +926,96 @@ function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onI
         <div className="set-label">🔐 {t("changePw")}</div>
         <div className="set-val">›</div>
       </button>
+      <button className="set-row set-btn about-row" onClick={onAbout}>
+        <div className="set-label">👨‍💻 {t("aboutDev")}</div>
+        <div className="set-val">›</div>
+      </button>
       <div className="set-legal"><a href="/privacy" target="_blank" rel="noreferrer">{t("privacy")}</a><a href="/terms" target="_blank" rel="noreferrer">{t("terms")}</a></div>
       <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
         <Svg d={Icon.logout} size={18} /> {t("logout")}
       </button>
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+/* ---------------- About the developer ---------------- */
+const intlPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.startsWith("964") ? d : d.startsWith("0") ? "964" + d.slice(1) : d; };
+function AboutDev({ me, onClose, onEdit }) {
+  const { t, lang } = useLang();
+  const [a, setA] = useState(null);
+  useEffect(() => { fetch("/api/about").then((r) => r.json()).then(setA).catch(() => setA({ error: true })); }, []);
+  const L = (o) => o?.[lang] || o?.ckb || "";
+  const num = intlPhone(a?.phone);
+  return (
+    <Sheet label={t("aboutDev")} onClose={onClose}>
+      {!a ? <p className="muted">…</p> : a.error ? <p className="pe-msg">⚠️ {t("errNetwork")}</p> : (
+        <div className="about">
+          <div className="about-head">
+            <div className="about-avatar" aria-hidden="true"><img src="/icon-192.png" alt="" /></div>
+            <div>
+              <div className="about-name">{L(a.nameLocal) || a.name}</div>
+              <div className="about-role">{L(a.role)}</div>
+            </div>
+          </div>
+          <div className="about-made">✨ {t("aboutMade")}</div>
+          <p className="about-bio" dir={lang === "en" ? "ltr" : "rtl"}>{L(a.bio)}</p>
+          {a.phone && (
+            <div className="about-contact">
+              {a.whatsapp && <a className="about-btn wa" href={`https://wa.me/${num}`} target="_blank" rel="noreferrer">💬 {t("whatsapp")}</a>}
+              <a className="about-btn call" href={`tel:+${num}`}>📞 {t("callMe")}</a>
+              <div className="about-num" dir="ltr">{a.phone}</div>
+            </div>
+          )}
+        </div>
+      )}
+      {me?.owner && a && !a.error && <button className="gold-btn" onClick={() => onEdit(a)}>✏️ {t("aboutEdit")}</button>}
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
+// Owner only: change the name, title, phone and text (in 3 languages).
+function AboutEditor({ data, token, onClose, onSaved }) {
+  const { t } = useLang();
+  const [f, setF] = useState(() => JSON.parse(JSON.stringify(data)));
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const set3 = (k, l, v) => setF((x) => ({ ...x, [k]: { ...x[k], [l]: v } }));
+  async function translate() {
+    setBusy("tr"); setMsg("");
+    try {
+      const go = async (txt) => { const r = await fetch("/api/admin/notice", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ translate: txt }) }); if (!r.ok) throw new Error(); return r.json(); };
+      const [bio, role, name] = await Promise.all([go(f.bio.ckb), go(f.role.ckb), go(f.nameLocal.ckb)]);
+      setF((x) => ({ ...x, bio: { ...x.bio, ar: bio.ar, en: bio.en }, role: { ...x.role, ar: role.ar, en: role.en }, nameLocal: { ...x.nameLocal, ar: name.ar, en: name.en } }));
+      setMsg("✅ " + t("aboutTranslated"));
+    } catch { setMsg("⚠️ " + t("errGeneric")); }
+    setBusy("");
+  }
+  async function save() {
+    setBusy("save"); setMsg("");
+    try {
+      const r = await fetch("/api/admin/about", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify(f) });
+      if (!r.ok) throw new Error();
+      setF(await r.json()); setMsg("✅ " + t("saved")); onSaved?.();
+    } catch { setMsg("⚠️ " + t("errGeneric")); }
+    setBusy("");
+  }
+  const LANGS3 = [["ckb", "کوردی", "rtl"], ["ar", "العربية", "rtl"], ["en", "English", "ltr"]];
+  return (
+    <Sheet label={t("aboutEdit")} onClose={onClose}>
+      <h3>✏️ {t("aboutEdit")}</h3>
+      <p className="muted">{t("aboutEditHelp")}</p>
+      <label className="notice-lang"><span>{t("aboutNameF")} (کوردی)</span><input className="notice-input" dir="rtl" value={f.nameLocal.ckb} onChange={(e) => set3("nameLocal", "ckb", e.target.value)} /></label>
+      <label className="notice-lang"><span>{t("aboutRoleF")} (کوردی)</span><input className="notice-input" dir="rtl" value={f.role.ckb} onChange={(e) => set3("role", "ckb", e.target.value)} /></label>
+      <label className="notice-lang"><span>📞 {t("aboutPhoneF")}</span><input className="notice-input" dir="ltr" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
+      <label className="about-check"><input type="checkbox" checked={!!f.whatsapp} onChange={(e) => setF({ ...f, whatsapp: e.target.checked })} /> 💬 {t("aboutWaF")}</label>
+      {LANGS3.map(([k, name, dir]) => (
+        <label key={k} className="notice-lang"><span>{t("aboutBioF")} — {name}</span><textarea rows={k === "ckb" ? 8 : 5} dir={dir} value={f.bio[k] || ""} onChange={(e) => set3("bio", k, e.target.value)} /></label>
+      ))}
+      <button className="ghost-btn" disabled={!!busy} onClick={translate}>{busy === "tr" ? <span className="mini-spin" /> : "🌐"} {t("aboutTranslate")}</button>
+      {msg && <p className="pe-msg">{msg}</p>}
+      <button className="gold-btn" disabled={!!busy} onClick={save}>{busy === "save" ? <span className="mini-spin" /> : "💾"} {t("save")}</button>
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
   );
@@ -2385,12 +2471,14 @@ function Main({ session }) {
       {sheet?.type === "password" && <ChangePassword onClose={() => setSheet(null)} />}
       {sheet?.type === "install" && <InstallHelp onClose={() => setSheet(null)} />}
       {sheet?.type === "a2hs" && <InstallGuide onClose={() => setSheet(null)} />}
+      {sheet?.type === "about" && <AboutDev me={me} onClose={() => setSheet(null)} onEdit={(data) => setSheet({ type: "aboutEdit", data })} />}
+      {sheet?.type === "aboutEdit" && me?.owner && <AboutEditor data={sheet.data} token={token} onClose={() => setSheet({ type: "about" })} onSaved={() => {}} />}
       {sheet?.type === "feedback" && <Feedback token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} />}
       {sheet?.type === "settings" && (
         <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
-          inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} />
+          inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />
       )}
     </div>
   );
