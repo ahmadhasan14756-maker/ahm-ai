@@ -134,7 +134,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Remember which "thinking" setting each model accepts, so later questions skip failed tries.
 // Deeper thinking = smarter answers. Code projects think the most, voice the least (it must be fast).
 const THINKING = [{ thinkingLevel: "medium" }, { thinkingLevel: "low" }, { thinkingLevel: "minimal" }, null];
-const START = { build: 0, file: 0, construct: 0, chat: 1, voice: 2 };
+const START = { build: 0, file: 0, construct: 1, chat: 1, voice: 2 };
 const thinkingOk = new Map();
 
 /*
@@ -157,6 +157,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       if (THINKING[level]) config.thinkingConfig = THINKING[level];
       if (search) config.tools = [{ googleSearch: {} }];
       try {
+        const t0 = Date.now();
         const stream = await gemini().models.generateContentStream({ model, contents, config });
         thinkingOk.set(model + ":" + start, level);
         const sources = new Map();
@@ -164,7 +165,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         for await (const chunk of stream) {
           if (isSafetyStop(chunk)) stopped = true;
           const text = chunk.text;
-          if (text) { sentAny = true; yield text; }
+          if (text) { if (!sentAny) console.log("first words", model, level, Date.now() - t0, "ms"); sentAny = true; yield text; }
           const g = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
           for (const c of g) if (c.web?.uri) sources.set(c.web.uri, c.web.title || c.web.uri);
         }
@@ -253,8 +254,11 @@ export async function POST(req) {
     // (it has its own free quota, so more people can be answered at the same time). Change in Vercel:
     // GEMINI_MODEL_PRO, GEMINI_MODEL (Pro fallback), GEMINI_MODEL_FREE.
     const proUser = usage.pro || usage.unlimited;
+    // The big "pro" model is slow to start, so it is used only where depth matters most (code projects, files).
+    // Everyday chat, construction and voice use the fast model, so the answer starts in a few seconds.
+    const deep = build || !!file;
     const preferred = proUser
-      ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")]
+      ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
       : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
     const models = [...new Set([...preferred, ...(proUser ? FALLBACK_MODELS : [...FALLBACK_MODELS].reverse())].filter(Boolean))];
     const TUTOR_LANG = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
