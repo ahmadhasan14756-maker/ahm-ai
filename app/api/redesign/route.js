@@ -103,31 +103,106 @@ async function furnishPrompt(items, refCount) {
     "No text, no watermark, no people.",
   ].join(" ");
 }
+// "3D room": the user placed real 3D furniture into the photo; the AI turns the mock-up into a real photograph.
+async function composePrompt(items, ghosts) {
+  let names = items.map((x) => clean(x, 60)).filter(Boolean).slice(0, 16);
+  let gnames = ghosts.map((g) => clean(g.name, 60) + (clean(g.note, 80) ? ` (${clean(g.note, 80)})` : ""));
+  const all = [...names, ...gnames];
+  if (all.some((n) => /[^\x00-\x7F]/.test(n))) {
+    try {
+      const j = await jsonCall('Translate each item to short English furniture/decor wording. Return JSON {"items": ["..."]} in the same order and count.', [{ text: JSON.stringify(all) }], { maxTokens: 600, think: "minimal" });
+      if (Array.isArray(j?.items) && j.items.length === all.length) { names = j.items.slice(0, names.length).map((x) => clean(x, 100)); gnames = j.items.slice(names.length).map((x) => clean(x, 100)); }
+    } catch (e) { if (e.message === "unsafe") throw e; }
+  }
+  const where = (g) => `in the area from ${Math.round(g.x)}% to ${Math.round(g.x + g.w)}% from the left edge and ${Math.round(g.y)}% to ${Math.round(g.y + g.h)}% from the top edge`;
+  return [
+    "Image 0 is a photo of a real space into which furniture and objects were inserted as a 3D mock-up. Image 1 is the same space before.",
+    "Turn image 0 into one real, professional photograph. Keep every inserted object exactly where it is, with the same size, shape, proportions, colours and materials, and make it sit naturally in the space: realistic lighting that matches the room, soft contact shadows on the floor, reflections and correct perspective.",
+    "Keep the space itself as in image 1: same walls, floor, ceiling, windows, doors and camera angle. Do not add, remove or move anything else.",
+    names.length ? `The inserted objects are: ${names.join("; ")}.` : "",
+    gnames.length ? "Also add: " + ghosts.map((g, i) => `${i + 1}) ${gnames[i]} ${where(g)} of the picture`).join("; ") + ", each at a realistic real-world size for this space." : "",
+    "No text, no watermark, no people.",
+  ].filter(Boolean).join(" ");
+}
 const PANO_PROMPT = "Turn image 0 into a 360-degree equirectangular panorama photo of the same space with exactly the same design, furniture, colours, materials and lighting, as seen from the middle of the space. Continue the space naturally behind the camera. Seamless where the left and right edges meet, level horizon. Photorealistic. No text, no watermark, no people.";
 
-// Free, legal picture search for objects (Openverse, then Wikimedia Commons). No key needed.
-async function searchPictures(q) {
-  let query = clean(q, 80);
-  if (/[^\x00-\x7F]/.test(query)) {
-    try { const j = await jsonCall('Translate this shopping/search query to short English. Return JSON {"q": "..."}', [{ text: query }], { maxTokens: 60, think: "minimal" }); if (j?.q) query = clean(j.q, 80); } catch {}
+// ---- Real 3D models (Poly Haven: free CC0 3D scans, real-world size in metres) ----
+const UA = { "User-Agent": "AHM-AI/1.0 (ahm-ai.vercel.app)" };
+const PH_FILE = /^https:\/\/dl\.polyhaven\.org\/file\/ph-assets\//;
+let phList = null, phAt = 0;
+const phFiles = new Map();
+async function models() {
+  if (phList && Date.now() - phAt < 12 * 3600_000) return phList;
+  const r = await fetch("https://api.polyhaven.com/assets?t=models", { headers: UA, signal: AbortSignal.timeout(12000) });
+  if (!r.ok) throw new Error("models " + r.status);
+  const j = await r.json();
+  phList = Object.entries(j || {}).map(([id, a]) => ({
+    id, name: clean(a?.name || id, 60),
+    cats: list(a?.categories, 8), tags: list(a?.tags, 14),
+    thumb: /^https:\/\/cdn\.polyhaven\.com\//.test(a?.thumbnail_url || "") ? a.thumbnail_url : `https://cdn.polyhaven.com/asset_img/thumbs/${id}.png?width=256&height=256`,
+  }));
+  phAt = Date.now();
+  return phList;
+}
+async function modelFiles(id) {
+  if (!/^[A-Za-z0-9_-]{2,60}$/.test(id)) throw new Error("bad_request");
+  if (phFiles.has(id)) return phFiles.get(id);
+  const r = await fetch(`https://api.polyhaven.com/files/${id}`, { headers: UA, signal: AbortSignal.timeout(12000) });
+  if (!r.ok) throw new Error("bad_request");
+  const j = await r.json();
+  const g = j?.gltf?.["1k"]?.gltf || j?.gltf?.["2k"]?.gltf;
+  if (!g?.url || !PH_FILE.test(g.url)) throw new Error("bad_request");
+  const include = {};
+  for (const [k, v] of Object.entries(g.include || {})) if (PH_FILE.test(v?.url || "") && !k.includes("..")) include[k] = v.url;
+  const out = { url: g.url, include };
+  phFiles.set(id, out);
+  return out;
+}
+// how well a model matches the English search words
+function score(m, words) {
+  const name = m.name.toLowerCase(), id = m.id.toLowerCase(), tags = m.tags.join(" ").toLowerCase(), cats = m.cats.join(" ").toLowerCase();
+  let s = 0;
+  for (const w of words) {
+    if (w.length < 3) continue;
+    const re = new RegExp("(^|[^a-z])" + w.replace(/[^a-z]/g, ""));
+    if (re.test(name) || re.test(id.replace(/_/g, " "))) s += 3;
+    if (re.test(tags)) s += 2;
+    if (re.test(cats)) s += 1;
   }
-  const out = [];
+  return s;
+}
+
+// The user may type Kurdish (Arabic or Latin letters, misspelled), Arabic or English: turn it into English search words.
+async function englishQuery(q) {
+  const raw = clean(q, 80);
   try {
-    const r = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=24&mature=false`, { signal: AbortSignal.timeout(9000), headers: { "User-Agent": "AHM-AI/1.0" } });
-    const j = await r.json();
-    for (const x of j.results || []) if (x.thumbnail) out.push({ thumb: x.thumbnail, title: clean(x.title, 80), credit: clean(x.creator, 60), license: clean(x.license, 20), source: "Openverse" });
-  } catch (e) { console.error("openverse", String(e.message).slice(0, 80)); }
-  if (out.length < 8) {
-    try {
-      const r = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(query + " filetype:bitmap")}&gsrlimit=20&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=360&format=json`, { signal: AbortSignal.timeout(9000), headers: { "User-Agent": "AHM-AI/1.0 (ahm-ai.vercel.app)" } });
-      const j = await r.json();
-      for (const pg of Object.values(j?.query?.pages || {})) {
+    const j = await jsonCall('A user searches for furniture, decoration or home/garden objects. The text may be Kurdish Sorani (Arabic or Latin letters, maybe misspelled), Arabic or English. Return JSON {"q": "the best short English search words (1-4 words)", "alt": ["up to 3 other English words for the same thing"]}.',
+      [{ text: raw }], { maxTokens: 120, think: "minimal" });
+    if (j?.q) return { q: clean(j.q, 60), alt: list(j.alt, 3) };
+  } catch (e) { if (e.message === "unsafe") throw e; }
+  return { q: raw, alt: [] };
+}
+
+// Search: real 3D models first, then free, legal pictures (Openverse + Wikimedia Commons). No key needed.
+async function searchPictures(q) {
+  const { q: query, alt } = await englishQuery(q);
+  const words = [...new Set([query, ...alt].join(" ").toLowerCase().split(/[^a-z]+/).map((w) => w.replace(/(ies)$/, "y").replace(/([^s])s$/, "$1")).filter((w) => w.length > 2))];
+  const [found3d, ov, wm] = await Promise.all([
+    models().then((all) => all.map((m) => [score(m, words), m]).filter(([n]) => n > 0).sort((a, b) => b[0] - a[0]).slice(0, 18).map(([, m]) => m)).catch(() => []),
+    fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=40&mature=false`, { signal: AbortSignal.timeout(9000), headers: UA })
+      .then((r) => r.json()).then((j) => (j.results || []).filter((x) => x.thumbnail).map((x) => ({ thumb: x.thumbnail, title: clean(x.title, 80), credit: clean(x.creator, 60), license: clean(x.license, 20), source: "Openverse" })))
+      .catch((e) => { console.error("openverse", String(e.message).slice(0, 80)); return []; }),
+    fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(query + " filetype:bitmap")}&gsrlimit=30&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=400&format=json`, { signal: AbortSignal.timeout(9000), headers: UA })
+      .then((r) => r.json()).then((j) => Object.values(j?.query?.pages || {}).sort((a, b) => (a.index || 0) - (b.index || 0)).map((pg) => {
         const ii = pg.imageinfo?.[0];
-        if (ii?.thumburl) out.push({ thumb: ii.thumburl, title: clean(String(pg.title || "").replace(/^File:|\.[a-z]+$/gi, ""), 80), credit: clean(ii.extmetadata?.Artist?.value?.replace(/<[^>]+>/g, ""), 60), license: clean(ii.extmetadata?.LicenseShortName?.value, 20), source: "Wikimedia" });
-      }
-    } catch (e) { console.error("wikimedia", String(e.message).slice(0, 80)); }
-  }
-  return { q: query, results: out.slice(0, 30) };
+        return ii?.thumburl ? { thumb: ii.thumburl, title: clean(String(pg.title || "").replace(/^File:|\.[a-z]+$/gi, ""), 80), credit: clean(ii.extmetadata?.Artist?.value?.replace(/<[^>]+>/g, ""), 60), license: clean(ii.extmetadata?.LicenseShortName?.value, 20), source: "Wikimedia" } : null;
+      }).filter(Boolean))
+      .catch((e) => { console.error("wikimedia", String(e.message).slice(0, 80)); return []; }),
+  ]);
+  // mix the two picture sources, best first, no repeats
+  const pics = [], seen = new Set();
+  for (let i = 0; i < Math.max(ov.length, wm.length); i++) for (const x of [ov[i], wm[i]]) if (x && !seen.has(x.thumb)) { seen.add(x.thumb); pics.push(x); }
+  return { q: query, models: found3d, results: pics.slice(0, 48) };
 }
 const GRAB_HOSTS = /^https:\/\/(api\.openverse\.org|upload\.wikimedia\.org)\//;
 
@@ -162,6 +237,14 @@ export async function POST(req) {
       if (!clean(body.q, 80)) return err("bad_request");
       return Response.json(await searchPictures(body.q));
     }
+    if (body.action === "models") {
+      try { return Response.json({ models: await models() }, { headers: { "Cache-Control": "private, max-age=3600" } }); }
+      catch (e) { console.error("models", e.message); return err("models_off", 503); }
+    }
+    if (body.action === "model") {
+      try { return Response.json(await modelFiles(String(body.id || ""))); }
+      catch (e) { return err("bad_request"); }
+    }
     if (body.action === "grab") {
       // fetch one search picture for the user (only from the two search sites) so the app can use it as an object
       if (!(await allow("ds-g:" + user.id, 30, 60000))) return tooMany();
@@ -181,7 +264,7 @@ export async function POST(req) {
       if (!(await allow("ds:" + user.id, 8, 60000))) return tooMany();
       const tool = TOOLS.includes(body.tool) ? body.tool : "redesign";
       const style = body.style in STYLES ? body.style : "modern";
-      const mode = ["furnish", "pano"].includes(body.mode) ? body.mode : "design";
+      const mode = ["furnish", "pano", "compose"].includes(body.mode) ? body.mode : "design";
       const hd = !!body.hd, cost = mode === "pano" || hd ? 2 : 1;
       const left = await LIMIT.left(user.id, usage);
       if (left.left !== null && left.left < cost) return err("limit", 402, left);
@@ -203,6 +286,17 @@ export async function POST(req) {
           extra.push({ data: String(r) });
         }
         prompt = await furnishPrompt(items, extra.length);
+      } else if (mode === "compose") {
+        // image 0 = the photo with the 3D furniture placed in it, image 1 = the room before
+        const room = String(body.room || "");
+        if (!JPEG.test(room) || room.length > 400_000) return err("bad_image");
+        extra.push({ data: room });
+        const ghosts = (Array.isArray(body.ghosts) ? body.ghosts : []).slice(0, 8).map((g) => ({
+          name: clean(g?.name, 60), note: clean(g?.note, 80),
+          x: Math.max(0, Math.min(100, Number(g?.x) || 0)), y: Math.max(0, Math.min(100, Number(g?.y) || 0)),
+          w: Math.max(2, Math.min(100, Number(g?.w) || 10)), h: Math.max(2, Math.min(100, Number(g?.h) || 10)),
+        })).filter((g) => g.name);
+        prompt = await composePrompt(Array.isArray(body.items) ? body.items : [], ghosts);
       } else if (mode === "pano") {
         prompt = PANO_PROMPT;
       } else {

@@ -55,17 +55,38 @@ const TX = {
   note: L("⚠️ ئەمانە بیرۆکەی دیزاینن. AI شێوەی شوێنەکە بە نزیکی دەپارێزێت، بەڵام ڕێک ١٠٠٪ نییە. بۆ کاری بیناسازی ڕاوێژ بە ئەندازیار بکە.", "⚠️ هذه أفكار تصميم. يحافظ الذكاء الاصطناعي على شكل المكان تقريباً لا بدقة 100٪. استشر مهندساً قبل البناء.", "⚠️ These are design ideas. The AI keeps the space's shape approximately, not 100% exactly. Consult an engineer before building."),
   furnish: L("🪄 خۆت کەلوپەل دابنێ", "🪄 ضع الأثاث بنفسك", "🪄 Furnish it yourself"),
   furnishHelp: L("کەلوپەلێک هەڵبژێرە یان بیگەڕێ ← لەسەر وێنەکە بیجوڵێنە بۆ شوێنی خۆی ← گۆشەکەی ڕابکێشە بۆ گەورە/بچووککردن ← «بیخە ناو ژوورەکە».", "اختر قطعة أو ابحث عنها ← حرّكها إلى مكانها ← اسحب الزاوية لتكبيرها ← «ضعها في الغرفة».", "Pick or search an item → drag it into place → drag its corner to resize → “Put it in the room”."),
+  tab3d: L("🛋️ 3D", "🛋️ 3D", "🛋️ 3D"),
+  tabAi: L("✨ AI", "✨ AI", "✨ AI"),
+  aiHelp: L("ئەمانە مۆدێلی 3D یان نییە. شوێن و قەبارەیان دیاری بکە، AI لە کاتی دروستکردنی وێنەکەدا دەیانکێشێت.", "هذه بلا نموذج 3D. حدّد مكانها وحجمها، وسيرسمها الذكاء الاصطناعي.", "These have no 3D model. Set their place and size; the AI draws them."),
+  loading3d: L("مۆدێلی 3D دێت…", "تحميل النموذج 3D…", "Loading 3D model…"),
+  fu3dHelp: L("کرتە لە شتێک بکە بۆ زیادکردن ← بە پەنجەیەک لەسەر زەوی بیجوڵێنە ← بە دوو پەنجە گەورە/بچووکی بکە و بیسوڕێنە.", "اضغط على قطعة لإضافتها ← حرّكها بإصبع ← كبّر/صغّر وأدِر بإصبعين.", "Tap an item to add it → move it with one finger → pinch to resize and twist to turn."),
+  size: L("قەبارە", "الحجم", "Size"),
+  turn: L("سوڕاندن", "تدوير", "Turn"),
+  lift: L("بەرزی لە زەوی", "الارتفاع", "Lift"),
+  m: L("م", "م", "m"),
+  fit: L("📐 ڕێکخستنی زەوی لەگەڵ وێنەکە", "📐 مطابقة الأرضية مع الصورة", "📐 Line up the floor with the photo"),
+  fitHelp: L("هێڵە زەردەکان زەوی 3Dـن. بیانگۆڕە تا وەک زەوی ژوورەکەت دیار بن، ئینجا کەلوپەلەکان ڕاست دادەنیشن.", "الخطوط الصفراء هي الأرضية 3D. عدّلها لتطابق أرضية غرفتك.", "The yellow lines are the 3D floor. Adjust them to match your room's floor."),
+  camH: L("بەرزی کامێرا", "ارتفاع الكاميرا", "Camera height"),
+  tiltL: L("لاری زەوی", "ميل الأرضية", "Floor angle"),
+  lens: L("لێنز", "العدسة", "Lens"),
+  saveMock: L("📸 پاشەکەوتکردنی وێنەی 3D (بەخۆڕایی)", "📸 حفظ صورة 3D (مجاناً)", "📸 Save the 3D picture (free)"),
+  res3d: L("🛋️ مۆدێلی 3D", "🛋️ نماذج 3D", "🛋️ 3D models"),
+  resPics: L("📷 وێنەکان", "📷 صور", "📷 Pictures"),
+  credit3d: L("مۆدێلە 3Dـەکان: Poly Haven (CC0، بەخۆڕایی)", "النماذج 3D: Poly Haven (CC0، مجانية)", "3D models: Poly Haven (CC0, free)"),
+  e_model: L("ئەم مۆدێلە نەکرایەوە. یەکێکی تر تاقی بکەرەوە.", "تعذّر فتح النموذج. جرّب غيره.", "This model didn't open. Try another."),
+  e_models_off: L("کتێبخانەی 3D ئێستا ناگات. «🔍 گەڕان» یان «✨ AI» بەکاربهێنە.", "مكتبة 3D غير متاحة الآن. استخدم البحث أو AI.", "The 3D library isn't reachable now. Use Search or AI."),
+  e_3d: L("ئەم ئامێرە 3D پشتگیری ناکات.", "هذا الجهاز لا يدعم 3D.", "This device doesn't support 3D."),
   catalog: L("📦 کەلوپەل", "📦 الأثاث", "📦 Items"),
   search: L("🔍 گەڕان", "🔍 بحث", "🔍 Search"),
   searchPh: L("بۆ نموونە: قەنەفەی چەرمی قاوەیی، گڵۆپی زێڕین…", "مثلاً: كنبة جلد بني، ثريا ذهبية…", "e.g. brown leather sofa, gold chandelier…"),
   searchNone: L("هیچ نەدۆزرایەوە. وشەیەکی تر تاقی بکەرەوە.", "لا نتائج. جرّب كلمة أخرى.", "Nothing found. Try another word."),
-  searchNote: L("وێنەکان لە Openverse و Wikimedia ـەوەن (بەخۆڕایی و یاسایی). AI شێوەی ئەو شتە بەکاردەهێنێت.", "الصور من Openverse وWikimedia (مجانية وقانونية). يستخدم الذكاء الاصطناعي شكل القطعة.", "Pictures come from Openverse and Wikimedia (free and legal). The AI uses the item's look."),
+  searchNote: L("بە کوردی، عەرەبی یان ئینگلیزی بنووسە. مۆدێلی 3D لە Poly Haven و وێنە لە Openverse و Wikimedia (بەخۆڕایی و یاسایی). ئەگەر وێنەکە پاشبنەمای سپی هەبێت، خۆکار لادەبرێت.", "اكتب بالكردية أو العربية أو الإنجليزية. نماذج 3D من Poly Haven وصور من Openverse وWikimedia (مجانية وقانونية). الخلفية البيضاء تُزال تلقائياً.", "Type in Kurdish, Arabic or English. 3D models from Poly Haven, pictures from Openverse and Wikimedia (free and legal). White backgrounds are removed automatically."),
   placed: L("لەسەر وێنەکە", "على الصورة", "On the photo"),
   noteF: L("ڕەنگ / کەرەستە (ئارەزوومەندانە)", "اللون / المادة (اختياري)", "Colour / material (optional)"),
   noteFPh: L("بۆ نموونە: بێژ، چەرم، دار", "مثلاً: بيج، جلد، خشب", "e.g. beige, leather, wood"),
   remove: L("لابردن", "إزالة", "Remove"),
   dup: L("دووبارەکردنەوە", "تكرار", "Duplicate"),
-  put: L("✨ بیخە ناو ژوورەکە", "✨ ضعها في الغرفة", "✨ Put it in the room"),
+  put: L("✨ بیکە بە وێنەی ڕاستەقینە (AI)", "✨ حوّلها إلى صورة حقيقية (AI)", "✨ Make it a real photo (AI)"),
   closeEdit: L("داخستنی دانان", "إغلاق", "Close"),
   maxPics: L("زۆرترین ٣ وێنەی گەڕان لە یەک جاردا", "3 صور بحث كحد أقصى في المرة", "Max 3 search pictures at a time"),
   pano: L("🔄 360°", "🔄 360°", "🔄 360°"),
@@ -110,15 +131,31 @@ const IDEAS = {
   exterior: [L("ڕووکاری مۆدێرن بە بەرد و دار و ڕووناکیی شەو", "واجهة عصرية بالحجر والخشب وإضاءة ليلية", "modern facade with stone, wood and night lights"), L("باخچەی جوان بە چیمەن، گوڵ و ڕێگای بەرد", "حديقة بعشب وزهور وممر حجري", "garden with lawn, flowers and stone path"), L("دەروازە و گەراجی نوێ", "مدخل وكراج جديد", "new entrance and garage")],
   redesign: [L("جوانتر و پڕۆفیشناڵتری بکە", "اجعله أجمل وأكثر احترافية", "make it more beautiful and professional"), L("هەمان شوێن بە شێوازی کوردی", "نفس المكان بطابع كردي", "same place in Kurdish style")],
 };
-// Things to place in the room: [emoji, name, default width %, default height %, English words for the AI]
-const ITEMS = {
-  living: { name: L("دانیشتن", "جلوس", "Seating"), items: [["🛋️", L("قەنەفەی L", "كنبة زاوية", "L sofa"), 42, 26, "large L-shaped sofa"], ["🛋️", L("قەنەفەی ٣ کەسی", "كنبة 3 مقاعد", "3-seat sofa"), 34, 20, "three-seat sofa"], ["🪑", L("کورسیی قەنەفە", "كرسي مريح", "Armchair"), 14, 18, "armchair"], ["🟫", L("مێزی ناوەڕاست", "طاولة وسط", "Coffee table"), 18, 9, "coffee table"], ["📺", L("مێزی تەلەفزیۆن", "وحدة تلفاز", "TV unit"), 34, 18, "TV wall unit with TV"], ["🟥", L("فەرش", "سجادة", "Rug"), 40, 14, "large rug on the floor"]] },
-  bedroom: { name: L("نوستن", "نوم", "Bedroom"), items: [["🛏️", L("قەرەوێڵەی دوو کەسی", "سرير مزدوج", "Double bed"), 38, 26, "king size bed with headboard"], ["🛏️", L("قەرەوێڵەی یەک کەسی", "سرير مفرد", "Single bed"), 22, 22, "single bed"], ["🗄️", L("دۆڵاب", "خزانة ملابس", "Wardrobe"), 24, 40, "tall wardrobe"], ["🟫", L("مێزی تەنیشت قەرەوێڵە", "طاولة جانبية", "Nightstand"), 8, 9, "bedside table with lamp"], ["🪞", L("مێزی ئارایش", "تسريحة", "Dressing table"), 16, 22, "dressing table with mirror"]] },
-  dining: { name: L("چێشتخانە", "مطبخ وطعام", "Kitchen & dining"), items: [["🍽️", L("مێزی نانخواردن", "طاولة طعام", "Dining table"), 32, 20, "dining table with six chairs"], ["🧊", L("سەلاجە", "ثلاجة", "Fridge"), 12, 36, "tall fridge"], ["🍳", L("دوورگەی چێشتخانە", "جزيرة مطبخ", "Kitchen island"), 30, 16, "kitchen island with stools"], ["🪑", L("کورسیی بار", "كرسي بار", "Bar stool"), 7, 16, "bar stool"]] },
-  bath: { name: L("حەمام", "حمام", "Bathroom"), items: [["🛁", L("بانیۆ", "بانيو", "Bathtub"), 30, 16, "freestanding bathtub"], ["🚿", L("دووش", "دش", "Shower"), 18, 40, "glass walk-in shower"], ["🚰", L("دەستشۆر", "مغسلة", "Vanity"), 18, 22, "vanity with sink and mirror"], ["🚽", L("تەوالێت", "مرحاض", "Toilet"), 8, 14, "toilet"]] },
-  light: { name: L("ڕووناکی و ڕازاندنەوە", "إضاءة وديكور", "Lights & decor"), items: [["💡", L("چرای سەقف", "ثريا", "Chandelier"), 16, 16, "elegant chandelier hanging from the ceiling"], ["🛋️", L("گڵۆپی سەر زەوی", "مصباح أرضي", "Floor lamp"), 6, 30, "floor lamp"], ["🪴", L("ڕووەک", "نبتة", "Plant"), 9, 22, "large indoor plant in a pot"], ["🖼️", L("تابلۆ", "لوحة", "Wall art"), 18, 14, "framed wall painting"], ["🪟", L("پەردە", "ستارة", "Curtains"), 24, 50, "floor-length curtains"], ["🪞", L("ئاوێنە", "مرآة", "Mirror"), 10, 22, "wall mirror"], ["📚", L("ڕەفەی کتێب", "رف كتب", "Bookshelf"), 18, 38, "bookshelf with books"], ["💐", L("گوڵدان", "مزهرية", "Flowers"), 6, 10, "vase with flowers"]] },
-  outdoor: { name: L("دەرەوە", "خارجي", "Outdoor"), items: [["🌳", L("درەخت", "شجرة", "Tree"), 16, 40, "tree"], ["🌷", L("گوڵ", "زهور", "Flower bed"), 26, 10, "flower bed"], ["🪑", L("قەنەفەی دەرەوە", "جلسة خارجية", "Outdoor sofa"), 26, 16, "outdoor lounge sofa set"], ["⛱️", L("سێبەرە", "مظلة", "Parasol"), 14, 26, "garden parasol"], ["🏛️", L("پێرگۆلا", "برجولا", "Pergola"), 34, 34, "wooden pergola"], ["🚗", L("ئۆتۆمبێل", "سيارة", "Car"), 30, 20, "modern car"], ["🏮", L("گڵۆپی باخچە", "إنارة حديقة", "Garden light"), 4, 14, "garden light post"], ["🧱", L("پەرژین", "سور", "Fence"), 40, 14, "modern fence"], ["🏊", L("حەوزی مەلە", "مسبح", "Pool"), 40, 16, "swimming pool"]] },
+// "AI draws it" things (no 3D model): [emoji, name, English for the AI, size in metres [w, h, d], hangs from the ceiling]
+const AI_ITEMS = {
+  living: { name: L("دانیشتن", "جلوس", "Seating"), items: [["🛋️", L("قەنەفەی L", "كنبة زاوية", "L sofa"), "large L-shaped sofa", [2.8, 0.85, 1.8]], ["🛋️", L("قەنەفەی ٣ کەسی", "كنبة 3 مقاعد", "3-seat sofa"), "three-seat sofa", [2.2, 0.85, 0.95]], ["🪑", L("کورسیی قەنەفە", "كرسي مريح", "Armchair"), "armchair", [0.85, 0.9, 0.85]], ["🟫", L("مێزی ناوەڕاست", "طاولة وسط", "Coffee table"), "coffee table", [1.2, 0.42, 0.65]], ["📺", L("مێزی تەلەفزیۆن", "وحدة تلفاز", "TV unit"), "TV wall unit with a large TV", [2.2, 1.6, 0.45]], ["🟥", L("فەرش", "سجادة", "Rug"), "large rug on the floor", [2.6, 0.02, 1.8]]] },
+  bedroom: { name: L("نوستن", "نوم", "Bedroom"), items: [["🛏️", L("قەرەوێڵەی دوو کەسی", "سرير مزدوج", "Double bed"), "king size bed with headboard", [1.9, 1.1, 2.15]], ["🛏️", L("قەرەوێڵەی یەک کەسی", "سرير مفرد", "Single bed"), "single bed", [1, 0.9, 2.05]], ["🗄️", L("دۆڵاب", "خزانة ملابس", "Wardrobe"), "tall wardrobe", [2, 2.4, 0.6]], ["🟫", L("مێزی تەنیشت قەرەوێڵە", "طاولة جانبية", "Nightstand"), "bedside table with lamp", [0.5, 0.55, 0.4]], ["🪞", L("مێزی ئارایش", "تسريحة", "Dressing table"), "dressing table with mirror", [1.1, 1.5, 0.45]]] },
+  dining: { name: L("چێشتخانە", "مطبخ وطعام", "Kitchen & dining"), items: [["🍽️", L("مێزی نانخواردن", "طاولة طعام", "Dining table"), "dining table with six chairs", [2, 0.76, 1]], ["🧊", L("سەلاجە", "ثلاجة", "Fridge"), "tall fridge", [0.9, 1.85, 0.7]], ["🍳", L("دوورگەی چێشتخانە", "جزيرة مطبخ", "Kitchen island"), "kitchen island with stools", [2.2, 0.92, 1]]] },
+  bath: { name: L("حەمام", "حمام", "Bathroom"), items: [["🛁", L("بانیۆ", "بانيو", "Bathtub"), "freestanding bathtub", [1.7, 0.6, 0.8]], ["🚿", L("دووش", "دش", "Shower"), "glass walk-in shower", [1, 2.1, 1]], ["🚰", L("دەستشۆر", "مغسلة", "Vanity"), "vanity with sink and mirror", [1, 0.9, 0.5]], ["🚽", L("تەوالێت", "مرحاض", "Toilet"), "toilet", [0.4, 0.8, 0.65]]] },
+  decor: { name: L("ڕووناکی و ڕازاندنەوە", "إضاءة وديكور", "Lights & decor"), items: [["💡", L("چرای سەقف", "ثريا", "Chandelier"), "elegant chandelier hanging from the ceiling", [0.8, 0.7, 0.8], 1], ["🪟", L("پەردە", "ستارة", "Curtains"), "floor-length curtains", [2.4, 2.6, 0.1]], ["🖼️", L("تابلۆ", "لوحة", "Wall art"), "framed wall painting", [1.2, 0.8, 0.05]], ["📚", L("ڕەفەی کتێب", "رف كتب", "Bookshelf"), "bookshelf with books", [1.2, 2, 0.35]]] },
+  outdoor: { name: L("دەرەوە", "خارجي", "Outdoor"), items: [["🌳", L("درەخت", "شجرة", "Tree"), "tree", [3, 5, 3]], ["🌷", L("گوڵ", "زهور", "Flower bed"), "flower bed", [3, 0.4, 1]], ["🪑", L("قەنەفەی دەرەوە", "جلسة خارجية", "Outdoor sofa"), "outdoor lounge sofa set", [2.6, 0.8, 2]], ["⛱️", L("سێبەرە", "مظلة", "Parasol"), "garden parasol", [2.5, 2.5, 2.5]], ["🏛️", L("پێرگۆلا", "برجولا", "Pergola"), "wooden pergola", [4, 2.8, 3.5]], ["🚗", L("ئۆتۆمبێل", "سيارة", "Car"), "modern car", [1.9, 1.5, 4.7]], ["🏮", L("گڵۆپی باخچە", "إنارة حديقة", "Garden light"), "garden light post", [0.3, 1.2, 0.3]], ["🏊", L("حەوزی مەلە", "مسبح", "Pool"), "swimming pool", [4, 0.05, 8]]] },
 };
+// Groups for the real 3D models (matched by words in the model's name / tags / categories)
+const GROUPS = [
+  ["sofa", L("قەنەفە", "كنب", "Sofas"), ["sofa", "couch", "armchair", "loveseat", "ottoman", "pouf"]],
+  ["chair", L("کورسی", "كراسي", "Chairs"), ["chair", "stool", "bench"]],
+  ["table", L("مێز", "طاولات", "Tables"), ["table", "desk"]],
+  ["storage", L("دۆڵاب و ڕەفە", "خزائن ورفوف", "Storage"), ["shelf", "shelves", "cabinet", "drawer", "wardrobe", "dresser", "bookcase", "sideboard", "cupboard", "nightstand", "console"]],
+  ["bed", L("نوستن و حەمام", "نوم وحمام", "Bed & bath"), ["bed", "bathtub", "toilet", "sink", "basin"]],
+  ["light", L("گڵۆپ", "إضاءة", "Lights"), ["lamp", "chandelier", "lantern", "light", "candle"]],
+  ["plant", L("ڕووەک", "نباتات", "Plants"), ["plant", "potted", "flower", "fern", "cactus", "bonsai", "succulent"]],
+  ["decor", L("ڕازاندنەوە", "ديكور", "Decor"), ["vase", "frame", "painting", "picture", "mirror", "rug", "carpet", "clock", "sculpture", "statue", "decor", "decorative", "bowl", "basket", "television", "tv", "speaker", "radio", "book"]],
+  ["outdoor", L("دەرەوە", "خارجي", "Outdoor"), ["tree", "bush", "shrub", "outdoor", "garden", "planter", "fence", "barrel", "street"]],
+];
+const words = (m) => (m.id.replace(/_/g, " ") + " " + m.name + " " + m.tags.join(" ") + " " + m.cats.join(" ")).toLowerCase();
+const groupOf = (m) => { const w = words(m); for (const [k, , keys] of GROUPS) if (keys.some((x) => new RegExp("(^|[^a-z])" + x + "(s|es)?([^a-z]|$)").test(w))) return k; return null; };
+const hangs = (m) => /chandelier|ceiling|pendant|hanging/.test(words(m));
+const onWall = (m) => /(^|[^a-z])(frame|painting|picture|mirror|clock|wall)([^a-z]|$)/.test(words(m)) && !/table|chair|sofa|cabinet/.test(words(m));
 const ICON = { interior: "🛋️", exterior: "🏡", plan: "📐", redesign: "✨", chat: "💬" };
 
 function shrink(file, max, q = 0.86) {
@@ -313,7 +350,12 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
   async function openEditor() {
     if (!base || busy) return;
     setError("");
-    try { const { ratio } = await smallOf(base.src); setEditing({ src: base.src, ratio }); }
+    try {
+      // a local copy of the picture, so the 3D mock-up can be saved together with it
+      const src = base.src.startsWith("data:") ? base.src : await toDataUrl(await (await fetch(base.src)).blob());
+      const { ref, ratio } = await smallOf(src);
+      setEditing({ src, ratio, ref });
+    }
     catch { setError(tx("e_bad_image")); }
   }
   // furnish: the AI puts the placed objects into the picture. pano: the picture becomes a 360° view.
@@ -322,7 +364,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
     setBusy("p_prep"); setError("");
     let ok = false;
     try {
-      const { ref, ratio } = await smallOf(editing?.src || base.src);
+      const { ref, ratio } = editing ? editing : await smallOf(base.src);
       setBusy("p_make");
       const r = await api({ action: "make", mode, tool, style, ref, ratio, ...extra,
         original: projectId ? undefined : photo?.original, project: projectId || undefined });
@@ -356,7 +398,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
           {quota && quota.left != null && <p className="house-quota">{(quota.pro ? tx("leftPro") : tx("left")).replace("{n}", quota.left)}</p>}
           {error && <p className="learn-err" role="alert">{error}</p>}
           <Furnish base={editing} tool={tool} tx={tx} T={T} api={api} busy={busy} out={quota && quota.left != null && quota.left < 1} onUpgrade={onUpgrade}
-            onMake={async (items, itemRefs) => { if (await makeFrom("furnish", { items, itemRefs })) setEditing(null); }} />
+            onMake={async (extra) => { if (await makeFrom("compose", extra)) setEditing(null); }} />
         </div>
       </div>
     );
@@ -472,158 +514,233 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
 
 const result0 = (rs, i) => (rs[i] && !rs[i].pano ? rs[i] : null);
 
-// "Furnish it yourself": put furniture on the photo, move and resize it, then the AI builds it into the room.
-let uid = 0;
+// "Furnish it yourself" in 3D: real 3D furniture stands on the floor of the user's photo in true perspective.
+// Move with one finger, pinch to resize, twist to turn. Then the AI turns the mock-up into a real photograph.
 function Furnish({ base, tool, tx, T, api, busy, out, onUpgrade, onMake }) {
-  const [items, setItems] = useState([]); // { id, emoji, label, en, x, y, w, h, note, img, data }
-  const [act, setAct] = useState(null);
-  const [tab, setTab] = useState("catalog");
-  const [cat, setCat] = useState(tool === "exterior" ? "outdoor" : "living");
+  const cv = useRef(null), photoRef = useRef(null), boxRef = useRef(null), room = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [sel, setSel] = useState(null);
+  const [placed, setPlaced] = useState([]);
+  const [loading, setLoading] = useState(0);
+  const [tab, setTab] = useState("3d");
+  const [lib, setLib] = useState(null); // 3D models list, or "off"
+  const [grp, setGrp] = useState(tool === "exterior" ? "outdoor" : "sofa");
+  const [aiCat, setAiCat] = useState(tool === "exterior" ? "outdoor" : "living");
   const [q, setQ] = useState("");
   const [found, setFound] = useState(null);
   const [searching, setSearching] = useState(false);
   const [grabbing, setGrabbing] = useState("");
   const [msg, setMsg] = useState("");
-  const box = useRef(null);
-  const moving = useRef(null);
-  const withPic = items.filter((i) => i.data).length;
+  const [view, setView] = useState({ height: 1.45, tilt: 14, fov: 55 });
+  const [saving, setSaving] = useState(false);
 
-  const add = (it) => {
-    const n = items.length % 5;
-    const w = Math.min(90, it.w), h = Math.min(90, it.h);
-    const x = Math.max(0, Math.min(100 - w, 50 - w / 2 + (n - 2) * 4));
-    const y = Math.max(0, Math.min(100 - h, 62 - h / 2 + (n - 2) * 3));
-    const id = ++uid;
-    setItems((xs) => [...xs, { note: "", ...it, id, w, h, x, y }].slice(0, 12));
-    setAct(id);
-  };
-  const upd = (id, ch) => setItems((xs) => xs.map((i) => (i.id === id ? { ...i, ...ch } : i)));
-  const del = (id) => { setItems((xs) => xs.filter((i) => i.id !== id)); setAct(null); };
+  // start the 3D view
+  useEffect(() => {
+    let dead = false, ro;
+    import("../lib/room3d").then(({ Room3D }) => {
+      if (dead || !cv.current) return;
+      try {
+        const r = new Room3D(cv.current, { onSelect: setSel, onChange: setPlaced });
+        room.current = r;
+        const fit = () => { const b = boxRef.current?.getBoundingClientRect(); if (b) r.resize(Math.round(b.width), Math.round(b.height)); };
+        fit();
+        ro = new ResizeObserver(fit);
+        ro.observe(boxRef.current);
+        setReady(true);
+      } catch { setMsg(tx("e_3d")); }
+    }).catch(() => setMsg(tx("e_3d")));
+    return () => { dead = true; ro?.disconnect(); room.current?.dispose(); room.current = null; };
+  }, []);
+  // the 3D library
+  useEffect(() => {
+    api({ action: "models" }).then((j) => setLib((j.models || []).map((m) => ({ ...m, g: groupOf(m) })))).catch(() => setLib("off"));
+  }, []);
 
-  const down = (e, it, kind) => {
-    e.stopPropagation(); e.preventDefault();
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    setAct(it.id);
-    moving.current = { id: it.id, kind, sx: e.clientX, sy: e.clientY, start: { ...it } };
-  };
-  const move = (e) => {
-    const m = moving.current, r = box.current?.getBoundingClientRect();
-    if (!m || !r) return;
-    const dx = ((e.clientX - m.sx) / r.width) * 100, dy = ((e.clientY - m.sy) / r.height) * 100, s = m.start;
-    if (m.kind === "move") upd(m.id, { x: Math.max(0, Math.min(100 - s.w, s.x + dx)), y: Math.max(0, Math.min(100 - s.h, s.y + dy)) });
-    else upd(m.id, { w: Math.max(3, Math.min(100 - s.x, s.w + dx)), h: Math.max(3, Math.min(100 - s.y, s.h + dy)) });
-  };
-  const up = () => { moving.current = null; };
-
+  const R = () => room.current;
+  async function addModel(m) {
+    if (!R() || placed.length >= 16) return;
+    setLoading((n) => n + 1); setMsg("");
+    try {
+      const f = await api({ action: "model", id: m.id });
+      await R().addModel({ ...f, name: m.name, label: m.name, hang: hangs(m), wall: onWall(m) });
+    } catch { setMsg(tx("e_model")); }
+    setLoading((n) => n - 1);
+  }
+  function addAi([emoji, label, en, size, hang]) {
+    if (!R() || placed.length >= 16) return;
+    R().addGhost({ name: en, label: emoji + " " + T(label), size, hang: !!hang });
+  }
   async function search(e) {
     e?.preventDefault();
     if (!q.trim() || searching) return;
     setSearching(true); setMsg("");
-    try { const j = await api({ action: "search", q: q.trim() }); setFound(j); }
-    catch { setFound({ results: [] }); }
+    try { setFound(await api({ action: "search", q: q.trim() })); }
+    catch { setFound({ results: [], models: [] }); }
     setSearching(false);
   }
-  async function pick(r) {
-    if (withPic >= 3) { setMsg(tx("maxPics")); return; }
+  async function pickPicture(r) {
+    if (!R() || placed.length >= 16) return;
     setGrabbing(r.thumb); setMsg("");
     try {
       const blob = await api({ action: "grab", url: r.thumb });
-      const s = await shrink(new File([blob], "item.jpg", { type: blob.type || "image/jpeg" }), 496, 0.82);
-      const ar = s.w / s.h;
-      const w = 24, h = Math.max(8, Math.min(50, (w / ar) * (base.ratio || 1.5)));
-      add({ emoji: "🖼️", label: r.title || found?.q || q, en: found?.q || q, w, h, img: "data:image/jpeg;base64," + s.data, data: s.data });
+      const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = URL.createObjectURL(blob); });
+      const { cutout } = await import("../lib/room3d");
+      const c = cutout(img);
+      URL.revokeObjectURL(img.src);
+      await R().addPicture({ src: c.url, name: found?.q || r.title || q, label: r.title || found?.q || q });
     } catch { setMsg(tx("e_bad_image")); }
     setGrabbing("");
   }
-  function submit() {
-    const refs = [];
-    const list = items.map((i) => {
-      let ref = -1;
-      if (i.data && refs.length < 3) { ref = refs.length; refs.push(i.data); }
-      return { name: i.en, note: i.note, ref, x: +i.x.toFixed(1), y: +i.y.toFixed(1), w: +i.w.toFixed(1), h: +i.h.toFixed(1) };
-    });
-    onMake(list, refs);
+  const changeView = (ch) => { const v = { ...view, ...ch }; setView(v); R()?.setView(v); };
+
+  async function snapshot(longSide) {
+    const img = photoRef.current;
+    if (!img?.complete) throw new Error("bad_image");
+    return R().snapshot(img, longSide);
   }
-  const cur = items.find((i) => i.id === act);
+  async function saveMock() {
+    if (!R() || saving) return;
+    setSaving(true);
+    try { const { canvas } = await snapshot(1600); await saveFile(canvas.toDataURL("image/jpeg", 0.92), "AHM-AI-3D-room.jpg"); }
+    catch { setMsg(tx("e_bad_image")); }
+    setSaving(false);
+  }
+  async function submit() {
+    if (!R() || busy) return;
+    try {
+      const { canvas, ghosts } = await snapshot(1024);
+      const s = Math.min(1, 496 / Math.max(canvas.width, canvas.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(canvas.width * s); c.height = Math.round(canvas.height * s);
+      c.getContext("2d").drawImage(canvas, 0, 0, c.width, c.height);
+      const ref = c.toDataURL("image/jpeg", 0.85).split(",")[1];
+      const items = R().items.filter((i) => i.kind !== "ghost").map((i) => i.name);
+      onMake({ ref, room: base.ref, items, ghosts });
+    } catch { setMsg(tx("e_bad_image")); }
+  }
+
+  const shown = Array.isArray(lib) ? lib.filter((m) => m.g === grp) : [];
+  const groups = Array.isArray(lib) ? GROUPS.filter(([k]) => lib.some((m) => m.g === k)) : [];
+  const full = placed.length >= 16;
+  const ModelCard = ({ m }) => (
+    <button disabled={!ready || full} onClick={() => addModel(m)} title={m.name}>
+      <img src={m.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" />
+      <small>{m.name}</small><em>3D</em>
+    </button>
+  );
 
   return (
     <div className="ds-work fu">
       <div className="ds-stage">
-        <div className={"fu-box" + (busy ? " working" : "")} dir="ltr" ref={box} style={{ aspectRatio: String(base.ratio || 1.5), width: `min(100%, calc(72vh * ${base.ratio || 1.5}))` }}
-          onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerDown={() => setAct(null)}>
-          <img src={base.src} alt="" draggable={false} />
-          {items.map((it) => (
-            <div key={it.id} className={"fu-item" + (act === it.id ? " on" : "") + (it.img ? " pic" : "")}
-              style={{ left: it.x + "%", top: it.y + "%", width: it.w + "%", height: it.h + "%" }}
-              onPointerDown={(e) => down(e, it, "move")} role="button" aria-label={T(it.label) || it.label} tabIndex={0}
-              onKeyDown={(e) => { const st = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]; if (st) { e.preventDefault(); upd(it.id, { x: Math.max(0, Math.min(100 - it.w, it.x + st[0])), y: Math.max(0, Math.min(100 - it.h, it.y + st[1])) }); } if (e.key === "Delete") del(it.id); }}>
-              {it.img ? <img src={it.img} alt="" draggable={false} /> : <span className="fu-emo">{it.emoji}</span>}
-              <em>{typeof it.label === "string" ? it.label : T(it.label)}</em>
-              {act === it.id && <>
-                <button className="fu-x" aria-label={tx("remove")} onPointerDown={(e) => e.stopPropagation()} onClick={() => del(it.id)}>×</button>
-                <i className="fu-rs" onPointerDown={(e) => down(e, it, "size")} aria-hidden="true" />
-              </>}
-            </div>
-          ))}
+        <div className={"fu-box" + (busy ? " working" : "")} dir="ltr" ref={boxRef}
+          style={{ aspectRatio: String(base.ratio || 1.5), width: `min(100%, calc(70vh * ${base.ratio || 1.5}))` }}>
+          <img ref={photoRef} src={base.src} alt="" draggable={false} />
+          <canvas ref={cv} className="fu-cv" aria-label={tx("fu3dHelp")} />
+          {!ready && !msg && <div className="fu-loading"><span className="mini-spin" /></div>}
+          {loading > 0 && <div className="fu-loading chip"><span className="mini-spin" /> {tx("loading3d")}</div>}
           {busy && <div className="ds-progress"><span className="mini-spin" /> {tx(busy)}<i /></div>}
         </div>
-        <p className="cs-note">{tx("furnishHelp")}</p>
-        {cur && (
+        <p className="cs-note">{tx("fu3dHelp")}</p>
+        {sel && (
           <div className="fu-edit">
-            <b>{cur.emoji} {typeof cur.label === "string" ? cur.label : T(cur.label)}</b>
-            <input value={cur.note} maxLength={80} onChange={(e) => upd(cur.id, { note: e.target.value })} placeholder={tx("noteFPh")} aria-label={tx("noteF")} />
-            <button className="ghost-btn" onClick={() => add({ ...cur, id: undefined })}>{tx("dup")}</button>
-            <button className="ghost-btn" onClick={() => del(cur.id)}>{tx("remove")}</button>
+            <b>{sel.label} <small dir="ltr">≈ {sel.kind === "picture" ? `${sel.w} × ${sel.h}` : `${sel.w} × ${sel.d} × ${sel.h}`} {tx("m")}</small></b>
+            <label className="fu-row"><span>{tx("size")}</span>
+              <button className="fu-step" onClick={() => R()?.set(sel.id, { scale: sel.scale / 1.1 })} aria-label="−">−</button>
+              <input type="range" min="0.2" max="4" step="0.01" value={sel.scale} onChange={(e) => R()?.set(sel.id, { scale: +e.target.value })} />
+              <button className="fu-step" onClick={() => R()?.set(sel.id, { scale: sel.scale * 1.1 })} aria-label="+">+</button>
+            </label>
+            <label className="fu-row"><span>{tx("turn")}</span>
+              <button className="fu-step" onClick={() => R()?.set(sel.id, { rot: sel.rot - 45 })} aria-label="⟲">⟲</button>
+              <input type="range" min="0" max="359" step="1" value={sel.rot} onChange={(e) => R()?.set(sel.id, { rot: +e.target.value })} />
+              <button className="fu-step" onClick={() => R()?.set(sel.id, { rot: sel.rot + 45 })} aria-label="⟳">⟳</button>
+            </label>
+            <label className="fu-row"><span>{tx("lift")}</span>
+              <input type="range" min="0" max="3" step="0.01" value={sel.lift} onChange={(e) => R()?.set(sel.id, { lift: +e.target.value })} />
+              <i dir="ltr">{sel.lift.toFixed(2)} {tx("m")}</i>
+            </label>
+            <div className="fu-btns">
+              <button className="ghost-btn" disabled={full} onClick={() => R()?.duplicate(sel.id)}>{tx("dup")}</button>
+              <button className="ghost-btn" onClick={() => R()?.remove(sel.id)}>{tx("remove")}</button>
+            </div>
           </div>
         )}
+        <details className="ds-adv fu-fit" onToggle={(e) => R()?.showGrid(e.currentTarget.open)}>
+          <summary>{tx("fit")}</summary>
+          <p className="cs-note">{tx("fitHelp")}</p>
+          <label className="fu-row"><span>{tx("camH")}</span><input type="range" min="0.6" max="2.6" step="0.01" value={view.height} onChange={(e) => changeView({ height: +e.target.value })} /><i dir="ltr">{view.height.toFixed(2)} {tx("m")}</i></label>
+          <label className="fu-row"><span>{tx("tiltL")}</span><input type="range" min="0" max="50" step="0.5" value={view.tilt} onChange={(e) => changeView({ tilt: +e.target.value })} /><i dir="ltr">{view.tilt}°</i></label>
+          <label className="fu-row"><span>{tx("lens")}</span><input type="range" min="30" max="85" step="1" value={view.fov} onChange={(e) => changeView({ fov: +e.target.value })} /><i dir="ltr">{view.fov}°</i></label>
+        </details>
       </div>
 
       <div className="ds-panel house-card">
         <div className="seg lang-seg fu-tabs">
-          <button className={tab === "catalog" ? "on" : ""} onClick={() => setTab("catalog")}>{tx("catalog")}</button>
+          <button className={tab === "3d" ? "on" : ""} onClick={() => setTab("3d")}>{tx("tab3d")}</button>
           <button className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>{tx("search")}</button>
+          <button className={tab === "ai" ? "on" : ""} onClick={() => setTab("ai")}>{tx("tabAi")}</button>
         </div>
-        {tab === "catalog" ? (
-          <>
-            <div className="house-chips">
-              {Object.entries(ITEMS).map(([k, c]) => <button key={k} className={cat === k ? "on" : ""} aria-pressed={cat === k} onClick={() => setCat(k)}>{T(c.name)}</button>)}
-            </div>
-            <div className="fu-grid">
-              {ITEMS[cat].items.map(([emoji, label, w, h, en], i) => (
-                <button key={i} disabled={items.length >= 12} onClick={() => add({ emoji, label: T(label), en, w, h })}>
-                  <span>{emoji}</span><small>{T(label)}</small>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
+
+        {tab === "3d" && (lib === null ? <div className="fu-models">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="ds-card skeleton" />)}</div>
+          : lib === "off" ? <p className="house-warn">{tx("e_models_off")}</p> : (
+            <>
+              <div className="house-chips">
+                {groups.map(([k, name]) => <button key={k} className={grp === k ? "on" : ""} aria-pressed={grp === k} onClick={() => setGrp(k)}>{T(name)}</button>)}
+              </div>
+              <div className="fu-models">{shown.map((m) => <ModelCard key={m.id} m={m} />)}</div>
+              {!shown.length && <p className="muted">{tx("searchNone")}</p>}
+            </>
+          ))}
+
+        {tab === "search" && (
           <>
             <form className="fu-search" onSubmit={search}>
               <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 80))} placeholder={tx("searchPh")} enterKeyHint="search" />
               <button className="gold-btn small" disabled={!q.trim() || searching}>{searching ? <span className="mini-spin" /> : "🔍"}</button>
             </form>
-            {found && !found.results?.length && <p className="muted">{tx("searchNone")}</p>}
-            {found?.results?.length > 0 && (
+            {found && !found.results?.length && !found.models?.length && <p className="muted">{tx("searchNone")}</p>}
+            {found?.models?.length > 0 && <>
+              <p className="sl-label">{tx("res3d")} ({found.models.length})</p>
+              <div className="fu-models">{found.models.map((m) => <ModelCard key={m.id} m={m} />)}</div>
+            </>}
+            {found?.results?.length > 0 && <>
+              <p className="sl-label">{tx("resPics")} ({found.results.length})</p>
               <div className="fu-found">
                 {found.results.map((r, i) => (
-                  <button key={i} disabled={!!grabbing || items.length >= 12} onClick={() => pick(r)} title={[r.title, r.credit, r.license].filter(Boolean).join(" · ")}>
+                  <button key={i} disabled={!!grabbing || !ready || full} onClick={() => pickPicture(r)} title={[r.title, r.credit, r.license].filter(Boolean).join(" · ")}>
                     <img src={r.thumb} alt={r.title} loading="lazy" referrerPolicy="no-referrer" />
                     {grabbing === r.thumb && <span className="mini-spin" />}
                     <small>{r.credit ? "© " + r.credit : r.source}{r.license ? " · " + r.license.toUpperCase() : ""}</small>
                   </button>
                 ))}
               </div>
-            )}
+            </>}
             <p className="cs-note">{tx("searchNote")}</p>
           </>
         )}
+
+        {tab === "ai" && (
+          <>
+            <p className="cs-note">{tx("aiHelp")}</p>
+            <div className="house-chips">
+              {Object.entries(AI_ITEMS).map(([k, c]) => <button key={k} className={aiCat === k ? "on" : ""} aria-pressed={aiCat === k} onClick={() => setAiCat(k)}>{T(c.name)}</button>)}
+            </div>
+            <div className="fu-grid">
+              {AI_ITEMS[aiCat].items.map((it, i) => (
+                <button key={i} disabled={!ready || full} onClick={() => addAi(it)}><span>{it[0]}</span><small>{T(it[1])}</small></button>
+              ))}
+            </div>
+          </>
+        )}
+
         {msg && <p className="house-warn">{msg}</p>}
-        {items.length > 0 && <p className="sl-label">{tx("placed")}: {items.length}/12</p>}
+        {placed.length > 0 && <p className="sl-label">{tx("placed")}: {placed.length}/16</p>}
         {out ? <button className="gold-btn" onClick={onUpgrade}>{tx("getPro")}</button> : (
-          <button className="gold-btn ds-make" disabled={!items.length || !!busy} onClick={submit}>
+          <button className="gold-btn ds-make" disabled={!placed.length || !!busy || !ready} onClick={submit}>
             {busy ? <><span className="mini-spin" /> {tx(busy)}</> : tx("put")}
           </button>
         )}
+        <button className="ghost-btn fu-save" disabled={!placed.length || !ready || saving} onClick={saveMock}>{tx("saveMock")}</button>
+        <p className="cs-note">{tx("credit3d")}</p>
       </div>
     </div>
   );

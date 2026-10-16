@@ -1575,3 +1575,28 @@ header { position: relative; z-index: 5; }
 .fu-found img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }
 .fu-found small { font-size: 9.5px; padding: 0 5px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
 .fu-found .mini-spin { position: absolute; top: 8px; left: 8px; }
+/* 3D room editor */
+.fu-cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block; }
+.fu-cv:active { cursor: grabbing; }
+.fu-loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.fu-loading.chip { inset: 12px auto auto 12px; display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 999px; background: rgba(8,10,14,.8); color: #fff; font-size: 13px; }
+.fu-edit .fu-row, .fu-fit .fu-row { flex: 1 1 100%; }
+.fu-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 2px 0; }
+.fu-row > span { min-width: 74px; opacity: .85; }
+.fu-row input[type=range] { flex: 1; min-width: 0; accent-color: var(--gold, #d8b26a); height: 32px; }
+.fu-row i { font-style: normal; font-size: 12px; opacity: .75; min-width: 50px; text-align: center; }
+.fu-step { width: 40px; height: 40px; flex: none; border-radius: 12px; border: 1px solid var(--line, rgba(127,127,127,.25)); background: var(--surface, transparent); color: inherit; font-size: 20px; cursor: pointer; }
+.fu-btns { display: flex; gap: 8px; flex: 1 1 100%; }
+.fu-edit b small { font-weight: 500; opacity: .7; font-size: 12px; margin-inline-start: 6px; }
+.fu-fit { margin-top: 4px; }
+.fu-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; max-height: 52vh; overflow: auto; padding: 2px; }
+.fu-models .ds-card.skeleton { aspect-ratio: 1; min-height: 0; }
+.fu-models button { position: relative; display: grid; gap: 2px; padding: 0 0 6px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line, rgba(127,127,127,.2)); background: linear-gradient(180deg, #f4f1ec, #e2ddd5); color: #222; cursor: pointer; font: inherit; }
+.fu-models button:hover:not(:disabled) { border-color: var(--gold, #d8b26a); box-shadow: 0 0 0 2px var(--gold, #d8b26a); }
+.fu-models button:disabled { opacity: .5; }
+.fu-models img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }
+.fu-models small { font-size: 11px; line-height: 1.25; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: ltr; }
+.fu-models em { position: absolute; top: 6px; left: 6px; font-style: normal; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: #111; color: #ffd27a; }
+.fu-found { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-height: 60vh; }
+.fu-found small { font-size: 10.5px; padding: 2px 6px 5px; }
+.fu-save { width: 100%; margin-top: 8px; min-height: 46px; }
