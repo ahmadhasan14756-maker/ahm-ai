@@ -1322,9 +1322,10 @@ header { position: relative; z-index: 5; }
 @media (min-width: 900px) {
   .caps .cap:last-child:nth-child(odd) { grid-column: auto; }
   main > .empty { max-width: 980px; }
-  .caps:has(> .cap:nth-child(5)) { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: 940px; }
-  .caps:has(> .cap:nth-child(5)) > .cap { grid-column: span 2; }
-  .caps:has(> .cap:nth-child(5)) > .cap:nth-child(4) { grid-column: 2 / span 2; }
+  .caps:has(> .cap:nth-child(5):last-child) { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: 940px; }
+  .caps:has(> .cap:nth-child(5):last-child) > .cap { grid-column: span 2; }
+  .caps:has(> .cap:nth-child(5):last-child) > .cap:nth-child(4) { grid-column: 2 / span 2; }
+  .caps:has(> .cap:nth-child(6)) { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 940px; }
 }
 :root[data-theme="d"] .bubble strong { background: linear-gradient(transparent 66%, rgb(230 172 72 / .16) 0); }
 
@@ -1430,3 +1431,35 @@ header { position: relative; z-index: 5; }
 .house-plans .muted.small { margin: 0; }
 .hr-name.with-floor { grid-template-columns: 82px 96px minmax(0, 1fr); }
 @media (max-width: 520px) { .hr-name.with-floor { grid-template-columns: 1fr 1fr; } .hr-name.with-floor input { grid-column: 1 / -1; } }
+
+/* ---------- 🎞️ presentation designer ---------- */
+.cap .cap-emoji { font-size: 22px; line-height: 1; box-sizing: content-box; width: 22px; height: 22px; padding: 9px; border-radius: 12px; background: rgb(var(--gold-rgb) / .12); display: grid; place-items: center; margin-bottom: 4px; }
+.slides-cap b { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sl-label { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }
+.sl-styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 700px) { .sl-styles { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.sl-styles button { border: 2px solid var(--line); background: var(--surface-2); border-radius: 14px; padding: 6px; cursor: pointer; font: inherit; color: var(--text); text-align: center; }
+.sl-styles button.on { border-color: var(--gold); box-shadow: 0 0 0 3px rgb(var(--gold-rgb) / .15); }
+.sl-styles i { display: flex; flex-direction: column; justify-content: center; gap: 6px; aspect-ratio: 16 / 9; border-radius: 9px; padding: 0 14%; margin-bottom: 5px; }
+.sl-styles i b { display: block; height: 5px; border-radius: 3px; width: 35%; }
+.sl-styles span { font-size: 12.5px; }
+.sl-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sl-bar .gold-btn.small { margin: 0; }
+.sl-bar .ghost-btn { width: auto; margin: 0; min-height: 44px; padding: 0 14px; }
+.sl-main { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.sl-main img, .sl-wait { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-md); box-shadow: var(--e3); display: block; }
+.sl-wait { display: grid; place-items: center; background: var(--surface-2); }
+.sl-main figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; }
+.sl-main figcaption .ghost-btn { width: auto; margin: 0; min-height: 40px; padding: 0 14px; }
+.sl-thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: thin; }
+.sl-thumbs button { position: relative; flex: 0 0 132px; aspect-ratio: 16 / 9; border-radius: 10px; border: 2px solid transparent; padding: 0; overflow: hidden; background: var(--surface-2); cursor: pointer; display: grid; place-items: center; }
+.sl-thumbs button.on { border-color: var(--gold); }
+.sl-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sl-thumbs em { position: absolute; bottom: 4px; inset-inline-start: 4px; font-style: normal; font-size: 11px; font-weight: 700; background: rgba(0,0,0,.6); color: #fff; border-radius: 6px; padding: 0 6px; }
+.sl-ask, .sl-edit textarea { width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--text); border-radius: var(--r-sm); padding: 10px 12px; font: inherit; font-size: 15px; resize: vertical; outline: none; }
+.house-card summary { cursor: pointer; list-style: none; }
+.house-card summary::-webkit-details-marker { display: none; }
+.house-card summary h3 { display: inline; }
+.house-card summary::after { content: " ▾"; color: var(--muted); }
+.house-meta select { width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--text); border-radius: var(--r-sm); padding: 10px 12px; font: inherit; font-size: 15px; }
+.house-reset { width: auto; align-self: flex-start; margin: 0; min-height: 38px; padding: 0 14px; font-size: 13.5px; }

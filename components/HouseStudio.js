@@ -27,6 +27,7 @@ const TX = {
   floorN: { ckb: "نهۆمی {n}", ar: "الطابق {n}", en: "Floor {n}" },
   addFloor: { ckb: "➕ نەخشەی نهۆمێکی تر زیاد بکە", ar: "➕ أضف مخطط طابق آخر", en: "➕ Add another floor's plan" },
   floorsHint: { ckb: "ئەگەر خانووەکە چەند نهۆمە، نەخشەی هەر نهۆمێک وەک وێنەیەکی جیا دابنێ (یەکەم = نهۆمی خوارەوە). ئەگەر هەموو نهۆمەکان لە یەک وێنەدان، یەک وێنە بەسە.", ar: "إن كان المنزل عدة طوابق، ضع مخطط كل طابق كصورة منفصلة (الأولى = الأرضي). إن كانت كل الطوابق في صورة واحدة فصورة واحدة تكفي.", en: "For a house with several floors, add each floor's plan as its own picture (first = ground floor). If all floors are in one picture, one picture is enough." },
+  restart: { ckb: "↺ دەستپێکردنەوە بە نەخشەیەکی تر", ar: "↺ ابدأ بمخطط آخر", en: "↺ Start again with another plan" },
   remove: { ckb: "لابردن", ar: "إزالة", en: "Remove" },
   area: { ckb: "ڕووبەر (م²)", ar: "المساحة (م²)", en: "Area (m²)" },
   unclear: { ckb: "⚠️ ئەمانە ڕوون نەبوون، تکایە بیانپشکنە:", ar: "⚠️ هذه غير واضحة، تحقق منها:", en: "⚠️ These were not clear, please check:" },
@@ -83,7 +84,7 @@ const TX = {
   v_guest: { ckb: "ژووری میوان", ar: "غرفة الضيوف", en: "Guest room" },
   v_bedroom: { ckb: "ژووری نوستن", ar: "غرفة النوم", en: "Bedroom" },
   v_kitchen: { ckb: "چێشتخانە و نانخواردن", ar: "المطبخ والطعام", en: "Kitchen & dining" },
-  v_bath: { ckb: "حەمام و شاوەر", ar: "الحمام والدش", en: "Bathroom" },
+  v_bath: { ckb: "حەمام و دووش", ar: "الحمام والدش", en: "Bathroom" },
   v_garage: { ckb: "گەراج", ar: "الكراج", en: "Garage" },
   v_garden: { ckb: "باخچە و گوڵ", ar: "الحديقة والزهور", en: "Garden" },
   t_living: { ckb: "هۆڵی دانیشتن", ar: "معيشة", en: "Living" }, t_guest: { ckb: "ژووری میوان", ar: "ضيوف", en: "Guest" },
@@ -93,7 +94,7 @@ const TX = {
   t_yard: { ckb: "حەوشە", ar: "فناء", en: "Yard" }, t_hall: { ckb: "ڕاڕەو", ar: "ممر", en: "Hall" },
   t_stairs: { ckb: "پەیژە", ar: "درج", en: "Stairs" }, t_storage: { ckb: "کۆگا", ar: "مخزن", en: "Storage" },
   t_office: { ckb: "ئۆفیس", ar: "مكتب", en: "Office" }, t_laundry: { ckb: "جلشۆر", ar: "غسيل", en: "Laundry" },
-  t_balcony: { ckb: "بالکۆن", ar: "شرفة", en: "Balcony" }, t_other: { ckb: "تر", ar: "أخرى", en: "Other" },
+  t_balcony: { ckb: "بالکۆن", ar: "شرفة", en: "Balcony" }, t_other: { ckb: "هی تر", ar: "أخرى", en: "Other" },
 };
 const TYPES = ["living", "guest", "bedroom", "kitchen", "dining", "bath", "garage", "garden", "yard", "hall", "stairs", "storage", "office", "laundry", "balcony", "other"];
 // Pictures are made only for what is in the user's plan: the outside, a 3D view of the plan, and each room ("r0", "r1", …).
@@ -198,8 +199,19 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
   useEffect(() => { refreshQuota(); }, []);
   const errText = (code) => TX["e_" + code] ? tx("e_" + code) : tx("e_net");
 
-  // A plan sent straight from a construction answer: use it right away.
-  useEffect(() => { if (initialPlan) takeFile(initialPlan); }, [initialPlan]);
+  // A plan sent straight from a construction answer: use it right away. Otherwise bring back the last project.
+  useEffect(() => {
+    if (initialPlan) { takeFile(initialPlan); return; }
+    try {
+      const d = JSON.parse(localStorage.getItem("ahm-house-v1") || "null");
+      if (d?.planImgs?.length) { setPlanImgs(d.planImgs); setWish(d.wish || ""); if (d.plan?.rooms?.length) { setPlan(d.plan); setInfo(d.info || { notes: [], unclear: [], entrance: "" }); setViews(d.views || []); setStep("rooms"); } }
+    } catch {}
+  }, [initialPlan]);
+  // keep the plan pictures and the checked rooms (not the made pictures — they are too big), so nothing is lost
+  useEffect(() => {
+    const id = setTimeout(() => { try { localStorage.setItem("ahm-house-v1", JSON.stringify({ planImgs, wish, plan, info, views })); } catch { try { localStorage.removeItem("ahm-house-v1"); } catch {} } }, 600);
+    return () => clearTimeout(id);
+  }, [planImgs, wish, plan, info, views]);
   async function onFile(e) {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -435,6 +447,9 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
           {tx("back")}
         </button>
         <h2 className="house-h">🏡 {tx("title")}</h2>
+        {(planImgs.length > 0 || plan) && !busy && (
+          <button className="ghost-btn house-reset" onClick={() => { setPlanImgs([]); setPlan(null); setPics({}); setBoards({}); setTops({}); setStep("upload"); try { localStorage.removeItem("ahm-house-v1"); } catch {} }}>{tx("restart")}</button>
+        )}
         {step === "upload" && <p className="muted house-sub">{tx("sub")}</p>}
         {quotaLine && <p className="house-quota">{quotaLine}</p>}
         {error && <p className="learn-err" role="alert">{error}</p>}

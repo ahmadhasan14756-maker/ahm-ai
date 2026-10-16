@@ -11,6 +11,7 @@ import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
 import Learn from "../components/Learn";
 import HouseStudio from "../components/HouseStudio";
+import SlidesStudio from "../components/SlidesStudio";
 import VoiceMode from "../components/VoiceMode";
 import Landing from "../components/Landing";
 import { quickGuess } from "../lib/intent";
@@ -2417,7 +2418,7 @@ function Main({ session }) {
             <img src="/icon-192.png" alt="" aria-hidden="true" />
             <span className="brand-name">AHM <b>AI</b></span>
           </div>
-          <div className="head-title" dir="auto">{view === "learn" ? t("learnLang") : view === "house" ? t("houseCta") : active.title || toolName || t("newChat")}</div>
+          <div className="head-title" dir="auto">{view === "learn" ? t("learnLang") : view === "house" ? t("houseCta") : view === "slides" ? t("capSlides") : active.title || toolName || t("newChat")}</div>
           <div className="head-tools">
             {me && (
               <button className={"quota-pill" + (me.unlimited || me.pro ? " pro" : "") + (me.lockedUntil ? " wait" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })}>
@@ -2457,6 +2458,8 @@ function Main({ session }) {
         {view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
             onLimit={() => showLimit()} />
+        ) : view === "slides" ? (
+          <SlidesStudio lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : view === "house" ? (
           <HouseStudio key={housePlan ? housePlan.size : 0} lang={lang} getToken={token} initialPlan={housePlan} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : (
@@ -2475,6 +2478,7 @@ function Main({ session }) {
                         <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
                         <button className="cap" onClick={() => openVoice()}><Svg d={Icon.wave} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
                         <button className="cap construct-cap" onClick={() => chooseTool("construct")}><Svg d={Icon.house} /><b>{t("capConstruct")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capConstructSub")}</span></button>
+                        <button className="cap slides-cap" onClick={() => { if (!busy) { setView("slides"); setSideOpen(false); } }}><span className="cap-emoji" aria-hidden="true">🎞️</span><b>{t("capSlides")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capSlidesSub")}</span></button>
                         <button className="cap learn-cap" onClick={openLearn}><Svg d={Icon.learn} /><b>{t("learnLang")}</b><span>{t("learnLangSub")}</span></button>
                       </div>
                       <p className="auto-hint">{t("autoHint")}</p>
