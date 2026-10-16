@@ -6,7 +6,7 @@
 // Picture service: Cloudflare Workers AI (FLUX.2 klein) with the user's photo as reference — free daily quota.
 import { getUser, getProfile, usageOf, getSettings, isOwner } from "../../../lib/server";
 import { jsonCall } from "../../../lib/gemini";
-import { cfImage, hasCF } from "../../../lib/cfimage";
+import { makeImage } from "../../../lib/imagegen";
 import { quota } from "../../../lib/quota";
 import { allow, tooMany } from "../../../lib/ratelimit";
 import { saveResult, listProjects, withLinks, renameProject, deleteProject } from "../../../lib/designs";
@@ -91,7 +91,7 @@ function size(ratio, hd) {
 export async function GET(req) {
   const c = await ctx(req);
   if (c.fail) return c.fail;
-  return Response.json({ ...(await LIMIT.left(c.user.id, c.usage)), ready: hasCF() });
+  return Response.json({ ...(await LIMIT.left(c.user.id, c.usage)), ready: true });
 }
 
 export async function POST(req) {
@@ -110,7 +110,6 @@ export async function POST(req) {
     if (body.action === "delete") return Response.json({ ok: await deleteProject(user.id, String(body.id || "")) });
 
     if (body.action === "make") {
-      if (!hasCF()) return err("cf_off", 503);
       if (!(await allow("ds:" + user.id, 8, 60000))) return tooMany();
       const tool = TOOLS.includes(body.tool) ? body.tool : "redesign";
       const style = body.style in STYLES ? body.style : "modern";
@@ -124,7 +123,15 @@ export async function POST(req) {
       const { prompt, title } = await buildPrompt({ tool, style, category: body.category, custom: body.custom, ask: body.ask,
         colors: list(body.colors), materials: list(body.materials), light: body.light, keep: body.keep !== false });
       const seed = Number.isInteger(body.seed) ? body.seed % 2_147_483_647 : Math.floor(Math.random() * 1e9);
-      const pic = await cfImage({ prompt, ref: { data: ref }, seed, ...size(body.ratio, hd) });
+      // If only the description-based back-up service is free, describe the photo in words first (free Gemini vision).
+      const textOnlyPrompt = async () => {
+        try {
+          const j = await jsonCall("Describe this photo for an image AI that cannot see it: the space type, size feeling, camera angle, where the windows, doors and walls are, the floor and ceiling. Return JSON {\"scene\": \"max 70 English words\"}.",
+            [{ inlineData: { mimeType: "image/jpeg", data: ref } }, { text: "Describe it." }], { maxTokens: 300, think: "minimal" });
+          return `${prompt.replace(/ in image 0/g, "").replace(/from image 0/g, "of this scene")} The scene: ${clean(j?.scene, 500)}`;
+        } catch { return prompt.replace(/ in image 0/g, "").replace(/from image 0/g, "of this scene"); }
+      };
+      const pic = await makeImage({ prompt, ref: { data: ref }, seed, ...size(body.ratio, hd), textOnlyPrompt });
       await LIMIT.spend(user.id, usage, cost);
       // keep it in the user's projects (if saving fails, the picture is still returned)
       let project = "";
@@ -134,7 +141,7 @@ export async function POST(req) {
       } catch (e) { console.error("design save", e.message); }
       return new Response(Buffer.from(pic.data, "base64"), {
         headers: { "Content-Type": pic.mime, "Cache-Control": "no-store", "X-Project": project, "X-Seed": String(seed),
-          "X-Left": left.left === null ? "" : String(left.left - cost) },
+          "X-Left": left.left === null ? "" : String(left.left - cost), "X-Provider": pic.provider || "" },
       });
     }
     return err("bad_request");

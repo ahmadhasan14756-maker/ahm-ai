@@ -6,7 +6,7 @@
 // Free accounts: SLIDES_FREE (default 10) in total. Pro: SLIDES_PRO_DAILY (default 30) a day. Owner: no limit.
 import { getUser, getProfile, usageOf, getSettings, isOwner } from "../../../lib/server";
 import { jsonCall } from "../../../lib/gemini";
-import { cfImage, hasCF } from "../../../lib/cfimage";
+import { makeImage } from "../../../lib/imagegen";
 import { quota } from "../../../lib/quota";
 import { allow, tooMany } from "../../../lib/ratelimit";
 
@@ -78,7 +78,7 @@ function cleanDeck(d) {
 export async function GET(req) {
   const c = await ctx(req);
   if (c.fail) return c.fail;
-  return Response.json({ ...(await LIMIT.left(c.user.id, c.usage)), images: hasCF() });
+  return Response.json({ ...(await LIMIT.left(c.user.id, c.usage)), images: true });
 }
 
 export async function POST(req) {
@@ -129,11 +129,10 @@ export async function POST(req) {
     }
 
     if (body.action === "image") {
-      if (!hasCF()) return err("cf_off", 503);
       if (!(await allow("sl-img:" + user.id, 8, 60000))) return tooMany();
       const idea = String(body.prompt || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 300).trim();
       if (!idea) return err("bad_request");
-      const pic = await cfImage({ prompt: `${idea}. Professional presentation image, clean composition, soft natural light, high quality, photorealistic or elegant modern illustration. No text, no letters, no words, no watermark, no logo.`, width: 1280, height: 768, seed: Math.floor(Math.random() * 1e9) });
+      const pic = await makeImage({ prompt: `${idea}. Professional presentation image, clean composition, soft natural light, high quality, photorealistic or elegant modern illustration. No text, no letters, no words, no watermark, no logo.`, width: 1280, height: 768, seed: Math.floor(Math.random() * 1e9) });
       return new Response(Buffer.from(pic.data, "base64"), { headers: { "Content-Type": pic.mime, "Cache-Control": "no-store" } });
     }
     return err("bad_request");

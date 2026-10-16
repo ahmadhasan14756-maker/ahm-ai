@@ -4,7 +4,7 @@
 //  GET                                                → how many pictures this user has left
 import { getUser, getProfile, usageOf, getSettings, chargeUsage, blockedResponse, isOwner } from "../../../lib/server";
 import { jsonCall } from "../../../lib/gemini";
-import { cfImage, hasCF } from "../../../lib/cfimage";
+import { makeImage } from "../../../lib/imagegen";
 import { VIEWS, STYLES, cleanPlan, housePrompt, usesPlan, houseLeft, houseSpend } from "../../../lib/house";
 import { allow, tooMany } from "../../../lib/ratelimit";
 
@@ -45,7 +45,7 @@ async function context(req) {
 export async function GET(req) {
   const c = await context(req);
   if (c.fail) return c.fail;
-  return Response.json({ ...(await houseLeft(c.user.id, c.usage)), ready: hasCF() });
+  return Response.json({ ...(await houseLeft(c.user.id, c.usage)), ready: true });
 }
 
 export async function POST(req) {
@@ -79,7 +79,6 @@ export async function POST(req) {
     }
 
     if (body.action === "render") {
-      if (!hasCF()) return err("cf_off", 503);
       if (!(await allow("house-r:" + user.id, 12, 60000))) return tooMany();
       const view = VIEWS.includes(body.view) ? body.view : null;
       const style = STYLES.includes(body.style) ? body.style : null;
@@ -96,7 +95,7 @@ export async function POST(req) {
       const seed = Number.isInteger(body.seed) ? body.seed % 2_147_483_647 : Math.floor(Math.random() * 1e9);
       const prompt = housePrompt({ view, style, plan, wish: body.wish, room, pano });
       if (!prompt) return err("bad_request");
-      const pic = await cfImage({ prompt, ref, seed, width: pano ? 1920 : 1280, height: pano ? 960 : 768 });
+      const pic = await makeImage({ prompt, ref, seed, width: pano ? 1920 : 1280, height: pano ? 960 : 768 });
       await houseSpend(user.id, usage, cost);
       const after = left.left === null ? null : left.left - cost;
       // Sent as the picture itself (not text), so big 360° pictures stay small enough to send.

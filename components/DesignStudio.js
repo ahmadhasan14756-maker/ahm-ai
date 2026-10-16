@@ -52,6 +52,7 @@ const TX = {
   delQ: L("ئەم پرۆژەیە بسڕدرێتەوە؟", "حذف هذا المشروع؟", "Delete this project?"),
   untitled: L("پرۆژەی بێ ناو", "مشروع بلا اسم", "Untitled project"),
   note: L("⚠️ ئەمانە بیرۆکەی دیزاینن. AI شێوەی شوێنەکە بە نزیکی دەپارێزێت، بەڵام ڕێک ١٠٠٪ نییە. بۆ کاری بیناسازی ڕاوێژ بە ئەندازیار بکە.", "⚠️ هذه أفكار تصميم. يحافظ الذكاء الاصطناعي على شكل المكان تقريباً لا بدقة 100٪. استشر مهندساً قبل البناء.", "⚠️ These are design ideas. The AI keeps the space's shape approximately, not 100% exactly. Consult an engineer before building."),
+  simpleNote: L("ℹ️ ئەمڕۆ خزمەتگوزارییە سەرەکییەکە پڕ بووە، بۆیە ئەم وەشانە بە خزمەتگوزارییە یەدەگەکە دروست کرا. ئەو وێنەکەت ناخوێنێتەوە، تەنها وەسفەکەی بەکاردەهێنێت، بۆیە کەمتر لە ژوورەکەت دەچێت.", "ℹ️ الخدمة الرئيسية ممتلئة اليوم، فصُنعت هذه النسخة بالخدمة الاحتياطية التي تستخدم وصف الصورة فقط، لذا قد تشبه مكانك أقل.", "ℹ️ The main service is full today, so this version was made by the back-up service, which uses a description of your photo only — it may look less like your space."),
   e_limit: L("وێنە بەخۆڕاییەکانت تەواو بوون. بۆ زیاتر Pro وەربگرە.", "انتهت صورك المجانية. اشترك في Pro.", "Your free pictures are used up. Get Pro for more."),
   e_daily_full: L("ئەمڕۆ ژمارەی وێنەی بەخۆڕایی بۆ هەموو ئەپەکە تەواو بوو. بەیانی هەوڵ بدەرەوە 🌙", "انتهت الصور المجانية لكل التطبيق اليوم. حاول غداً 🌙", "Today's free pictures for the whole app are used up. Try tomorrow 🌙"),
   e_cf_off: L("دروستکردنی وێنە هێشتا ئامادە نییە.", "إنشاء الصور غير جاهز بعد.", "Picture making is not set up yet."),
@@ -133,7 +134,7 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
       if (!r.ok || !(r.headers.get("content-type") || "").startsWith("image/")) {
         const j = await r.json().catch(() => ({})); const e = new Error(j.error || "net"); e.data = j; throw e;
       }
-      return { src: await toDataUrl(await r.blob()), project: r.headers.get("x-project") || "", left: r.headers.get("x-left"), seed: +r.headers.get("x-seed") };
+      return { src: await toDataUrl(await r.blob()), project: r.headers.get("x-project") || "", left: r.headers.get("x-left"), seed: +r.headers.get("x-seed"), provider: r.headers.get("x-provider") || "" };
     }
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { const e = new Error(j.error || "net"); throw e; }
@@ -258,7 +259,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
         colors: colors.map((i) => COLORS[i].en), materials: materials.map((i) => MATERIALS[i].en), light, keep, hd,
         ref: photo.ref, original: projectId ? undefined : photo.original, ratio: photo.ratio, project: projectId || undefined });
       clearTimeout(t);
-      setResults((rs) => { setSel(rs.length); return [...rs, { src: r.src }]; });
+      setResults((rs) => { setSel(rs.length); return [...rs, { src: r.src, simple: r.provider === "pollinations" }]; });
       if (r.project) setProjectId(r.project);
       if (r.left !== "" && r.left != null) setQuota((q) => ({ ...q, left: +r.left }));
     } catch (e) {
@@ -298,6 +299,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
               </button>
             )}
             {result && busy && <div className="ds-progress floating"><span className="mini-spin" /> {tx(busy)}<i /></div>}
+            {result?.simple && <p className="house-warn">{tx("simpleNote")}</p>}
             {results.length > 0 && (
               <>
                 <div className="ds-actions">
