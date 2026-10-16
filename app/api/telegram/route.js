@@ -178,7 +178,7 @@ async function giveFlow(chatId, text) {
   }
   if (state.s === "days") {
     if (/^(♾️|بۆ هەمیشە|forever|free|بەخۆڕایی)/i.test(text)) { const r = await giveAccess(state.id, "forever"); await endGive(); await send(chatId, r ? `✅ <b>${esc(r.p.email)}</b> ← ${r.label}` : "❌ نەکرا."); return true; }
-    const n = Number((text.match(/[0-9٠-٩]+/)?.[0] || "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+    const n = Number((text.match(/[0-9٠-٩۰-۹]+/)?.[0] || "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
     if (!n || n < 1 || n > 3650) { await send(chatId, "🔢 ژمارەی ڕۆژەکان بنووسە (١ تا ٣٦٥٠)، یان دوگمەیەک دابگرە."); return true; }
     const r = await giveAccess(state.id, n);
     await endGive();
@@ -212,9 +212,7 @@ async function handleAdmin(chatId, cmd, rest) {
       return askDays(chatId, p);
     }
     await setGive({ s: "email" });
-    return send(chatId, "🎁 <b>پێدانی Pro / بەخۆڕایی</b>
-
-📧 ئیمەیڵی بەکارهێنەرەکە بنووسە:");
+    return send(chatId, "🎁 <b>پێدانی Pro / بەخۆڕایی</b>\n\n📧 ئیمەیڵی بەکارهێنەرەکە بنووسە:");
   }
 
   if (cmd === "/vip") {
