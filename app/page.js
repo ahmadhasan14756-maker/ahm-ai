@@ -811,7 +811,7 @@ function WaitBox({ until }) {
   );
 }
 
-function Upgrade({ reason, me, onClose, onEdit, onNotice }) {
+function Upgrade({ reason, me, onClose, onEdit, onNotice, onRelease }) {
   const { t } = useLang();
   const text = { limit: t("upLimit"), pro_only: t("upPro"), info: t("upInfo"), voice: t("upVoice") }[reason] || "";
   const plans = me?.plans || DEFAULT_SETTINGS;
@@ -821,7 +821,7 @@ function Upgrade({ reason, me, onClose, onEdit, onNotice }) {
   return (
     <Sheet label={t("plans")} onClose={onClose}>
       <h3>{t("plans")} <span className="gold brand-font">AHM AI</span></h3>
-      {me?.owner && <OwnerTools onPlans={onEdit} onNotice={onNotice} />}
+      {me?.owner && <OwnerTools onPlans={onEdit} onNotice={onNotice} onRelease={onRelease} />}
       {me?.lockedUntil ? <WaitBox until={me.lockedUntil} /> : null}
       <p>{me?.lockedUntil ? t(me.lockReason === "week" ? "upWaitWeek" : "upWait").replace("{h}", me.windowHours || 5) : text}</p>
       <UsageBars me={me} />
@@ -1022,12 +1022,87 @@ function AboutEditor({ data, token, onClose, onSaved }) {
   );
 }
 
+/* ---------------- Owner only: release new versions (the "Update" button) ---------------- */
+const fmtDT = (ms) => (ms ? new Date(ms).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : "");
+function ReleaseSheet({ token, onClose, onChanged }) {
+  const { t } = useLang();
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const load = async () => {
+    try {
+      const r = await fetch("/api/admin/release", { headers: { Authorization: "Bearer " + (await token()) }, cache: "no-store" });
+      setD(await r.json());
+    } catch { setD({ error: "net" }); }
+  };
+  useEffect(() => { load(); }, []);
+  async function go(id, back) {
+    if (!confirm(back ? t("relBackQ") : t("relGoQ"))) return;
+    setBusy(id); setMsg("");
+    try {
+      const r = await fetch("/api/admin/release", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ deploymentId: id }) });
+      if (!r.ok) throw new Error();
+      setMsg("✅ " + t(back ? "relBackDone" : "relDone"));
+      onChanged?.();
+      setTimeout(load, 2500);
+    } catch { setMsg("⚠️ " + t("errGeneric")); }
+    setBusy("");
+  }
+  return (
+    <Sheet label={t("releaseBtn")} onClose={onClose}>
+      <h3>🚀 {t("releaseBtn")}</h3>
+      <p className="muted">{t("relHelp")}</p>
+      {!d ? <p className="muted"><span className="mini-spin" /> …</p>
+        : d.configured === false ? (
+          <div className="rel-setup">
+            <b>⚙️ {t("relSetupTitle")}</b>
+            <ol>{[t("relSetup1"), t("relSetup2"), t("relSetup3")].map((x, i) => <li key={i}>{x}</li>)}</ol>
+          </div>
+        ) : d.error ? <p className="pe-msg">⚠️ {d.error === "token" ? t("relTokenBad") : t("errGeneric")}</p> : (
+          <>
+            <div className="rel-card live">
+              <div className="rel-tag">✅ {t("relLive")}</div>
+              <div className="rel-msg" dir="ltr">{d.live?.message || "—"}</div>
+              <div className="rel-meta" dir="ltr">{fmtDT(d.live?.created)}{d.live?.sha ? " · " + d.live.sha : ""}</div>
+            </div>
+            {d.next ? (
+              <div className="rel-card next">
+                <div className="rel-tag">🆕 {t("relNew")}{d.newerCount > 1 ? ` (+${d.newerCount - 1})` : ""}</div>
+                <div className="rel-msg" dir="ltr">{d.next.message || "—"}</div>
+                <div className="rel-meta" dir="ltr">{fmtDT(d.next.created)}{d.next.sha ? " · " + d.next.sha : ""}</div>
+                {d.next.url && <a className="ghost-btn rel-preview" href={d.next.url} target="_blank" rel="noreferrer">👀 {t("relPreview")}</a>}
+                <button className="rel-go" disabled={!!busy} onClick={() => go(d.next.id, false)}>
+                  {busy === d.next.id ? <span className="mini-spin" /> : "🚀"} {t("releaseBtn")}
+                </button>
+              </div>
+            ) : d.building ? <p className="rel-note">⏳ {t("relBuilding")}</p> : <p className="rel-note">✅ {t("relNone")}</p>}
+            {d.older?.length > 0 && (
+              <details className="rel-older">
+                <summary>↩️ {t("relOlder")}</summary>
+                {d.older.map((v) => (
+                  <div key={v.id} className="rel-row">
+                    <span dir="ltr">{fmtDT(v.created)} · {v.message || v.sha}</span>
+                    <button className="ghost-btn" disabled={!!busy} onClick={() => go(v.id, true)}>{busy === v.id ? <span className="mini-spin" /> : t("relBack")}</button>
+                  </div>
+                ))}
+              </details>
+            )}
+          </>
+        )}
+      {msg && <p className="pe-msg">{msg}</p>}
+      <button className="ghost-btn" onClick={() => { setD(null); load(); }}>🔍 {t("relCheck")}</button>
+      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
+    </Sheet>
+  );
+}
+
 /* ---------------- Owner only: tools, announcements ---------------- */
 // Two big buttons the owner sees (never shown to other users).
-function OwnerTools({ onPlans, onNotice }) {
+function OwnerTools({ onPlans, onNotice, onRelease, releaseReady }) {
   const { t } = useLang();
   return (
     <div className="owner-tools">
+      {onRelease && <button className={"rel-tool" + (releaseReady ? " ready" : "")} onClick={onRelease}>🚀 {t("releaseBtn")}{releaseReady && <em className="new-badge">{t("updateNew")}</em>}</button>}
       <button onClick={onPlans}>✏️ {t("editPlans")}</button>
       <button onClick={onNotice}>📢 {t("noticeBtn")}</button>
     </div>
@@ -1123,7 +1198,7 @@ function NoticeBar({ notice }) {
   );
 }
 
-function Dashboard({ token, onClose, onPlans, onNotice }) {
+function Dashboard({ token, onClose, onPlans, onNotice, onRelease }) {
   const { t, lang } = useLang();
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
@@ -1182,7 +1257,7 @@ function Dashboard({ token, onClose, onPlans, onNotice }) {
           {d.sites != null && <p className="muted">🌐 {t("dSites")}: {d.sites}</p>}
         </>
       )}
-      <OwnerTools onPlans={onPlans} onNotice={onNotice} />
+      <OwnerTools onPlans={onPlans} onNotice={onNotice} onRelease={onRelease} />
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
   );
@@ -1474,7 +1549,7 @@ function PlanEditor({ me, token, onSaved, onClose }) {
 }
 
 /* ---------------- Sidebar (chat history) ---------------- */
-function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard, onOwnerPlans, onNotice }) {
+function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard, onOwnerPlans, onNotice, onRelease, releaseReady }) {
   const { t } = useLang();
   const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image, studio: Icon.image };
   return (
@@ -1499,6 +1574,7 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
             </div>
           ))}
         </div>
+        {me?.owner && <button className={"side-fb gift rel-side" + (releaseReady ? " ready" : "")} onClick={onRelease}>🚀 <span>{t("releaseBtn")}</span>{releaseReady && <em className="new-badge">{t("updateNew")}</em>}</button>}
         {me?.owner && <button className="side-fb gift" onClick={onDashboard}>📊 <span>{t("dashboard")}</span></button>}
         {me?.owner && <button className="side-fb gift" onClick={onOwnerPlans}>✏️ <span>{t("editPlans")}</span></button>}
         {me?.owner && <button className="side-fb gift" onClick={onNotice}>📢 <span>{t("noticeBtn")}</span></button>}
@@ -1625,6 +1701,21 @@ function Main({ session }) {
 
   // Fresh plan numbers and announcements when the app comes back to the screen (at most once a minute).
   const meAt = useRef(0);
+  const [releaseReady, setReleaseReady] = useState(false);
+  useEffect(() => {
+    if (!me?.owner) return;
+    let stop = false;
+    const check = async () => {
+      try {
+        const r = await fetch("/api/admin/release", { headers: { Authorization: "Bearer " + (await token()) }, cache: "no-store" });
+        const j = await r.json();
+        if (!stop) setReleaseReady(!!j.next);
+      } catch {}
+    };
+    check();
+    const id = setInterval(check, 5 * 60 * 1000);
+    return () => { stop = true; clearInterval(id); };
+  }, [me?.owner]);
   useEffect(() => {
     const onShow = () => { if (document.visibilityState === "visible" && Date.now() - meAt.current > 60000) { meAt.current = Date.now(); loadMe(); } };
     document.addEventListener("visibilitychange", onShow);
@@ -2284,7 +2375,8 @@ function Main({ session }) {
         onInvite={() => { setSideOpen(false); setSheet({ type: "invite" }); }}
         onDashboard={() => { setSideOpen(false); setSheet({ type: "dashboard" }); }}
         onOwnerPlans={() => { setSideOpen(false); setSheet({ type: "admin" }); }}
-        onNotice={() => { setSideOpen(false); setSheet({ type: "notice" }); }} />
+        onNotice={() => { setSideOpen(false); setSheet({ type: "notice" }); }}
+        onRelease={() => { setSideOpen(false); setSheet({ type: "release" }); }} releaseReady={releaseReady} />
 
       <div className="main-col">
         <header>
@@ -2307,6 +2399,7 @@ function Main({ session }) {
             )}
             {me?.owner && <button className="head-btn" onClick={() => setSheet({ type: "dashboard" })}><span aria-hidden="true">📊</span> {t("dashboard")}</button>}
             {me?.owner && <button className="head-btn" onClick={() => setSheet({ type: "notice" })}><span aria-hidden="true">📢</span> {t("noticeBtn")}</button>}
+            {me?.owner && <button className={"head-btn rel-head" + (releaseReady ? " ready" : "")} onClick={() => setSheet({ type: "release" })}><span aria-hidden="true">🚀</span> {t("releaseBtn")}</button>}
             <button className="head-btn" onClick={() => setSheet({ type: "feedback" })}><span aria-hidden="true">💬</span> {t("feedback")}</button>
           </div>
           <button className="icon-btn new-chat-btn" aria-label={t("newChat")} title={t("newChat") + " (Ctrl+K)"} onClick={() => startNew("auto")}>
@@ -2508,7 +2601,8 @@ function Main({ session }) {
           onTurn={voiceTurn} onClose={() => { setVoice(null); loadMe(); }}
           onLimit={(why) => showLimit(why === "voice" ? "voice" : "limit")} />
       )}
-      {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} />}
+      {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} onRelease={() => setSheet({ type: "release" })} />}
+      {sheet?.type === "release" && me?.owner && <ReleaseSheet token={token} onClose={() => setSheet(null)} onChanged={() => setReleaseReady(false)} />}
       {sheet?.type === "notice" && me?.owner && <NoticeComposer token={token} onClose={() => setSheet(null)} onSent={loadMe} />}
       {sheet?.type === "screen" && <ScreenGuide info={sheet} onClose={() => setSheet(null)} />}
       {sheet?.type === "zipGuide" && <ZipGuide onClose={() => setSheet(null)} />}
@@ -2521,7 +2615,7 @@ function Main({ session }) {
       {sheet?.type === "aboutEdit" && me?.owner && <AboutEditor data={sheet.data} token={token} onClose={() => setSheet({ type: "about" })} onSaved={() => {}} />}
       {sheet?.type === "feedback" && <Feedback token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
-      {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} />}
+      {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} onRelease={() => setSheet({ type: "release" })} />}
       {sheet?.type === "settings" && (
         <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
           inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />

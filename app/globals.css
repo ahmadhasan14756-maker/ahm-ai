@@ -1081,3 +1081,23 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .zip-import-card small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.6; margin-top: 2px; }
 .ws-image { height: 100%; display: grid; place-items: center; padding: 16px; background: repeating-conic-gradient(#0001 0 25%, #0000 0 50%) 0 0 / 20px 20px; }
 .ws-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* ---------- owner: Update (release) ---------- */
+.owner-tools .rel-tool { grid-column: 1 / -1; border-color: #278e43; background: rgba(39,142,67,.12); color: #1f7a3a; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.owner-tools .rel-tool.ready, .rel-side.ready, .rel-head.ready { box-shadow: 0 0 0 2px rgba(39,142,67,.45); }
+.rel-card { border-radius: 16px; padding: 14px 16px; margin: 8px 0; border: 1px solid var(--line); background: var(--surface); display: grid; gap: 6px; }
+.rel-card.live { border-color: rgba(39,142,67,.45); }
+.rel-card.next { border-color: var(--gold); background: rgb(var(--gold-rgb) / .08); }
+.rel-tag { font-weight: 700; font-size: 14px; }
+.rel-msg { font-size: 14px; color: var(--text); overflow-wrap: anywhere; text-align: start; }
+.rel-meta { font-size: 12.5px; color: var(--muted); text-align: start; }
+.rel-preview { text-decoration: none; text-align: center; }
+.rel-go { min-height: 54px; border: 0; border-radius: 14px; background: #278e43; color: #fff; font: inherit; font-size: 17px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.rel-go:disabled { opacity: .6; }
+.rel-note { font-size: 14px; color: var(--text-2); margin: 10px 0; }
+.rel-older { margin: 10px 0; }
+.rel-older summary { cursor: pointer; font-size: 14px; color: var(--text-2); }
+.rel-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12.5px; }
+.rel-row .ghost-btn { width: auto; min-height: 34px; padding: 0 12px; margin: 0; }
+.rel-setup { border: 1px dashed var(--gold); border-radius: 14px; padding: 12px 14px; margin: 8px 0; }
+.rel-setup ol { margin: 8px 0 0; padding-inline-start: 20px; line-height: 1.8; font-size: 14px; }
