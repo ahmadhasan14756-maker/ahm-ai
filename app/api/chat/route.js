@@ -298,16 +298,19 @@ VOICE CONVERSATION MODE (most important rules)
     // The answer keeps being made even if the phone disconnects (user left the app);
     // the full text is saved as a "job" so the app can show it when the user comes back.
     const jobId = validJobId(body.jobId);
-    const startLevel = START[body.voice ? "voice" : build ? "build" : file ? "file" : construct ? "construct" : "chat"];
+    const lastText = String(messages[messages.length - 1].content || "");
+    const kind = body.voice ? "voice" : build ? "build" : file ? "file" : construct ? "construct" : "chat";
+    // Short everyday questions think the least, so the first words appear fast.
+    const startLevel = kind === "chat" && lastText.length < 300 && !attachments.length ? 2 : START[kind];
     let ctrl = null;
     let open = true;
     const send = (txt) => { if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; } };
     const work = (async () => {
       let full = "";
-      if (jobId) await saveJob(user.id, jobId, "running");
+      // Saved in the background (don't make the user wait for the database).
+      const started = jobId ? saveJob(user.id, jobId, "running") : null;
       // Wait in the fair line (Pro first). The app shows "you are number N".
       const ticket = jobId || randomUUID();
-      const lastText = messages[messages.length - 1].content;
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
         { onPlace: (n) => send(`\u0000Q:${n}\n`) });
       try {
@@ -325,6 +328,7 @@ VOICE CONVERSATION MODE (most important rules)
         if (open && ctrl) { try { ctrl.close(); } catch {} }
         open = false;
       }
+      if (started) await started;
       if (jobId) await saveJob(user.id, jobId, "done", full);
     })();
     waitUntil(work);

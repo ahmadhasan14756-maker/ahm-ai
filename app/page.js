@@ -2082,6 +2082,7 @@ function Main({ session }) {
           try {
             const r = await fetch("/api/intent", {
               method: "POST",
+              signal: AbortSignal.timeout?.(2500), // never make the user wait long just to choose a section
               headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
               body: JSON.stringify({ text: typed }),
             });
