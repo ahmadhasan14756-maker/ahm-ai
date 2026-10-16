@@ -398,7 +398,9 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
           {quota && quota.left != null && <p className="house-quota">{(quota.pro ? tx("leftPro") : tx("left")).replace("{n}", quota.left)}</p>}
           {error && <p className="learn-err" role="alert">{error}</p>}
           <Furnish base={editing} tool={tool} tx={tx} T={T} api={api} busy={busy} out={quota && quota.left != null && quota.left < 1} onUpgrade={onUpgrade}
-            onMake={async (extra) => { if (await makeFrom("compose", extra)) setEditing(null); }} />
+            out2={quota && quota.left != null && quota.left < 2}
+            onMake={async (extra) => { if (await makeFrom("compose", extra)) setEditing(null); }}
+            onPano={async (extra) => { if (await makeFrom("pano", extra)) setEditing(null); }} />
         </div>
       </div>
     );
@@ -516,7 +518,7 @@ const result0 = (rs, i) => (rs[i] && !rs[i].pano ? rs[i] : null);
 
 // "Furnish it yourself" in 3D: real 3D furniture stands on the floor of the user's photo in true perspective.
 // Move with one finger, pinch to resize, twist to turn. Then the AI turns the mock-up into a real photograph.
-function Furnish({ base, tool, tx, T, api, busy, out, onUpgrade, onMake }) {
+function Furnish({ base, tool, tx, T, api, busy, out, out2, onUpgrade, onMake, onPano }) {
   const cv = useRef(null), photoRef = useRef(null), boxRef = useRef(null), room = useRef(null);
   const [ready, setReady] = useState(false);
   const [sel, setSel] = useState(null);
@@ -605,6 +607,20 @@ function Furnish({ base, tool, tx, T, api, busy, out, onUpgrade, onMake }) {
     catch { setMsg(tx("e_bad_image")); }
     setSaving(false);
   }
+  // the room as it looks now (photo + 3D furniture), small enough for the AI
+  async function smallShot() {
+    const { canvas, ghosts } = await snapshot(1024);
+    const s = Math.min(1, 496 / Math.max(canvas.width, canvas.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(canvas.width * s); c.height = Math.round(canvas.height * s);
+    c.getContext("2d").drawImage(canvas, 0, 0, c.width, c.height);
+    return { ref: c.toDataURL("image/jpeg", 0.85).split(",")[1], ghosts };
+  }
+  async function make360() {
+    if (!R() || busy) return;
+    try { const { ref } = await smallShot(); onPano({ ref }); }
+    catch { setMsg(tx("e_bad_image")); }
+  }
   async function submit() {
     if (!R() || busy) return;
     try {
@@ -639,6 +655,10 @@ function Furnish({ base, tool, tx, T, api, busy, out, onUpgrade, onMake }) {
           {!ready && !msg && <div className="fu-loading"><span className="mini-spin" /></div>}
           {loading > 0 && <div className="fu-loading chip"><span className="mini-spin" /> {tx("loading3d")}</div>}
           {busy && <div className="ds-progress"><span className="mini-spin" /> {tx(busy)}<i /></div>}
+        </div>
+        <div className="fu-quick">
+          <button className="ghost-btn fu-360" disabled={!ready || !!busy || out2} onClick={make360}>{tx("panoMake")} <small>({tx("panoNote")})</small></button>
+          <button className="ghost-btn" disabled={!placed.length || !ready || saving} onClick={saveMock}>{tx("saveMock")}</button>
         </div>
         <p className="cs-note">{tx("fu3dHelp")}</p>
         {sel && (
@@ -739,7 +759,6 @@ function Furnish({ base, tool, tx, T, api, busy, out, onUpgrade, onMake }) {
             {busy ? <><span className="mini-spin" /> {tx(busy)}</> : tx("put")}
           </button>
         )}
-        <button className="ghost-btn fu-save" disabled={!placed.length || !ready || saving} onClick={saveMock}>{tx("saveMock")}</button>
         <p className="cs-note">{tx("credit3d")}</p>
       </div>
     </div>
