@@ -3,6 +3,7 @@
 //   A. Interior design  B. Exterior design  C. Floor plan studio (the house planner)  D. AI redesign (anything)
 // Photos are redesigned by a real image AI (server: /api/redesign). Projects are saved privately per user.
 import { useEffect, useRef, useState } from "react";
+import { Pano360 } from "./HouseStudio";
 
 const L = (ckb, ar, en) => ({ ckb, ar, en });
 const TX = {
@@ -52,6 +53,27 @@ const TX = {
   delQ: L("ئەم پرۆژەیە بسڕدرێتەوە؟", "حذف هذا المشروع؟", "Delete this project?"),
   untitled: L("پرۆژەی بێ ناو", "مشروع بلا اسم", "Untitled project"),
   note: L("⚠️ ئەمانە بیرۆکەی دیزاینن. AI شێوەی شوێنەکە بە نزیکی دەپارێزێت، بەڵام ڕێک ١٠٠٪ نییە. بۆ کاری بیناسازی ڕاوێژ بە ئەندازیار بکە.", "⚠️ هذه أفكار تصميم. يحافظ الذكاء الاصطناعي على شكل المكان تقريباً لا بدقة 100٪. استشر مهندساً قبل البناء.", "⚠️ These are design ideas. The AI keeps the space's shape approximately, not 100% exactly. Consult an engineer before building."),
+  furnish: L("🪄 خۆت کەلوپەل دابنێ", "🪄 ضع الأثاث بنفسك", "🪄 Furnish it yourself"),
+  furnishHelp: L("کەلوپەلێک هەڵبژێرە یان بیگەڕێ ← لەسەر وێنەکە بیجوڵێنە بۆ شوێنی خۆی ← گۆشەکەی ڕابکێشە بۆ گەورە/بچووککردن ← «بیخە ناو ژوورەکە».", "اختر قطعة أو ابحث عنها ← حرّكها إلى مكانها ← اسحب الزاوية لتكبيرها ← «ضعها في الغرفة».", "Pick or search an item → drag it into place → drag its corner to resize → “Put it in the room”."),
+  catalog: L("📦 کەلوپەل", "📦 الأثاث", "📦 Items"),
+  search: L("🔍 گەڕان", "🔍 بحث", "🔍 Search"),
+  searchPh: L("بۆ نموونە: قەنەفەی چەرمی قاوەیی، گڵۆپی زێڕین…", "مثلاً: كنبة جلد بني، ثريا ذهبية…", "e.g. brown leather sofa, gold chandelier…"),
+  searchNone: L("هیچ نەدۆزرایەوە. وشەیەکی تر تاقی بکەرەوە.", "لا نتائج. جرّب كلمة أخرى.", "Nothing found. Try another word."),
+  searchNote: L("وێنەکان لە Openverse و Wikimedia ـەوەن (بەخۆڕایی و یاسایی). AI شێوەی ئەو شتە بەکاردەهێنێت.", "الصور من Openverse وWikimedia (مجانية وقانونية). يستخدم الذكاء الاصطناعي شكل القطعة.", "Pictures come from Openverse and Wikimedia (free and legal). The AI uses the item's look."),
+  placed: L("لەسەر وێنەکە", "على الصورة", "On the photo"),
+  noteF: L("ڕەنگ / کەرەستە (ئارەزوومەندانە)", "اللون / المادة (اختياري)", "Colour / material (optional)"),
+  noteFPh: L("بۆ نموونە: بێژ، چەرم، دار", "مثلاً: بيج، جلد، خشب", "e.g. beige, leather, wood"),
+  remove: L("لابردن", "إزالة", "Remove"),
+  dup: L("دووبارەکردنەوە", "تكرار", "Duplicate"),
+  put: L("✨ بیخە ناو ژوورەکە", "✨ ضعها في الغرفة", "✨ Put it in the room"),
+  closeEdit: L("داخستنی دانان", "إغلاق", "Close"),
+  maxPics: L("زۆرترین ٣ وێنەی گەڕان لە یەک جاردا", "3 صور بحث كحد أقصى في المرة", "Max 3 search pictures at a time"),
+  pano: L("🔄 360°", "🔄 360°", "🔄 360°"),
+  panoMake: L("🔄 بیکە بە 360°", "🔄 حوّلها إلى 360°", "🔄 Make it 360°"),
+  panoOpen: L("🔄 بینینی 360°", "🔄 عرض 360°", "🔄 View 360°"),
+  panoNote: L("بە ٢ وێنە حیساب دەکرێت", "تُحسب صورتين", "Counts as 2 pictures"),
+  drag360: L("بە پەنجە بیجوڵێنە بۆ سەیرکردنی هەموو لایەک", "اسحب لترى كل الجهات", "Drag to look around"),
+  close: L("داخستن", "إغلاق", "Close"),
   simpleNote: L("ℹ️ ئەمڕۆ خزمەتگوزارییە سەرەکییەکە پڕ بووە، بۆیە ئەم وەشانە بە خزمەتگوزارییە یەدەگەکە دروست کرا. ئەو وێنەکەت ناخوێنێتەوە، تەنها وەسفەکەی بەکاردەهێنێت، بۆیە کەمتر لە ژوورەکەت دەچێت.", "ℹ️ الخدمة الرئيسية ممتلئة اليوم، فصُنعت هذه النسخة بالخدمة الاحتياطية التي تستخدم وصف الصورة فقط، لذا قد تشبه مكانك أقل.", "ℹ️ The main service is full today, so this version was made by the back-up service, which uses a description of your photo only — it may look less like your space."),
   e_limit: L("وێنە بەخۆڕاییەکانت تەواو بوون. بۆ زیاتر Pro وەربگرە.", "انتهت صورك المجانية. اشترك في Pro.", "Your free pictures are used up. Get Pro for more."),
   e_daily_full: L("ئەمڕۆ ژمارەی وێنەی بەخۆڕایی بۆ هەموو ئەپەکە تەواو بوو. بەیانی هەوڵ بدەرەوە 🌙", "انتهت الصور المجانية لكل التطبيق اليوم. حاول غداً 🌙", "Today's free pictures for the whole app are used up. Try tomorrow 🌙"),
@@ -87,6 +109,15 @@ const IDEAS = {
   interior: [L("قەنەفەی بێژ، ڕووناکیی ناڕاستەوخۆی گەرم، زەوی مەڕمەڕ، ڕووەکی ناوماڵ", "كنب بيج، إضاءة غير مباشرة دافئة، رخام، نباتات", "beige sofas, warm indirect light, marble floor, plants"), L("ژووری نوستنی ئارام بە ڕەنگی سپی و دار", "غرفة نوم هادئة بالأبيض والخشب", "calm bedroom in white and wood"), L("چێشتخانەی مۆدێرن بە دوورگەی ناوەڕاست", "مطبخ عصري بجزيرة وسطية", "modern kitchen with an island")],
   exterior: [L("ڕووکاری مۆدێرن بە بەرد و دار و ڕووناکیی شەو", "واجهة عصرية بالحجر والخشب وإضاءة ليلية", "modern facade with stone, wood and night lights"), L("باخچەی جوان بە چیمەن، گوڵ و ڕێگای بەرد", "حديقة بعشب وزهور وممر حجري", "garden with lawn, flowers and stone path"), L("دەروازە و گەراجی نوێ", "مدخل وكراج جديد", "new entrance and garage")],
   redesign: [L("جوانتر و پڕۆفیشناڵتری بکە", "اجعله أجمل وأكثر احترافية", "make it more beautiful and professional"), L("هەمان شوێن بە شێوازی کوردی", "نفس المكان بطابع كردي", "same place in Kurdish style")],
+};
+// Things to place in the room: [emoji, name, default width %, default height %, English words for the AI]
+const ITEMS = {
+  living: { name: L("دانیشتن", "جلوس", "Seating"), items: [["🛋️", L("قەنەفەی L", "كنبة زاوية", "L sofa"), 42, 26, "large L-shaped sofa"], ["🛋️", L("قەنەفەی ٣ کەسی", "كنبة 3 مقاعد", "3-seat sofa"), 34, 20, "three-seat sofa"], ["🪑", L("کورسیی قەنەفە", "كرسي مريح", "Armchair"), 14, 18, "armchair"], ["🟫", L("مێزی ناوەڕاست", "طاولة وسط", "Coffee table"), 18, 9, "coffee table"], ["📺", L("مێزی تەلەفزیۆن", "وحدة تلفاز", "TV unit"), 34, 18, "TV wall unit with TV"], ["🟥", L("فەرش", "سجادة", "Rug"), 40, 14, "large rug on the floor"]] },
+  bedroom: { name: L("نوستن", "نوم", "Bedroom"), items: [["🛏️", L("قەرەوێڵەی دوو کەسی", "سرير مزدوج", "Double bed"), 38, 26, "king size bed with headboard"], ["🛏️", L("قەرەوێڵەی یەک کەسی", "سرير مفرد", "Single bed"), 22, 22, "single bed"], ["🗄️", L("دۆڵاب", "خزانة ملابس", "Wardrobe"), 24, 40, "tall wardrobe"], ["🟫", L("مێزی تەنیشت قەرەوێڵە", "طاولة جانبية", "Nightstand"), 8, 9, "bedside table with lamp"], ["🪞", L("مێزی ئارایش", "تسريحة", "Dressing table"), 16, 22, "dressing table with mirror"]] },
+  dining: { name: L("چێشتخانە", "مطبخ وطعام", "Kitchen & dining"), items: [["🍽️", L("مێزی نانخواردن", "طاولة طعام", "Dining table"), 32, 20, "dining table with six chairs"], ["🧊", L("سەلاجە", "ثلاجة", "Fridge"), 12, 36, "tall fridge"], ["🍳", L("دوورگەی چێشتخانە", "جزيرة مطبخ", "Kitchen island"), 30, 16, "kitchen island with stools"], ["🪑", L("کورسیی بار", "كرسي بار", "Bar stool"), 7, 16, "bar stool"]] },
+  bath: { name: L("حەمام", "حمام", "Bathroom"), items: [["🛁", L("بانیۆ", "بانيو", "Bathtub"), 30, 16, "freestanding bathtub"], ["🚿", L("دووش", "دش", "Shower"), 18, 40, "glass walk-in shower"], ["🚰", L("دەستشۆر", "مغسلة", "Vanity"), 18, 22, "vanity with sink and mirror"], ["🚽", L("تەوالێت", "مرحاض", "Toilet"), 8, 14, "toilet"]] },
+  light: { name: L("ڕووناکی و ڕازاندنەوە", "إضاءة وديكور", "Lights & decor"), items: [["💡", L("چرای سەقف", "ثريا", "Chandelier"), 16, 16, "elegant chandelier hanging from the ceiling"], ["🛋️", L("گڵۆپی سەر زەوی", "مصباح أرضي", "Floor lamp"), 6, 30, "floor lamp"], ["🪴", L("ڕووەک", "نبتة", "Plant"), 9, 22, "large indoor plant in a pot"], ["🖼️", L("تابلۆ", "لوحة", "Wall art"), 18, 14, "framed wall painting"], ["🪟", L("پەردە", "ستارة", "Curtains"), 24, 50, "floor-length curtains"], ["🪞", L("ئاوێنە", "مرآة", "Mirror"), 10, 22, "wall mirror"], ["📚", L("ڕەفەی کتێب", "رف كتب", "Bookshelf"), 18, 38, "bookshelf with books"], ["💐", L("گوڵدان", "مزهرية", "Flowers"), 6, 10, "vase with flowers"]] },
+  outdoor: { name: L("دەرەوە", "خارجي", "Outdoor"), items: [["🌳", L("درەخت", "شجرة", "Tree"), 16, 40, "tree"], ["🌷", L("گوڵ", "زهور", "Flower bed"), 26, 10, "flower bed"], ["🪑", L("قەنەفەی دەرەوە", "جلسة خارجية", "Outdoor sofa"), 26, 16, "outdoor lounge sofa set"], ["⛱️", L("سێبەرە", "مظلة", "Parasol"), 14, 26, "garden parasol"], ["🏛️", L("پێرگۆلا", "برجولا", "Pergola"), 34, 34, "wooden pergola"], ["🚗", L("ئۆتۆمبێل", "سيارة", "Car"), 30, 20, "modern car"], ["🏮", L("گڵۆپی باخچە", "إنارة حديقة", "Garden light"), 4, 14, "garden light post"], ["🧱", L("پەرژین", "سور", "Fence"), 40, 14, "modern fence"], ["🏊", L("حەوزی مەلە", "مسبح", "Pool"), 40, 16, "swimming pool"]] },
 };
 const ICON = { interior: "🛋️", exterior: "🏡", plan: "📐", redesign: "✨", chat: "💬" };
 
@@ -136,6 +167,7 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
       }
       return { src: await toDataUrl(await r.blob()), project: r.headers.get("x-project") || "", left: r.headers.get("x-left"), seed: +r.headers.get("x-seed"), provider: r.headers.get("x-provider") || "" };
     }
+    if (body?.action === "grab") { if (!r.ok) throw new Error("bad_image"); return r.blob(); }
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { const e = new Error(j.error || "net"); throw e; }
     return j;
@@ -223,10 +255,12 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
   const [hd, setHd] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [results, setResults] = useState(() => (project?.results || []).filter((r) => r.url).map((r) => ({ src: r.url, remote: true })));
+  const [results, setResults] = useState(() => (project?.results || []).filter((r) => r.url).map((r) => ({ src: r.url, remote: true, pano: r.prompt === "pano" })));
   const [sel, setSel] = useState(Math.max(0, (project?.results?.length || 1) - 1));
   const [projectId, setProjectId] = useState(project?.id || "");
   const [drag, setDrag] = useState(false);
+  const [editing, setEditing] = useState(null); // { src, ratio } while placing furniture
+  const [pano, setPano] = useState(null); // picture shown in the 360° viewer
   const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const errText = (c) => (TX["e_" + c] ? tx("e_" + c) : tx("e_net"));
 
@@ -269,7 +303,64 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
     setBusy("");
   }
 
+  // the picture being worked on: the chosen result, or the user's photo
+  const base = result0(results, sel) || (photo ? { src: photo.preview } : null);
+  async function smallOf(src) {
+    const b = await (await fetch(src)).blob();
+    const s = await shrink(new File([b], "base.jpg", { type: b.type || "image/jpeg" }), 496, 0.82);
+    return { ref: s.data, ratio: s.w / s.h };
+  }
+  async function openEditor() {
+    if (!base || busy) return;
+    setError("");
+    try { const { ratio } = await smallOf(base.src); setEditing({ src: base.src, ratio }); }
+    catch { setError(tx("e_bad_image")); }
+  }
+  // furnish: the AI puts the placed objects into the picture. pano: the picture becomes a 360° view.
+  async function makeFrom(mode, extra = {}) {
+    if (!base || busy) return false;
+    setBusy("p_prep"); setError("");
+    let ok = false;
+    try {
+      const { ref, ratio } = await smallOf(editing?.src || base.src);
+      setBusy("p_make");
+      const r = await api({ action: "make", mode, tool, style, ref, ratio, ...extra,
+        original: projectId ? undefined : photo?.original, project: projectId || undefined });
+      setResults((rs) => { setSel(rs.length); return [...rs, { src: r.src, simple: r.provider === "pollinations", pano: mode === "pano" }]; });
+      if (r.project) setProjectId(r.project);
+      if (r.left !== "" && r.left != null) setQuota((q) => ({ ...q, left: +r.left }));
+      if (mode === "pano") setPano(r.src);
+      ok = true;
+    } catch (e) {
+      setError(errText(e.message));
+      if (e.message === "limit") setQuota((q) => ({ ...q, left: 0 }));
+    }
+    setBusy("");
+    return ok;
+  }
+  async function view360(src) {
+    if (src.startsWith("data:")) { setPano(src); return; }
+    try { setPano(await toDataUrl(await (await fetch(src)).blob())); } catch { setPano(src); }
+  }
+
   const result = results[sel];
+  if (editing) {
+    return (
+      <div className="house ds" dir={rtl ? "rtl" : "ltr"}>
+        <div className="house-inner">
+          <button className="learn-back" onClick={() => setEditing(null)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+            {tx("closeEdit")}
+          </button>
+          <h2 className="house-h">{tx("furnish")}</h2>
+          {quota && quota.left != null && <p className="house-quota">{(quota.pro ? tx("leftPro") : tx("left")).replace("{n}", quota.left)}</p>}
+          {error && <p className="learn-err" role="alert">{error}</p>}
+          <Furnish base={editing} tool={tool} tx={tx} T={T} api={api} busy={busy} out={quota && quota.left != null && quota.left < 1} onUpgrade={onUpgrade}
+            onMake={async (items, itemRefs) => { if (await makeFrom("furnish", { items, itemRefs })) setEditing(null); }} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="house ds" dir={rtl ? "rtl" : "ltr"}>
       <div className="house-inner">
@@ -284,7 +375,9 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
         <div className="ds-work">
           <div className="ds-stage">
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; takeFile(f); }} />
-            {result && photo ? (
+            {result?.pano ? (
+              <div className="ds-photo ds-panoimg"><img src={result.src} alt="" /><button className="gold-btn small" onClick={() => view360(result.src)}>{tx("panoOpen")}</button></div>
+            ) : result && photo ? (
               <Compare before={photo.preview} after={result.src} tx={tx} />
             ) : photo ? (
               <div className={"ds-photo" + (busy ? " working" : "")}>
@@ -307,6 +400,12 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
                   <button className="ghost-btn" onClick={() => saveFile(result.src, `AHM-AI-design-${sel + 1}.jpg`)}>{tx("download")}</button>
                   <button className="ghost-btn" disabled={!!busy} onClick={() => fileRef.current?.click()}>{tx("newPhoto")}</button>
                 </div>
+                {!result?.pano && (
+                  <div className="ds-actions ds-more">
+                    <button className="ghost-btn" disabled={!!busy} onClick={openEditor}>{tx("furnish")}</button>
+                    <button className="ghost-btn" disabled={!!busy || (quota && quota.left != null && quota.left < 2)} onClick={() => makeFrom("pano")} title={tx("panoNote")}>{tx("panoMake")} <small>({tx("panoNote")})</small></button>
+                  </div>
+                )}
                 {results.length > 1 && (
                   <div className="sl-thumbs" aria-label={tx("results")}>
                     {results.map((r, i) => <button key={i} className={i === sel ? "on" : ""} onClick={() => setSel(i)}><img src={r.src} alt="" /><em>{i + 1}</em></button>)}
@@ -314,7 +413,14 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
                 )}
               </>
             )}
-            {photo && !results.length && <button className="ghost-btn ds-change" disabled={!!busy} onClick={() => fileRef.current?.click()}>{tx("change")}</button>}
+            {photo && !results.length && (
+              <div className="ds-actions ds-more">
+                <button className="ghost-btn" disabled={!!busy} onClick={() => fileRef.current?.click()}>{tx("change")}</button>
+                <button className="ghost-btn" disabled={!!busy} onClick={openEditor}>{tx("furnish")}</button>
+                <button className="ghost-btn" disabled={!!busy || (quota && quota.left != null && quota.left < 2)} onClick={() => makeFrom("pano")} title={tx("panoNote")}>{tx("panoMake")}</button>
+              </div>
+            )}
+            {pano && <Pano360 src={pano} title="360°" hint={tx("drag360")} closeText={tx("close")} onClose={() => setPano(null)} />}
           </div>
 
           <div className="ds-panel house-card">
@@ -359,6 +465,165 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
             <p className="cs-note">{tx("note")}</p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const result0 = (rs, i) => (rs[i] && !rs[i].pano ? rs[i] : null);
+
+// "Furnish it yourself": put furniture on the photo, move and resize it, then the AI builds it into the room.
+let uid = 0;
+function Furnish({ base, tool, tx, T, api, busy, out, onUpgrade, onMake }) {
+  const [items, setItems] = useState([]); // { id, emoji, label, en, x, y, w, h, note, img, data }
+  const [act, setAct] = useState(null);
+  const [tab, setTab] = useState("catalog");
+  const [cat, setCat] = useState(tool === "exterior" ? "outdoor" : "living");
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [grabbing, setGrabbing] = useState("");
+  const [msg, setMsg] = useState("");
+  const box = useRef(null);
+  const moving = useRef(null);
+  const withPic = items.filter((i) => i.data).length;
+
+  const add = (it) => {
+    const n = items.length % 5;
+    const w = Math.min(90, it.w), h = Math.min(90, it.h);
+    const x = Math.max(0, Math.min(100 - w, 50 - w / 2 + (n - 2) * 4));
+    const y = Math.max(0, Math.min(100 - h, 62 - h / 2 + (n - 2) * 3));
+    const id = ++uid;
+    setItems((xs) => [...xs, { note: "", ...it, id, w, h, x, y }].slice(0, 12));
+    setAct(id);
+  };
+  const upd = (id, ch) => setItems((xs) => xs.map((i) => (i.id === id ? { ...i, ...ch } : i)));
+  const del = (id) => { setItems((xs) => xs.filter((i) => i.id !== id)); setAct(null); };
+
+  const down = (e, it, kind) => {
+    e.stopPropagation(); e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setAct(it.id);
+    moving.current = { id: it.id, kind, sx: e.clientX, sy: e.clientY, start: { ...it } };
+  };
+  const move = (e) => {
+    const m = moving.current, r = box.current?.getBoundingClientRect();
+    if (!m || !r) return;
+    const dx = ((e.clientX - m.sx) / r.width) * 100, dy = ((e.clientY - m.sy) / r.height) * 100, s = m.start;
+    if (m.kind === "move") upd(m.id, { x: Math.max(0, Math.min(100 - s.w, s.x + dx)), y: Math.max(0, Math.min(100 - s.h, s.y + dy)) });
+    else upd(m.id, { w: Math.max(3, Math.min(100 - s.x, s.w + dx)), h: Math.max(3, Math.min(100 - s.y, s.h + dy)) });
+  };
+  const up = () => { moving.current = null; };
+
+  async function search(e) {
+    e?.preventDefault();
+    if (!q.trim() || searching) return;
+    setSearching(true); setMsg("");
+    try { const j = await api({ action: "search", q: q.trim() }); setFound(j); }
+    catch { setFound({ results: [] }); }
+    setSearching(false);
+  }
+  async function pick(r) {
+    if (withPic >= 3) { setMsg(tx("maxPics")); return; }
+    setGrabbing(r.thumb); setMsg("");
+    try {
+      const blob = await api({ action: "grab", url: r.thumb });
+      const s = await shrink(new File([blob], "item.jpg", { type: blob.type || "image/jpeg" }), 496, 0.82);
+      const ar = s.w / s.h;
+      const w = 24, h = Math.max(8, Math.min(50, (w / ar) * (base.ratio || 1.5)));
+      add({ emoji: "🖼️", label: r.title || found?.q || q, en: found?.q || q, w, h, img: "data:image/jpeg;base64," + s.data, data: s.data });
+    } catch { setMsg(tx("e_bad_image")); }
+    setGrabbing("");
+  }
+  function submit() {
+    const refs = [];
+    const list = items.map((i) => {
+      let ref = -1;
+      if (i.data && refs.length < 3) { ref = refs.length; refs.push(i.data); }
+      return { name: i.en, note: i.note, ref, x: +i.x.toFixed(1), y: +i.y.toFixed(1), w: +i.w.toFixed(1), h: +i.h.toFixed(1) };
+    });
+    onMake(list, refs);
+  }
+  const cur = items.find((i) => i.id === act);
+
+  return (
+    <div className="ds-work fu">
+      <div className="ds-stage">
+        <div className={"fu-box" + (busy ? " working" : "")} dir="ltr" ref={box} style={{ aspectRatio: String(base.ratio || 1.5), width: `min(100%, calc(72vh * ${base.ratio || 1.5}))` }}
+          onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerDown={() => setAct(null)}>
+          <img src={base.src} alt="" draggable={false} />
+          {items.map((it) => (
+            <div key={it.id} className={"fu-item" + (act === it.id ? " on" : "") + (it.img ? " pic" : "")}
+              style={{ left: it.x + "%", top: it.y + "%", width: it.w + "%", height: it.h + "%" }}
+              onPointerDown={(e) => down(e, it, "move")} role="button" aria-label={T(it.label) || it.label} tabIndex={0}
+              onKeyDown={(e) => { const st = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]; if (st) { e.preventDefault(); upd(it.id, { x: Math.max(0, Math.min(100 - it.w, it.x + st[0])), y: Math.max(0, Math.min(100 - it.h, it.y + st[1])) }); } if (e.key === "Delete") del(it.id); }}>
+              {it.img ? <img src={it.img} alt="" draggable={false} /> : <span className="fu-emo">{it.emoji}</span>}
+              <em>{typeof it.label === "string" ? it.label : T(it.label)}</em>
+              {act === it.id && <>
+                <button className="fu-x" aria-label={tx("remove")} onPointerDown={(e) => e.stopPropagation()} onClick={() => del(it.id)}>×</button>
+                <i className="fu-rs" onPointerDown={(e) => down(e, it, "size")} aria-hidden="true" />
+              </>}
+            </div>
+          ))}
+          {busy && <div className="ds-progress"><span className="mini-spin" /> {tx(busy)}<i /></div>}
+        </div>
+        <p className="cs-note">{tx("furnishHelp")}</p>
+        {cur && (
+          <div className="fu-edit">
+            <b>{cur.emoji} {typeof cur.label === "string" ? cur.label : T(cur.label)}</b>
+            <input value={cur.note} maxLength={80} onChange={(e) => upd(cur.id, { note: e.target.value })} placeholder={tx("noteFPh")} aria-label={tx("noteF")} />
+            <button className="ghost-btn" onClick={() => add({ ...cur, id: undefined })}>{tx("dup")}</button>
+            <button className="ghost-btn" onClick={() => del(cur.id)}>{tx("remove")}</button>
+          </div>
+        )}
+      </div>
+
+      <div className="ds-panel house-card">
+        <div className="seg lang-seg fu-tabs">
+          <button className={tab === "catalog" ? "on" : ""} onClick={() => setTab("catalog")}>{tx("catalog")}</button>
+          <button className={tab === "search" ? "on" : ""} onClick={() => setTab("search")}>{tx("search")}</button>
+        </div>
+        {tab === "catalog" ? (
+          <>
+            <div className="house-chips">
+              {Object.entries(ITEMS).map(([k, c]) => <button key={k} className={cat === k ? "on" : ""} aria-pressed={cat === k} onClick={() => setCat(k)}>{T(c.name)}</button>)}
+            </div>
+            <div className="fu-grid">
+              {ITEMS[cat].items.map(([emoji, label, w, h, en], i) => (
+                <button key={i} disabled={items.length >= 12} onClick={() => add({ emoji, label: T(label), en, w, h })}>
+                  <span>{emoji}</span><small>{T(label)}</small>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <form className="fu-search" onSubmit={search}>
+              <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 80))} placeholder={tx("searchPh")} enterKeyHint="search" />
+              <button className="gold-btn small" disabled={!q.trim() || searching}>{searching ? <span className="mini-spin" /> : "🔍"}</button>
+            </form>
+            {found && !found.results?.length && <p className="muted">{tx("searchNone")}</p>}
+            {found?.results?.length > 0 && (
+              <div className="fu-found">
+                {found.results.map((r, i) => (
+                  <button key={i} disabled={!!grabbing || items.length >= 12} onClick={() => pick(r)} title={[r.title, r.credit, r.license].filter(Boolean).join(" · ")}>
+                    <img src={r.thumb} alt={r.title} loading="lazy" referrerPolicy="no-referrer" />
+                    {grabbing === r.thumb && <span className="mini-spin" />}
+                    <small>{r.credit ? "© " + r.credit : r.source}{r.license ? " · " + r.license.toUpperCase() : ""}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="cs-note">{tx("searchNote")}</p>
+          </>
+        )}
+        {msg && <p className="house-warn">{msg}</p>}
+        {items.length > 0 && <p className="sl-label">{tx("placed")}: {items.length}/12</p>}
+        {out ? <button className="gold-btn" onClick={onUpgrade}>{tx("getPro")}</button> : (
+          <button className="gold-btn ds-make" disabled={!items.length || !!busy} onClick={submit}>
+            {busy ? <><span className="mini-spin" /> {tx(busy)}</> : tx("put")}
+          </button>
+        )}
       </div>
     </div>
   );

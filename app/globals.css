@@ -1537,3 +1537,41 @@ header { position: relative; z-index: 5; }
 .ds-adv summary::-webkit-details-marker { display: none; }
 .ds-adv[open] { display: flex; }
 .ds-make { min-height: 56px; font-size: 16.5px; }
+
+/* ---- Furnish it yourself (place furniture on the photo) ---- */
+.ds-more { margin-top: 2px; }
+.ds-more small { opacity: .7; font-size: 11px; margin-inline-start: 4px; }
+.ds-panoimg { display: grid; }
+.ds-panoimg .gold-btn { position: absolute; inset: auto 12px 12px auto; width: auto; margin: 0; }
+.fu-box { position: relative; margin: 0 auto; border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--e3); background: var(--surface-2); touch-action: none; user-select: none; -webkit-user-select: none; }
+.fu-box > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.fu-box.working > img { filter: saturate(.6) brightness(.75); }
+.fu-item { position: absolute; display: grid; place-items: center; border: 2px dashed rgba(255,255,255,.85); border-radius: 10px; background: rgba(10,12,18,.28); color: #fff; cursor: grab; touch-action: none; box-shadow: 0 2px 10px rgba(0,0,0,.25); outline: none; }
+.fu-item.on { border-style: solid; border-color: var(--gold, #d8b26a); background: rgba(10,12,18,.18); z-index: 2; }
+.fu-item:focus-visible { box-shadow: 0 0 0 3px var(--gold, #d8b26a); }
+.fu-item.pic { background: transparent; }
+.fu-item > img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; opacity: .92; border-radius: 8px; }
+.fu-emo { font-size: clamp(18px, 4.5vw, 40px); line-height: 1; pointer-events: none; }
+.fu-item em { position: absolute; inset: auto 0 -1px 0; font-style: normal; font-size: 10.5px; line-height: 1.3; padding: 2px 4px; text-align: center; background: rgba(0,0,0,.55); border-radius: 0 0 8px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.fu-x { position: absolute; top: -14px; right: -14px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: #e5484d; color: #fff; font-size: 18px; line-height: 1; cursor: pointer; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.fu-rs { position: absolute; right: -12px; bottom: -12px; width: 26px; height: 26px; border-radius: 50%; background: var(--gold, #d8b26a); border: 3px solid #fff; cursor: nwse-resize; touch-action: none; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.fu-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.fu-edit b { flex: 1 1 100%; font-size: 14px; }
+.fu-edit input { flex: 1 1 160px; min-height: 44px; border-radius: 12px; border: 1px solid var(--line, rgba(127,127,127,.25)); background: var(--surface, transparent); color: inherit; padding: 0 12px; font: inherit; font-size: 16px; }
+.fu-edit .ghost-btn { width: auto; margin: 0; min-height: 44px; padding: 0 14px; }
+.fu-tabs { margin-bottom: 4px; }
+.fu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.fu-grid button { display: grid; justify-items: center; gap: 4px; padding: 10px 6px; border-radius: 14px; border: 1px solid var(--line, rgba(127,127,127,.2)); background: var(--surface-2); color: inherit; cursor: pointer; font: inherit; min-height: 76px; }
+.fu-grid button:hover:not(:disabled) { border-color: var(--gold, #d8b26a); }
+.fu-grid button:disabled { opacity: .45; }
+.fu-grid span { font-size: 26px; line-height: 1.1; }
+.fu-grid small { font-size: 12px; line-height: 1.3; text-align: center; }
+.fu-search { display: flex; gap: 8px; }
+.fu-search input { flex: 1; min-width: 0; min-height: 46px; border-radius: 12px; border: 1px solid var(--line, rgba(127,127,127,.25)); background: var(--surface-2); color: inherit; padding: 0 12px; font: inherit; font-size: 16px; }
+.fu-search .gold-btn.small { width: auto; margin: 0; min-width: 52px; }
+.fu-found { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; max-height: 46vh; overflow: auto; padding: 2px; }
+.fu-found button { position: relative; display: grid; gap: 3px; padding: 0; border: 1px solid var(--line, rgba(127,127,127,.2)); border-radius: 12px; overflow: hidden; background: #fff; cursor: pointer; color: #333; }
+.fu-found button:disabled { opacity: .55; }
+.fu-found img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }
+.fu-found small { font-size: 9.5px; padding: 0 5px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
+.fu-found .mini-spin { position: absolute; top: 8px; left: 8px; }

@@ -80,6 +80,57 @@ async function buildPrompt(o) {
   return { prompt, title };
 }
 
+// "Furnish it yourself": the user placed objects on the photo (positions in % of the picture).
+async function furnishPrompt(items, refCount) {
+  let names = items.map((it) => clean(it.name, 60) + (clean(it.note, 80) ? ` (${clean(it.note, 80)})` : ""));
+  // names may be Kurdish/Arabic: one quick translation for all of them
+  if (names.some((n) => /[^\x00-\x7F]/.test(n))) {
+    try {
+      const j = await jsonCall('Translate each item to short English furniture/decor wording. Return JSON {"items": ["..."]} in the same order and count.', [{ text: JSON.stringify(names) }], { maxTokens: 500, think: "minimal" });
+      if (Array.isArray(j?.items) && j.items.length === names.length) names = j.items.map((x) => clean(x, 100));
+    } catch (e) { if (e.message === "unsafe") throw e; }
+  }
+  const where = (it) => {
+    const x0 = Math.round(it.x), x1 = Math.round(it.x + it.w), y0 = Math.round(it.y), y1 = Math.round(it.y + it.h);
+    return `in the area from ${x0}% to ${x1}% from the left edge and ${y0}% to ${y1}% from the top edge of the picture`;
+  };
+  const lines = items.map((it, i) => `${i + 1}) ${names[i]} — ${where(it)}${it.ref >= 0 && it.ref < refCount ? `, looking like the object in image ${it.ref + 1}` : ""}.`);
+  return [
+    "Image 0 is a photo of a real space. Add the following objects into this exact space so the result looks like a real, professional photograph.",
+    "Keep the space itself unchanged: same walls, floor, ceiling, windows, doors, camera angle and light. Do not add anything that is not in the list.",
+    "Each object must have a realistic real-world size for this room, follow the room's perspective, stand on the floor or hang on the wall where it naturally belongs, with correct shadows and reflections.",
+    "Objects:", ...lines,
+    "No text, no watermark, no people.",
+  ].join(" ");
+}
+const PANO_PROMPT = "Turn image 0 into a 360-degree equirectangular panorama photo of the same space with exactly the same design, furniture, colours, materials and lighting, as seen from the middle of the space. Continue the space naturally behind the camera. Seamless where the left and right edges meet, level horizon. Photorealistic. No text, no watermark, no people.";
+
+// Free, legal picture search for objects (Openverse, then Wikimedia Commons). No key needed.
+async function searchPictures(q) {
+  let query = clean(q, 80);
+  if (/[^\x00-\x7F]/.test(query)) {
+    try { const j = await jsonCall('Translate this shopping/search query to short English. Return JSON {"q": "..."}', [{ text: query }], { maxTokens: 60, think: "minimal" }); if (j?.q) query = clean(j.q, 80); } catch {}
+  }
+  const out = [];
+  try {
+    const r = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=24&mature=false`, { signal: AbortSignal.timeout(9000), headers: { "User-Agent": "AHM-AI/1.0" } });
+    const j = await r.json();
+    for (const x of j.results || []) if (x.thumbnail) out.push({ thumb: x.thumbnail, title: clean(x.title, 80), credit: clean(x.creator, 60), license: clean(x.license, 20), source: "Openverse" });
+  } catch (e) { console.error("openverse", String(e.message).slice(0, 80)); }
+  if (out.length < 8) {
+    try {
+      const r = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(query + " filetype:bitmap")}&gsrlimit=20&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=360&format=json`, { signal: AbortSignal.timeout(9000), headers: { "User-Agent": "AHM-AI/1.0 (ahm-ai.vercel.app)" } });
+      const j = await r.json();
+      for (const pg of Object.values(j?.query?.pages || {})) {
+        const ii = pg.imageinfo?.[0];
+        if (ii?.thumburl) out.push({ thumb: ii.thumburl, title: clean(String(pg.title || "").replace(/^File:|\.[a-z]+$/gi, ""), 80), credit: clean(ii.extmetadata?.Artist?.value?.replace(/<[^>]+>/g, ""), 60), license: clean(ii.extmetadata?.LicenseShortName?.value, 20), source: "Wikimedia" });
+      }
+    } catch (e) { console.error("wikimedia", String(e.message).slice(0, 80)); }
+  }
+  return { q: query, results: out.slice(0, 30) };
+}
+const GRAB_HOSTS = /^https:\/\/(api\.openverse\.org|upload\.wikimedia\.org)\//;
+
 function size(ratio, hd) {
   const r = Math.min(2.2, Math.max(0.45, Number(ratio) || 1.5));
   const long = hd ? 1920 : 1280;
@@ -106,6 +157,23 @@ export async function POST(req) {
       const projects = await listProjects(user.id);
       return Response.json({ projects: await withLinks(user.id, projects.slice(0, 40)) });
     }
+    if (body.action === "search") {
+      if (!(await allow("ds-s:" + user.id, 20, 60000))) return tooMany();
+      if (!clean(body.q, 80)) return err("bad_request");
+      return Response.json(await searchPictures(body.q));
+    }
+    if (body.action === "grab") {
+      // fetch one search picture for the user (only from the two search sites) so the app can use it as an object
+      if (!(await allow("ds-g:" + user.id, 30, 60000))) return tooMany();
+      const url = String(body.url || "");
+      if (!GRAB_HOSTS.test(url)) return err("bad_request");
+      const r = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "AHM-AI/1.0 (ahm-ai.vercel.app)" }, redirect: "follow" });
+      const type = r.headers.get("content-type") || "";
+      if (!r.ok || !/^image\/(jpeg|png|webp|gif)/.test(type)) return err("bad_image");
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > 4_000_000) return err("bad_image");
+      return new Response(buf, { headers: { "Content-Type": type.split(";")[0], "Cache-Control": "private, max-age=3600" } });
+    }
     if (body.action === "rename") return Response.json({ ok: await renameProject(user.id, String(body.id || ""), body.name) });
     if (body.action === "delete") return Response.json({ ok: await deleteProject(user.id, String(body.id || "")) });
 
@@ -113,15 +181,34 @@ export async function POST(req) {
       if (!(await allow("ds:" + user.id, 8, 60000))) return tooMany();
       const tool = TOOLS.includes(body.tool) ? body.tool : "redesign";
       const style = body.style in STYLES ? body.style : "modern";
-      const hd = !!body.hd, cost = hd ? 2 : 1;
+      const mode = ["furnish", "pano"].includes(body.mode) ? body.mode : "design";
+      const hd = !!body.hd, cost = mode === "pano" || hd ? 2 : 1;
       const left = await LIMIT.left(user.id, usage);
       if (left.left !== null && left.left < cost) return err("limit", 402, left);
       // the photo: a small copy for the AI (must be under 512×512) and a bigger one to keep in the project
       const ref = String(body.ref || ""), original = body.original ? String(body.original) : null;
       if (!JPEG.test(ref) || ref.length > 400_000) return err("bad_image");
       if (original && (!JPEG.test(original) || original.length > 2_600_000)) return err("bad_image");
-      const { prompt, title } = await buildPrompt({ tool, style, category: body.category, custom: body.custom, ask: body.ask,
-        colors: list(body.colors), materials: list(body.materials), light: body.light, keep: body.keep !== false });
+      let prompt, title = "";
+      const extra = []; // pictures of objects the user picked (image 1, 2, 3)
+      if (mode === "furnish") {
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 12).map((it) => ({
+          name: clean(it?.name, 60), note: clean(it?.note, 80), ref: Number.isInteger(it?.ref) ? it.ref : -1,
+          x: Math.max(0, Math.min(100, Number(it?.x) || 0)), y: Math.max(0, Math.min(100, Number(it?.y) || 0)),
+          w: Math.max(2, Math.min(100, Number(it?.w) || 10)), h: Math.max(2, Math.min(100, Number(it?.h) || 10)),
+        })).filter((it) => it.name);
+        if (!items.length) return err("bad_request");
+        for (const r of (Array.isArray(body.itemRefs) ? body.itemRefs : []).slice(0, 3)) {
+          if (!JPEG.test(String(r)) || String(r).length > 400_000) return err("bad_image");
+          extra.push({ data: String(r) });
+        }
+        prompt = await furnishPrompt(items, extra.length);
+      } else if (mode === "pano") {
+        prompt = PANO_PROMPT;
+      } else {
+        ({ prompt, title } = await buildPrompt({ tool, style, category: body.category, custom: body.custom, ask: body.ask,
+          colors: list(body.colors), materials: list(body.materials), light: body.light, keep: body.keep !== false }));
+      }
       const seed = Number.isInteger(body.seed) ? body.seed % 2_147_483_647 : Math.floor(Math.random() * 1e9);
       // If only the description-based back-up service is free, describe the photo in words first (free Gemini vision).
       const textOnlyPrompt = async () => {
@@ -131,13 +218,14 @@ export async function POST(req) {
           return `${prompt.replace(/ in image 0/g, "").replace(/from image 0/g, "of this scene")} The scene: ${clean(j?.scene, 500)}`;
         } catch { return prompt.replace(/ in image 0/g, "").replace(/from image 0/g, "of this scene"); }
       };
-      const pic = await makeImage({ prompt, ref: { data: ref }, seed, ...size(body.ratio, hd), textOnlyPrompt });
+      const dims = mode === "pano" ? { width: 1920, height: 960 } : size(body.ratio, hd);
+      const pic = await makeImage({ prompt, refs: [{ data: ref }, ...extra], seed, ...dims, textOnlyPrompt });
       await LIMIT.spend(user.id, usage, cost);
       // keep it in the user's projects (if saving fails, the picture is still returned)
       let project = "";
       try {
         project = await saveResult(user.id, { id: body.project, original, result: pic.data, mime: pic.mime,
-          meta: { name: title || clean(body.ask, 40), tool, style, prompt: clean(body.ask, 600) } });
+          meta: { name: title || clean(body.ask, 40), tool, style, prompt: mode === "design" ? clean(body.ask, 600) : mode } });
       } catch (e) { console.error("design save", e.message); }
       return new Response(Buffer.from(pic.data, "base64"), {
         headers: { "Content-Type": pic.mime, "Cache-Control": "no-store", "X-Project": project, "X-Seed": String(seed),

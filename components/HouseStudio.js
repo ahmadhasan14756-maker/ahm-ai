@@ -650,7 +650,7 @@ void main(){
   gl_FragColor=texture2D(t,vec2(fract(lon/(2.*PI)+.5),.5-lat/PI));
 }`;
 
-function Pano360({ src, title, hint, closeText, onClose }) {
+export function Pano360({ src, title, hint, closeText, onClose }) {
   const ref = useRef(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
