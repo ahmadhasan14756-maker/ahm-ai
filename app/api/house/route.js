@@ -95,7 +95,7 @@ export async function POST(req) {
       const seed = Number.isInteger(body.seed) ? body.seed % 2_147_483_647 : Math.floor(Math.random() * 1e9);
       const prompt = housePrompt({ view, style, plan, wish: body.wish, room, pano });
       if (!prompt) return err("bad_request");
-      const pic = await cfImage({ prompt, ref, seed, width: pano ? 1920 : 1280, height: pano ? 960 : 768, quality: pano || view !== "room" });
+      const pic = await cfImage({ prompt, ref, seed, width: pano ? 1920 : 1280, height: pano ? 960 : 768 });
       await houseSpend(user.id, usage, cost);
       const after = left.left === null ? null : left.left - cost;
       // Sent as the picture itself (not text), so big 360° pictures stay small enough to send.
@@ -106,7 +106,7 @@ export async function POST(req) {
     return err("bad_request");
   } catch (e) {
     const m = String(e?.message || "");
-    if (["daily_full", "cf_off", "cf_key", "unsafe", "busy"].includes(m)) return err(m, m === "unsafe" ? 400 : 503);
+    if (["daily_full", "cf_off", "cf_key", "unsafe", "busy", "cf_failed"].includes(m)) return err(m, m === "unsafe" ? 400 : 503);
     console.error("house", m.slice(0, 300));
     return err("server", 500);
   }

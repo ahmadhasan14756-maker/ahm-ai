@@ -64,6 +64,7 @@ const TX = {
   e_cf_off: { ckb: "دروستکردنی وێنە هێشتا ئامادە نییە. خاوەنی ئەپ ئاگادار کراوەتەوە.", ar: "إنشاء الصور غير جاهز بعد.", en: "Picture making is not set up yet." },
   e_cf_key: { ckb: "کلیلی دروستکردنی وێنە هەڵەیە (خاوەنی ئەپ پێویستە CF_API_TOKEN بپشکنێت).", ar: "مفتاح إنشاء الصور غير صحيح.", en: "The picture key is wrong (owner: check CF_API_TOKEN)." },
   e_verify_email: { ckb: "بۆ وێنەی بێبەرامبەر، سەرەتا ئیمەیڵەکەت پشتڕاست بکەرەوە.", ar: "لتحصل على الصور المجانية، أكّد بريدك الإلكتروني أولاً.", en: "Please confirm your e-mail first to get free pictures." },
+  e_cf_failed: { ckb: "ئەم وێنەیە دروست نەبوو. 🔄 دووبارە هەوڵ بدەرەوە.", ar: "لم تُنشأ هذه الصورة. 🔄 أعد المحاولة.", en: "This picture was not made. 🔄 Try again." },
   e_unsafe: { ckb: "ئەم داواکارییە ڕێگەپێدراو نییە.", ar: "هذا الطلب غير مسموح.", en: "This request is not allowed." },
   e_slow_down: { ckb: "زۆر خێرایت 🙂 چەند چرکەیەک چاوەڕێ بکە.", ar: "أنت سريع جداً 🙂 انتظر ثوانٍ.", en: "Too fast 🙂 wait a few seconds." },
   e_net: { ckb: "پەیوەندی نییە یان کێشەیەک هەبوو. دووبارە هەوڵ بدەرەوە.", ar: "لا اتصال أو حدث خطأ. أعد المحاولة.", en: "No connection or something went wrong. Try again." },
@@ -93,7 +94,7 @@ const TX = {
 const TYPES = ["living", "guest", "bedroom", "kitchen", "dining", "bath", "garage", "garden", "yard", "hall", "stairs", "storage", "office", "laundry", "balcony", "other"];
 // Pictures are made only for what is in the user's plan: the outside, a 3D view of the plan, and each room ("r0", "r1", …).
 // "p0", "p1", … are 360° pictures of the same rooms.
-const NO_PANO = new Set(["stairs", "storage"]);
+const NO_PANO = new Set(["stairs", "storage", "garden", "yard", "garage", "balcony", "hall", "laundry"]); // 360° only for real rooms inside the house
 const roomLabel = (r, tx) => (r?.name || tx("t_" + (r?.type || "other"))) + (r?.w && r?.l ? ` · ${r.w}×${r.l}` : "");
 const ICON = { bedroom: "🛏️", living: "🛋️", guest: "🪑", kitchen: "🍳", dining: "🍽️", bath: "🚿", garage: "🚗", garden: "🌳", yard: "🌳" };
 
