@@ -25,7 +25,9 @@ Return JSON only:
 Rules:
 - Read sizes ONLY when they are written on the plan or can be read clearly from a scale. Never guess a size: use null and add the room to "unclear".
 - Sizes in metres (convert cm/ft). "area" = total built area in m² only if it is written or every room size is known; else null.
-- One entry per room; number repeated rooms (e.g. "Bedroom 1", "Bedroom 2").
+- List EXACTLY the spaces drawn on the plan — never add a room that is not drawn, never skip one, never merge or split rooms. Use the plan's own room names (translated if needed).
+- One entry per room; number repeated rooms (e.g. "Bedroom 1", "Bedroom 2"). A yard/courtyard/garden drawn on the plan is a room too (type "yard" or "garden").
+- If part of the plan is cut off or hidden, say so in "unclear" and list only what is visible.
 - "name", "entrance", "notes" and "unclear" must be written in ${lang}. Keep notes short (max 4), e.g. where the entrance and garage are, which rooms are next to each other.
 - If the picture is not a floor plan, return {"isPlan": false}.`;
 
@@ -84,13 +86,21 @@ export async function POST(req) {
       const left = await houseLeft(user.id, usage);
       if (left.left !== null && left.left <= 0) return err("limit", 402, left);
       const plan = cleanPlan(body.plan);
+      const room = Number.isInteger(body.room) ? body.room : -1;
+      const pano = view === "room" && body.pano === true;
+      const cost = pano ? 2 : 1; // a 360° picture is twice as big
+      if (left.left !== null && left.left < cost) return err("limit", 402, left);
       const ref = usesPlan(view) && typeof body.ref === "string" && body.ref.length < 400_000 && B64.test(body.ref) ? { data: body.ref } : null;
       const seed = Number.isInteger(body.seed) ? body.seed % 2_147_483_647 : Math.floor(Math.random() * 1e9);
-      const prompt = housePrompt(view, style, plan, body.wish);
-      const pic = await cfImage({ prompt, ref, seed, width: 1280, height: 768 });
-      await houseSpend(user.id, usage);
-      const after = left.left === null ? null : left.left - 1;
-      return Response.json({ image: `data:${pic.mime};base64,${pic.data}`, left: after, seed });
+      const prompt = housePrompt({ view, style, plan, wish: body.wish, room, pano });
+      if (!prompt) return err("bad_request");
+      const pic = await cfImage({ prompt, ref, seed, width: pano ? 1920 : 1280, height: pano ? 960 : 768, quality: pano || view !== "room" });
+      await houseSpend(user.id, usage, cost);
+      const after = left.left === null ? null : left.left - cost;
+      // Sent as the picture itself (not text), so big 360° pictures stay small enough to send.
+      return new Response(Buffer.from(pic.data, "base64"), {
+        headers: { "Content-Type": pic.mime, "Cache-Control": "no-store", "X-Left": after === null ? "" : String(after), "X-Seed": String(seed) },
+      });
     }
     return err("bad_request");
   } catch (e) {
