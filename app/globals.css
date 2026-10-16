@@ -1423,3 +1423,10 @@ header { position: relative; z-index: 5; }
 .house-pic img[alt] { image-rendering: auto; }
 .design figcaption .plan-to-house { margin: 8px 0 0; width: 100%; }
 .design figcaption { flex-wrap: wrap; }
+.house-plans { display: flex; flex-direction: column; gap: 10px; }
+.house-plan { margin: 0; }
+.house-plan figcaption { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.house-plans > .ghost-btn { margin: 0; border-style: dashed; }
+.house-plans .muted.small { margin: 0; }
+.hr-name.with-floor { grid-template-columns: 82px 96px minmax(0, 1fr); }
+@media (max-width: 520px) { .hr-name.with-floor { grid-template-columns: 1fr 1fr; } .hr-name.with-floor input { grid-column: 1 / -1; } }

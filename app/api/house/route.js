@@ -20,7 +20,7 @@ const err = (error, status = 400, extra = {}) => Response.json({ error, ...extra
 const ANALYZE = (lang) => `You are an experienced architect reading a house floor plan picture (a drawing, sketch, screenshot or photo).
 Return JSON only:
 {"isPlan": true|false, "floors": number, "area": number|null, "plot": {"w": number|null, "l": number|null},
- "rooms": [{"type": "living|guest|bedroom|kitchen|dining|bath|garage|garden|yard|hall|stairs|storage|office|laundry|balcony|other", "name": "...", "w": number|null, "l": number|null, "box": [ymin, xmin, ymax, xmax]}],
+ "rooms": [{"type": "living|guest|bedroom|kitchen|dining|bath|garage|garden|yard|hall|stairs|storage|office|laundry|balcony|other", "name": "...", "w": number|null, "l": number|null, "floor": number, "box": [ymin, xmin, ymax, xmax]}],
  "entrance": "...", "notes": ["..."], "unclear": ["..."]}
 Rules:
 - Read sizes ONLY when they are written on the plan or can be read clearly from a scale. Never guess a size: use null and add the room to "unclear".
@@ -28,6 +28,7 @@ Rules:
 - List EXACTLY the spaces drawn on the plan — never add a room that is not drawn, never skip one, never merge or split rooms. Use the plan's own room names (translated if needed).
 - One entry per room; number repeated rooms (e.g. "Bedroom 1", "Bedroom 2"). A yard/courtyard/garden drawn on the plan is a room too (type "yard" or "garden").
 - If part of the plan is cut off or hidden, say so in "unclear" and list only what is visible.
+- "floors" = how many floors are drawn in this picture (1 if only one). If several floor plans are drawn side by side, give each room its "floor" (1 = ground floor). Otherwise "floor" is 1.
 - "box" = where the room is drawn in the picture, as [ymin, xmin, ymax, xmax] from 0 to 1000 (0,0 = top-left of the picture). Follow the drawn walls exactly; neighbouring rooms share their wall line.
 - "name", "entrance", "notes" and "unclear" must be written in ${lang}. Keep notes short (max 4), e.g. where the entrance and garage are, which rooms are next to each other.
 - If the picture is not a floor plan, return {"isPlan": false}.`;
@@ -65,7 +66,7 @@ export async function POST(req) {
       const note = String(body.note || "").slice(0, 500);
       const out = await jsonCall(ANALYZE(LANG_NAME[lang]), [
         { inlineData: { mimeType: "image/jpeg", data: img } },
-        { text: "Read this floor plan." + (note ? ` The owner says: ${note}` : "") },
+        { text: "Read this floor plan." + (Number(body.floor) > 1 ? ` This picture is floor number ${Number(body.floor)} of the house (1 = ground floor); set "floors" to 1 and every room's "floor" to 1.` : "") + (note ? ` The owner says: ${note}` : "") },
       ], { maxTokens: 4000, think: "low" });
       if (!out?.isPlan) return err("not_plan");
       await chargeUsage(profile, usage);

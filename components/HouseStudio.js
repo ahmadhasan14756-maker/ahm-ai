@@ -24,6 +24,10 @@ const TX = {
   length: { ckb: "درێژی (م)", ar: "الطول (م)", en: "Length (m)" },
   addRoom: { ckb: "+ ژوور زیاد بکە", ar: "+ أضف غرفة", en: "+ Add room" },
   floors: { ckb: "ژمارەی نهۆم", ar: "عدد الطوابق", en: "Floors" },
+  floorN: { ckb: "نهۆمی {n}", ar: "الطابق {n}", en: "Floor {n}" },
+  addFloor: { ckb: "➕ نەخشەی نهۆمێکی تر زیاد بکە", ar: "➕ أضف مخطط طابق آخر", en: "➕ Add another floor's plan" },
+  floorsHint: { ckb: "ئەگەر خانووەکە چەند نهۆمە، نەخشەی هەر نهۆمێک وەک وێنەیەکی جیا دابنێ (یەکەم = نهۆمی خوارەوە). ئەگەر هەموو نهۆمەکان لە یەک وێنەدان، یەک وێنە بەسە.", ar: "إن كان المنزل عدة طوابق، ضع مخطط كل طابق كصورة منفصلة (الأولى = الأرضي). إن كانت كل الطوابق في صورة واحدة فصورة واحدة تكفي.", en: "For a house with several floors, add each floor's plan as its own picture (first = ground floor). If all floors are in one picture, one picture is enough." },
+  remove: { ckb: "لابردن", ar: "إزالة", en: "Remove" },
   area: { ckb: "ڕووبەر (م²)", ar: "المساحة (م²)", en: "Area (m²)" },
   unclear: { ckb: "⚠️ ئەمانە ڕوون نەبوون، تکایە بیانپشکنە:", ar: "⚠️ هذه غير واضحة، تحقق منها:", en: "⚠️ These were not clear, please check:" },
   styles: { ckb: "🎨 شێواز", ar: "🎨 الأسلوب", en: "🎨 Style" },
@@ -122,12 +126,39 @@ function download(href, name) {
   const a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }
 
+// The top view of every floor, side by side in one picture (one floor = just that floor).
+function floorsTopView(plan, imgs, style, lang, tx) {
+  const floors = [...new Set(plan.rooms.map((r) => r.floor || 1))].sort((a, b) => a - b);
+  const parts = floors.map((f) => {
+    const rooms = plan.rooms.filter((r) => (r.floor || 1) === f);
+    const im = imgs[rooms[0]?.img ?? 0] || imgs[0];
+    return { f, c: drawTopView({ ...plan, rooms }, { style, img: { w: im.w, h: im.h }, lang }) };
+  }).filter((x) => x.c);
+  if (!parts.length) return null;
+  if (parts.length === 1) return parts[0].c.toDataURL("image/jpeg", 0.9);
+  const head = 90, gap = 40, H = Math.max(...parts.map((x) => x.c.height)) + head;
+  const W = parts.reduce((n, x) => n + x.c.width, 0) + gap * (parts.length - 1);
+  const out = document.createElement("canvas"); out.width = W; out.height = H;
+  const g = out.getContext("2d");
+  g.fillStyle = "#0f1c26"; g.fillRect(0, 0, W, H);
+  let x = 0;
+  const order = lang === "en" ? parts : [...parts].reverse(); // floor 1 on the reading side
+  for (const p of order) {
+    g.drawImage(p.c, x, head);
+    g.fillStyle = "#fff"; g.font = '800 46px Vazirmatn, "Noto Kufi Arabic", sans-serif'; g.textAlign = "center"; g.textBaseline = "middle";
+    g.direction = lang === "en" ? "ltr" : "rtl"; g.fillText(tx("floorN").replace("{n}", p.f), x + p.c.width / 2, head / 2);
+    x += p.c.width + gap;
+  }
+  return out.toDataURL("image/jpeg", 0.9);
+}
+
 export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initialPlan }) {
   const tx = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
   const rtl = lang !== "en";
   const fileRef = useRef(null);
   const [step, setStep] = useState("upload");
-  const [planImg, setPlanImg] = useState(null); // { full: base64 1400px, ref: base64 ≤512px, preview: dataURL }
+  const [planImgs, setPlanImgs] = useState([]); // one picture per floor: { full: base64 1400px, ref: base64 ≤512px, preview, w, h }
+  const planImg = planImgs[0] || null; // the ground floor (used for the outside view)
   const [wish, setWish] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -139,17 +170,17 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
   const [viewer, setViewer] = useState(null); // src of a 360° picture being viewed
   const [tops, setTops] = useState({}); // style → top view of the user's own plan (drawn here, free)
   useEffect(() => {
-    if (!plan || !planImg) return;
+    if (!plan || !planImgs.length) return;
     const id = setTimeout(async () => {
       await Promise.all(["700 30px Vazirmatn", "800 30px Vazirmatn"].map((f) => document.fonts?.load?.(f).catch(() => {})));
       const out = {};
       for (const st of ["modern", "classic"]) {
-        try { const c = drawTopView(plan, { style: st, img: { w: planImg.w, h: planImg.h }, lang }); out[st] = c ? c.toDataURL("image/jpeg", 0.9) : null; } catch (e) { console.error(e); out[st] = null; }
+        try { out[st] = floorsTopView(plan, planImgs, st, lang, tx); } catch (e) { console.error(e); out[st] = null; }
       }
       setTops(out);
     }, 350);
     return () => clearTimeout(id);
-  }, [plan, planImg, lang]);
+  }, [plan, planImgs, lang]);
   const [quota, setQuota] = useState(null); // { left, max, pro, ready }
   const [pics, setPics] = useState({}); // "style:view" → { state: "wait"|"run"|"ok"|"err", src, err, seed }
   const [boards, setBoards] = useState({}); // style → dataURL | "making"
@@ -180,18 +211,24 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
       const [full, ref] = await Promise.all([shrink(f, 1400), shrink(f, 500, 0.8)]);
       const preview = "data:image/jpeg;base64," + full;
       const im = await loadImg(preview);
-      setPlanImg({ full, ref, preview, w: im.width, h: im.height });
+      setPlanImgs((list) => [...list, { full, ref, preview, w: im.width, h: im.height }].slice(0, 4));
     } catch { setError(tx("e_bad_image")); }
   }
 
   async function analyze() {
-    if (!planImg || busy) return;
+    if (!planImgs.length || busy) return;
     setBusy(true); setError("");
     try {
-      const j = await api("POST", { action: "analyze", image: planImg.full, note: wish, lang });
-      setPlan(j.plan);
-      setInfo({ notes: j.notes || [], unclear: j.unclear || [], entrance: j.entrance || "" });
-      setViews(["exterior", ...j.plan.rooms.map((_, i) => "r" + i)]);
+      // Each picture is read on its own; with several pictures, picture 1 = floor 1, picture 2 = floor 2, …
+      const res = await Promise.all(planImgs.map((im, i) => api("POST", { action: "analyze", image: im.full, note: wish, lang, floor: planImgs.length > 1 ? i + 1 : undefined })));
+      const rooms = res.flatMap((j, i) => j.plan.rooms.map((r) => ({ ...r, img: i, floor: planImgs.length > 1 ? i + 1 : r.floor || 1 })));
+      const floors = Math.max(planImgs.length, ...rooms.map((r) => r.floor || 1), ...res.map((j) => j.plan.floors || 1));
+      const area = res.every((j) => j.plan.area) ? Math.round(res.reduce((n, j) => n + j.plan.area, 0) * 10) / 10 : res[0].plan.area;
+      const merged = { ...res[0].plan, floors, area, rooms };
+      setPlan(merged);
+      const all = (k) => res.flatMap((j) => j[k] || []);
+      setInfo({ notes: all("notes").slice(0, 6), unclear: all("unclear").slice(0, 6), entrance: res[0].entrance || "" });
+      setViews(["exterior", ...rooms.map((_, i) => "r" + i)]);
       setStep("rooms");
     } catch (e) { setError(errText(e.message)); }
     setBusy(false);
@@ -210,7 +247,11 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
   const total = jobs.reduce((n, k) => n + cost(k), 0);
   const left = quota?.left; // null = no limit
   const over = left != null && total > left;
-  const viewName = (id) => id === "exterior" || id === "aerial" ? tx("v_" + id) : (id[0] === "p" ? "360° · " : "") + roomLabel(plan?.rooms[+id.slice(1)], tx);
+  const viewName = (id) => {
+    if (id === "exterior" || id === "aerial") return tx("v_" + id);
+    const r = plan?.rooms[+id.slice(1)];
+    return (id[0] === "p" ? "360° · " : "") + (plan?.floors > 1 ? tx("floorN").replace("{n}", r?.floor || 1) + " · " : "") + roomLabel(r, tx);
+  };
 
   async function renderOne(key, seed) {
     const [style, id] = key.split(":");
@@ -401,10 +442,17 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
         {step === "upload" && (
           <div className="house-card">
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
-            {planImg ? (
-              <div className="house-plan">
-                <img src={planImg.preview} alt={tx("original")} />
-                <button className="ghost-btn" onClick={() => fileRef.current?.click()} disabled={busy}>{tx("change")}</button>
+            {planImgs.length ? (
+              <div className="house-plans">
+                {planImgs.map((im, i) => (
+                  <figure key={i} className="house-plan">
+                    {planImgs.length > 1 && <figcaption>{tx("floorN").replace("{n}", i + 1)}</figcaption>}
+                    <img src={im.preview} alt={tx("original")} />
+                    <button className="ghost-btn" onClick={() => setPlanImgs((l) => l.filter((_, j) => j !== i))} disabled={busy}>✕ {tx("remove")}</button>
+                  </figure>
+                ))}
+                {planImgs.length < 4 && <button className="ghost-btn" onClick={() => fileRef.current?.click()} disabled={busy}>{tx("addFloor")}</button>}
+                <p className="muted small">{tx("floorsHint")}</p>
               </div>
             ) : (
               <button className="house-drop" onClick={() => fileRef.current?.click()}>
@@ -414,7 +462,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
             <label className="house-label">{tx("wish")}
               <textarea value={wish} onChange={(e) => setWish(e.target.value.slice(0, 300))} placeholder={tx("wishPh")} rows={2} />
             </label>
-            <button className="gold-btn" disabled={!planImg || busy} onClick={analyze}>
+            <button className="gold-btn" disabled={!planImgs.length || busy} onClick={analyze}>
               {busy ? <><span className="mini-spin" /> {tx("reading")}</> : tx("read")}
             </button>
             <p className="cs-note">{tx("disclaimer")}</p>
@@ -451,7 +499,12 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
               <div className="hr-head"><span>{tx("room")}</span><span>{tx("width")}</span><span>{tx("length")}</span><span /></div>
               {plan.rooms.map((r, i) => (
                 <div className="hr-row" key={i}>
-                  <div className="hr-name">
+                  <div className={"hr-name" + (plan.floors > 1 ? " with-floor" : "")}>
+                    {plan.floors > 1 && (
+                      <select value={r.floor || 1} onChange={(e) => setRoom(i, "floor", +e.target.value)} aria-label={tx("floors")}>
+                        {Array.from({ length: plan.floors }, (_, f) => <option key={f} value={f + 1}>{tx("floorN").replace("{n}", f + 1)}</option>)}
+                      </select>
+                    )}
                     <select value={TYPES.includes(r.type) ? r.type : "other"} onChange={(e) => setRoom(i, "type", e.target.value)} aria-label={tx("room")}>
                       {TYPES.map((k) => <option key={k} value={k}>{tx("t_" + k)}</option>)}
                     </select>
