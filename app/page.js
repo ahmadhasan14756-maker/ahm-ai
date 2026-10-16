@@ -878,15 +878,15 @@ function Upgrade({ reason, me, onClose, onEdit, onNotice, onRelease }) {
   );
 }
 
-const THEME_COLOR = { a: "#08080a", b: "#f7f9f6", c: "#070d1f" };
+const THEME_COLOR = { a: "#08080a", b: "#f7f9f6", c: "#070d1f", d: "#07080b" };
 function currentTheme() {
-  if (typeof document === "undefined") return "b";
+  if (typeof document === "undefined") return "d";
   const t = document.documentElement.getAttribute("data-theme");
-  return t === "a" || t === "c" ? t : "b";
+  return ["a", "b", "c"].includes(t) ? t : "d";
 }
 function ThemePicker() {
   const { t } = useLang();
-  const [cur, setCur] = useState("b");
+  const [cur, setCur] = useState("d");
   useEffect(() => setCur(currentTheme()), []);
   function choose(k) {
     document.documentElement.setAttribute("data-theme", k);
@@ -896,7 +896,7 @@ function ThemePicker() {
   }
   return (
     <div className="theme-picks" role="radiogroup" aria-label={t("design")}>
-      {["b", "a", "c"].map((k) => (
+      {["d", "b", "a", "c"].map((k) => (
         <button key={k} type="button" role="radio" aria-checked={cur === k} className={"theme-pick" + (cur === k ? " on" : "")} onClick={() => choose(k)}>
           <i className={"t-" + k} aria-hidden="true" /><span>{t("theme_" + k)}</span>
         </button>
