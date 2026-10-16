@@ -565,6 +565,13 @@ function DesignTile({ d, kind }) {
           <button aria-label="PNG" title="PNG" disabled={!!saving} onClick={() => save("png")}>{saving === "png" ? <span className="mini-spin" /> : <Svg d={Icon.zip} size={16} />} PNG</button>
           <button aria-label="SVG" title="SVG" disabled={!!saving} onClick={() => save("svg")}>{saving === "svg" ? <span className="mini-spin" /> : null}SVG</button>
         </div>
+        {kind === "plan" && (
+          // Opens this exact plan in the house design studio (no download / upload needed).
+          <button className="gold-btn small plan-to-house" disabled={!!saving} onClick={async () => {
+            setSaving("house");
+            try { window.dispatchEvent(new CustomEvent("ahm-house-plan", { detail: await svgToPng(await svgWithFonts(d.svg)) })); } finally { setSaving(""); }
+          }}>{saving === "house" ? <span className="mini-spin" /> : "🏡"} {t("planToHouse")}</button>
+        )}
       </figcaption>
     </figure>
   );
@@ -1633,6 +1640,12 @@ function Main({ session }) {
   const [recSecs, setRecSecs] = useState(0);
   const recRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [housePlan, setHousePlan] = useState(null); // a plan picture sent from a construction answer
+  useEffect(() => {
+    const open = (e) => { setHousePlan(e.detail); setView("house"); setSideOpen(false); };
+    window.addEventListener("ahm-house-plan", open);
+    return () => window.removeEventListener("ahm-house-plan", open);
+  }, []);
   const [sideOpen, setSideOpen] = useState(false);
   const inst = useInstall();
   const keys = useRef({});
@@ -2445,7 +2458,7 @@ function Main({ session }) {
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
             onLimit={() => showLimit()} />
         ) : view === "house" ? (
-          <HouseStudio lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
+          <HouseStudio key={housePlan ? housePlan.size : 0} lang={lang} getToken={token} initialPlan={housePlan} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : (
         <div className="body">
           <div className="chat-col">

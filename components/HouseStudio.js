@@ -4,6 +4,7 @@
 // Pictures are concepts only; the plan the user confirmed is never changed silently.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { drawTopView } from "../lib/topview";
 
 const TX = {
   title: { ckb: "دیزاینی خانوو لە نەخشەکەتەوە", ar: "تصميم المنزل من مخططك", en: "House design from your plan" },
@@ -68,6 +69,11 @@ const TX = {
   e_net: { ckb: "پەیوەندی نییە یان کێشەیەک هەبوو. دووبارە هەوڵ بدەرەوە.", ar: "لا اتصال أو حدث خطأ. أعد المحاولة.", en: "No connection or something went wrong. Try again." },
   v_exterior: { ckb: "ڕووکاری دەرەوە", ar: "الواجهة الخارجية", en: "Exterior" },
   v_aerial: { ckb: "نەخشەی 3D", ar: "مخطط ثلاثي الأبعاد", en: "3D plan" },
+  v_top: { ckb: "خانووەکەت لە سەرەوە", ar: "منزلك من الأعلى", en: "Your house from above" },
+  topTitle: { ckb: "🗺️ نەخشەکەت وەک ئەپەکە خوێندییەوە", ar: "🗺️ مخططك كما قرأه التطبيق", en: "🗺️ Your plan as the app read it" },
+  topSub: { ckb: "لای ڕاست نەخشەکەی خۆتە، لای چەپ هەمان نەخشەیە بە کەلوپەل و ناوەکان. ئەگەر شوێنی ژوورێک هەڵەیە، وێنەیەکی ڕوونتر بنێرە.", ar: "اليمين مخططك، واليسار نفس المخطط بالأثاث والأسماء. إن كان مكان غرفة خطأ فأرسل صورة أوضح.", en: "Right: your plan. Left: the same plan with furniture and names. If a room is in the wrong place, send a clearer picture." },
+  topNone: { ckb: "شوێنی ژوورەکان لە وێنەکەدا نەدۆزرایەوە، بۆیە نەخشەی سەرەوە دروست نابێت. وێنەیەکی ڕوونتر تاقی بکەرەوە.", ar: "لم يُعثر على أماكن الغرف في الصورة. جرّب صورة أوضح.", en: "The room positions could not be found in the picture. Try a clearer one." },
+  topFree: { ckb: "بێبەرامبەرە و ڕاست لەسەر نەخشەکەی خۆتە", ar: "مجاني ومطابق لمخططك", en: "Free and exactly your plan" },
   v_living: { ckb: "هۆڵی دانیشتن", ar: "غرفة المعيشة", en: "Living room" },
   v_guest: { ckb: "ژووری میوان", ar: "غرفة الضيوف", en: "Guest room" },
   v_bedroom: { ckb: "ژووری نوستن", ar: "غرفة النوم", en: "Bedroom" },
@@ -115,7 +121,7 @@ function download(href, name) {
   const a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }
 
-export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
+export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initialPlan }) {
   const tx = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
   const rtl = lang !== "en";
   const fileRef = useRef(null);
@@ -130,6 +136,19 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
   const [views, setViews] = useState([]); // "exterior", "aerial", "r0", "r1", …
   const [pano, setPano] = useState(false);
   const [viewer, setViewer] = useState(null); // src of a 360° picture being viewed
+  const [tops, setTops] = useState({}); // style → top view of the user's own plan (drawn here, free)
+  useEffect(() => {
+    if (!plan || !planImg) return;
+    const id = setTimeout(async () => {
+      await Promise.all(["700 30px Vazirmatn", "800 30px Vazirmatn"].map((f) => document.fonts?.load?.(f).catch(() => {})));
+      const out = {};
+      for (const st of ["modern", "classic"]) {
+        try { const c = drawTopView(plan, { style: st, img: { w: planImg.w, h: planImg.h }, lang }); out[st] = c ? c.toDataURL("image/jpeg", 0.9) : null; } catch (e) { console.error(e); out[st] = null; }
+      }
+      setTops(out);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [plan, planImg, lang]);
   const [quota, setQuota] = useState(null); // { left, max, pro, ready }
   const [pics, setPics] = useState({}); // "style:view" → { state: "wait"|"run"|"ok"|"err", src, err, seed }
   const [boards, setBoards] = useState({}); // style → dataURL | "making"
@@ -147,14 +166,20 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
   useEffect(() => { refreshQuota(); }, []);
   const errText = (code) => TX["e_" + code] ? tx("e_" + code) : tx("e_net");
 
+  // A plan sent straight from a construction answer: use it right away.
+  useEffect(() => { if (initialPlan) takeFile(initialPlan); }, [initialPlan]);
   async function onFile(e) {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f) return;
+    if (f) takeFile(f);
+  }
+  async function takeFile(f) {
     setError("");
     try {
       const [full, ref] = await Promise.all([shrink(f, 1400), shrink(f, 500, 0.8)]);
-      setPlanImg({ full, ref, preview: "data:image/jpeg;base64," + full });
+      const preview = "data:image/jpeg;base64," + full;
+      const im = await loadImg(preview);
+      setPlanImg({ full, ref, preview, w: im.width, h: im.height });
     } catch { setError(tx("e_bad_image")); }
   }
 
@@ -165,7 +190,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
       const j = await api("POST", { action: "analyze", image: planImg.full, note: wish, lang });
       setPlan(j.plan);
       setInfo({ notes: j.notes || [], unclear: j.unclear || [], entrance: j.entrance || "" });
-      setViews(["exterior", "aerial", ...j.plan.rooms.map((_, i) => "r" + i)]);
+      setViews(["exterior", ...j.plan.rooms.map((_, i) => "r" + i)]);
       setStep("rooms");
     } catch (e) { setError(errText(e.message)); }
     setBusy(false);
@@ -177,7 +202,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
   const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   const roomIds = views.filter((v) => v[0] === "r" && plan?.rooms[+v.slice(1)]);
-  const ids = [...views.filter((v) => v === "exterior" || v === "aerial"), ...roomIds,
+  const ids = [...views.filter((v) => v === "exterior"), ...roomIds,
     ...(pano ? roomIds.filter((v) => !NO_PANO.has(plan.rooms[+v.slice(1)].type)).map((v) => "p" + v.slice(1)) : [])];
   const jobs = styles.flatMap((s) => ids.map((v) => `${s}:${v}`));
   const cost = (k) => (k.split(":")[1][0] === "p" ? 2 : 1);
@@ -241,7 +266,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
       const get = (v) => pics[`${style}:${v}`]?.state === "ok" ? pics[`${style}:${v}`].src : null;
       const W = 2400, PAD = 28;
       const hero = get("exterior");
-      const center = get("aerial") || planImg.preview;
+      const center = tops[style] || planImg.preview;
       const rooms = plan.rooms.map((_, i) => "r" + i).filter(get);
       const side = rooms.slice(0, 3), bottom = rooms.slice(3, 7);
       const nameOf = (id) => plan.rooms[+id.slice(1)]?.name || tx("t_" + plan.rooms[+id.slice(1)]?.type);
@@ -316,7 +341,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
       const px = rtl ? PAD + (side.length ? sideW + PAD : 0) : featW + PAD * 2;
       g.fillStyle = "#f4f1ea"; g.beginPath(); g.roundRect(px, my, planW, midH - PAD, 22); g.fill();
       await contain(center, px + 20, my + 20, planW - 40, midH - PAD - 40);
-      if (get("aerial") && planImg.preview) { // small original plan in the corner, so people can compare
+      if (tops[style] && planImg.preview) { // small original plan in the corner, so people can compare
         const iw = 300, ih = 220, ix = px + planW - iw - 24, iy = my + midH - PAD - ih - 24;
         g.fillStyle = "#fff"; g.beginPath(); g.roundRect(ix - 8, iy - 8, iw + 16, ih + 16, 14); g.fill();
         await contain(planImg.preview, ix, iy, iw, ih);
@@ -405,6 +430,18 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
             {(info.entrance || info.notes.length > 0) && (
               <ul className="house-notes">{info.entrance && <li>🚪 {info.entrance}</li>}{info.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
             )}
+            <div className="house-top">
+              <h3>{tx("topTitle")}</h3>
+              {tops.modern ? (
+                <>
+                  <p className="muted small">{tx("topSub")}</p>
+                  <div className="ht-pair">
+                    <img src={planImg.preview} alt={tx("original")} />
+                    <img src={tops[styles[0] || "modern"]} alt={tx("v_top")} />
+                  </div>
+                </>
+              ) : <p className="house-warn">{tx("topNone")}</p>}
+            </div>
             <div className="house-meta">
               <label>{tx("floors")}<input type="number" min="1" max="5" value={plan.floors || 1} onChange={(e) => setPlan({ ...plan, floors: e.target.value })} /></label>
               <label>{tx("area")}<input type="number" min="0" step="0.1" value={plan.area ?? ""} onChange={(e) => setPlan({ ...plan, area: e.target.value === "" ? null : e.target.value })} /></label>
@@ -435,7 +472,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
             </div>
             <h3>{tx("views")}</h3>
             <div className="house-chips">
-              {["exterior", "aerial", ...plan.rooms.map((_, i) => "r" + i)].map((v) => (
+              {["exterior", ...plan.rooms.map((_, i) => "r" + i)].map((v) => (
                 <button key={v} className={views.includes(v) ? "on" : ""} aria-pressed={views.includes(v)} onClick={() => toggle(views, setViews, v)}>{viewName(v)}</button>
               ))}
             </div>
@@ -460,8 +497,8 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
           <>
             {styles.map((s) => {
               const keys = ids.map((v) => `${s}:${v}`).filter((k) => pics[k]);
-              if (!keys.length) return null;
-              const done = keys.some((k) => pics[k]?.state === "ok");
+              if (!keys.length && !tops[s]) return null;
+              const done = !!tops[s] || keys.some((k) => pics[k]?.state === "ok");
               const b = boards[s];
               return (
                 <section className="house-style" key={s}>
@@ -471,6 +508,14 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade }) {
                       {b === "making" ? tx("boardMaking") : tx("board")}
                     </button>
                   </div>
+                  {tops[s] && (
+                    <figure className="house-pic wide">
+                      <img src={tops[s]} alt={tx("v_top")} />
+                      <figcaption><span>🗺️ {tx("v_top")} · <small className="ht-free">{tx("topFree")}</small></span>
+                        <span className="hp-tools"><button onClick={() => download(tops[s], `AHM-AI-${s}-top.jpg`)} aria-label={tx("download")}>⬇️</button></span>
+                      </figcaption>
+                    </figure>
+                  )}
                   {b && b !== "making" && (
                     <figure className="house-board">
                       <img src={b} alt={tx("board")} />
