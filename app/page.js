@@ -935,7 +935,7 @@ function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onI
       {me && (
         <button className="set-row set-btn" onClick={onPlans}>
           <div className="set-label">{t("plans")}</div>
-          <div className="set-val gold">{me.unlimited ? "👑" : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</div>
+          <div className="set-val gold">{me.unlimited ? (me.vip ? "♾️ VIP" : "👑") : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</div>
         </button>
       )}
       <button className={"set-row set-btn refresh-row" + (update ? " new" : "")} disabled={loading} onClick={() => { setLoading(true); refreshApp(); }}>
@@ -1607,7 +1607,7 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
         <button className="side-fb" onClick={onFeedback}>💬 <span>{t("feedback")}</span></button>
         <button className="side-settings" onClick={onSettings}>
           <Svg d={Icon.gear} size={18} /> <span>{t("settings")}</span>
-          {me && <em>{me.unlimited ? "👑" : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</em>}
+          {me && <em>{me.unlimited ? (me.vip ? "♾️ VIP" : "👑") : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</em>}
         </button>
       </aside>
     </>
@@ -2422,7 +2422,7 @@ function Main({ session }) {
           <div className="head-tools">
             {me && (
               <button className={"quota-pill" + (me.unlimited || me.pro ? " pro" : "") + (me.lockedUntil ? " wait" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })}>
-                {me.unlimited ? "👑" : me.pro ? "⭐" : ""} {usageText(me, t)}
+                {me.unlimited ? (me.vip ? "♾️ VIP" : "👑") : me.pro ? "⭐" : ""} {usageText(me, t)}
               </button>
             )}
             {!inst.installed && (

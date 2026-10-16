@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { serverEnv } from "../../../lib/env";
 import { webhookSecret } from "../../../lib/telegram";
 import { adminDb, isPaidActive, usageOf, getSettings, dropProfile } from "../../../lib/server";
+import { cacheGet, cacheSet, cacheDel } from "../../../lib/redis";
 import { planById, planByPrice } from "../../../lib/plans";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ async function tg(method, payload) {
 const send = (chat_id, text) => tg("sendMessage", { chat_id, text, parse_mode: "HTML", disable_web_page_preview: true });
 
 // iPhone keyboards often turn "/stats" into "Stats/" or "/Stats" — accept all of them, and the buttons.
-const ALIASES = { starts: "stats", stat: "stats", "ئامار": "stats", "📊": "stats", "👥": "users", "بەکارهێنەران": "users", "❓": "help", "یارمەتی": "help", miyd: "myid" };
+const ALIASES = { starts: "stats", stat: "stats", "ئامار": "stats", "📊": "stats", "👥": "users", "بەکارهێنەران": "users", "❓": "help", "یارمەتی": "help", miyd: "myid", "🎁": "give" };
 function normCmd(text) {
   const t = (text || "").trim();
   const first = t.split(/\s+/)[0] || "";
@@ -38,7 +39,7 @@ function normCmd(text) {
 }
 
 const ADMIN_KEYBOARD = {
-  keyboard: [[{ text: "📊 ئامار" }, { text: "👥 بەکارهێنەران" }], [{ text: "❓ یارمەتی" }]],
+  keyboard: [[{ text: "🎁 پێدانی Pro / بەخۆڕایی" }], [{ text: "📊 ئامار" }, { text: "👥 بەکارهێنەران" }], [{ text: "❓ یارمەتی" }]],
   resize_keyboard: true,
   is_persistent: true,
 };
@@ -80,6 +81,8 @@ const ADMIN_HELP = `👑 <b>تۆ خاوەنی بۆتەکەیت.</b>
 
 <b>فەرمانەکان:</b>
 <code>/pro email 6</code> — چالاککردنی پلان (ژمارەکە نرخی پلانەکەیە: 3، 6 یان 12)
+🎁 دوگمەی <b>پێدانی Pro / بەخۆڕایی</b> — ئیمەیڵ بنووسە، پاشان ژمارەی ڕۆژەکان، یان «بەخۆڕایی بۆ هەمیشە»
+<code>/vip email</code> — بەخۆڕایی و بێ سنوور بۆ هەمیشە
 <code>/remove email</code> — لابردنی Pro
 <code>/check email</code> — بینینی دۆخی بەکارهێنەر
 <code>/stats</code> — ئامارەکان
@@ -112,11 +115,84 @@ const resetText = (r) => `🔑 <b>وشەی نهێنی نوێ دروست کرا</
 <code>سڵاو! وشەی نهێنی نوێی AHM AI ـەکەت: ${esc(r.pass)}
 بەم وشەیە بچۆ ژوورەوە، پاشان لە ڕێکخستنەکان دەتوانیت بیگۆڕیت.</code>`;
 
+// ---- owner gives Pro / free access by hand: email → number of days (or "free for ever") ----
+const GIVE_KEY = "tg:give:" + ADMIN; // what the owner is in the middle of (Redis, 15 minutes)
+const FOREVER = "2099-12-31T00:00:00.000Z";
+const mem = new Map(); // backup when Redis is not reachable
+const getGive = async () => (await cacheGet(GIVE_KEY)) ?? ((mem.get(GIVE_KEY)?.until || 0) > Date.now() ? mem.get(GIVE_KEY).v : null);
+const setGive = (v) => { mem.set(GIVE_KEY, { v, until: Date.now() + 900_000 }); return cacheSet(GIVE_KEY, v, 900); };
+const endGive = () => { mem.delete(GIVE_KEY); return cacheDel(GIVE_KEY); };
+
+async function giveAccess(profileId, days) {
+  const st = await getSettings();
+  const db = adminDb();
+  const { data: p } = await db.from("profiles").select("*").eq("id", profileId).maybeSingle();
+  if (!p) return null;
+  const now = new Date();
+  const forever = days === "forever";
+  // Days → the biggest Pro plan for that many days. "forever" → VIP: free and without limits for ever.
+  const top = [...st.paid].sort((a, b) => b.limit - a.limit)[0];
+  const until = forever ? FOREVER : new Date(now.getTime() + Number(days) * 86400000).toISOString();
+  const plan = forever || !top ? "vip" : top.id;
+  await db.from("profiles").update({ plan, plan_until: until, used: 0, period_key: "paid:" + now.toISOString() }).eq("id", p.id);
+  await dropProfile(p.id);
+  const label = forever ? "♾️ بەخۆڕایی و بێ سنوور بۆ هەمیشە" : `⭐ ${esc(top?.name || "Pro")} بۆ ${Number(days)} ڕۆژ (تا ${fmtDate(until)})`;
+  if (p.telegram_chat_id) await send(p.telegram_chat_id, `🎉 پیرۆزە! هەژمارەکەت (<b>${esc(p.email)}</b>) چالاک کرا:
+${label}
+ئەپەکە دابخە و بیکەرەوە.`).catch(() => {});
+  return { p, label };
+}
+
+const DAYS_KEYBOARD = (id) => ({
+  inline_keyboard: [
+    [7, 30, 90].map((d) => ({ text: `${d} ڕۆژ`, callback_data: `g:${id}:${d}` })),
+    [180, 365].map((d) => ({ text: `${d} ڕۆژ`, callback_data: `g:${id}:${d}` })),
+    [{ text: "♾️ بەخۆڕایی بۆ هەمیشە", callback_data: `g:${id}:forever` }],
+    [{ text: "❌ هەڵوەشاندنەوە", callback_data: "gx" }],
+  ],
+});
+
+async function askDays(chatId, p) {
+  await setGive({ s: "days", id: p.id });
+  return tg("sendMessage", {
+    chat_id: chatId, parse_mode: "HTML", reply_markup: DAYS_KEYBOARD(p.id),
+    text: `👤 <b>${esc(p.email)}</b>
+
+چەند ڕۆژ؟ دوگمەیەک دابگرە، یان <b>ژمارەی ڕۆژەکان</b> بنووسە (بۆ نموونە <code>45</code>).
+یان «♾️ بەخۆڕایی بۆ هەمیشە» هەڵبژێرە.`,
+  });
+}
+
+// Returns true when the message was part of the give flow.
+async function giveFlow(chatId, text) {
+  const state = await getGive();
+  if (!state) return false;
+  if (state.s === "email") {
+    const email = text.match(EMAIL_RE)?.[0];
+    if (!email) { await send(chatId, "📧 تکایە تەنها <b>ئیمەیڵەکە</b> بنووسە (یان /cancel)."); return true; }
+    const p = await findByEmail(email);
+    if (!p) { await send(chatId, `❌ ئەم ئیمەیڵە تۆمار نەکراوە: ${esc(email)}
+ئیمەیڵێکی تر بنووسە، یان /cancel.`); return true; }
+    await askDays(chatId, p);
+    return true;
+  }
+  if (state.s === "days") {
+    if (/^(♾️|بۆ هەمیشە|forever|free|بەخۆڕایی)/i.test(text)) { const r = await giveAccess(state.id, "forever"); await endGive(); await send(chatId, r ? `✅ <b>${esc(r.p.email)}</b> ← ${r.label}` : "❌ نەکرا."); return true; }
+    const n = Number((text.match(/[0-9٠-٩]+/)?.[0] || "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+    if (!n || n < 1 || n > 3650) { await send(chatId, "🔢 ژمارەی ڕۆژەکان بنووسە (١ تا ٣٦٥٠)، یان دوگمەیەک دابگرە."); return true; }
+    const r = await giveAccess(state.id, n);
+    await endGive();
+    await send(chatId, r ? `✅ <b>${esc(r.p.email)}</b> ← ${r.label}` : "❌ نەکرا.");
+    return true;
+  }
+  return false;
+}
+
 async function handleAdmin(chatId, cmd, rest) {
   const [arg1, arg2, arg3] = rest;
   const db = adminDb();
   const st = await getSettings();
-  const priceOf = (id) => planById(st, id)?.price ?? "?";
+  const priceOf = (id) => (id === "vip" ? "♾️" : planById(st, id)?.price ?? "?");
 
   if (cmd === "/pro") {
     const plan = planByPrice(st, arg2) || planById(st, arg2);
@@ -127,6 +203,30 @@ async function handleAdmin(chatId, cmd, rest) {
     if (!found) return send(chatId, `❌ ئەم ئیمەیڵە تۆمار نەکراوە: ${esc(arg1)}\nبەکارهێنەر دەبێت سەرەتا لە ئەپەکەدا خۆی تۆمار بکات.`);
     const r = await activate(found.id, plan.id);
     return send(chatId, `✅ <b>${esc(r.p.email)}</b> ← پلانی <b>$${plan.price}</b> (${plan.limit} پرسیار) تا <b>${fmtDate(r.until)}</b>`);
+  }
+
+  if (cmd === "/give") {
+    if (arg1 && EMAIL_RE.test(arg1)) {
+      const p = await findByEmail(arg1);
+      if (!p) return send(chatId, `❌ ئەم ئیمەیڵە تۆمار نەکراوە: ${esc(arg1)}`);
+      return askDays(chatId, p);
+    }
+    await setGive({ s: "email" });
+    return send(chatId, "🎁 <b>پێدانی Pro / بەخۆڕایی</b>
+
+📧 ئیمەیڵی بەکارهێنەرەکە بنووسە:");
+  }
+
+  if (cmd === "/vip") {
+    const p = arg1 && (await findByEmail(arg1));
+    if (!p) return send(chatId, "بەم شێوەیە بنووسە: <code>/vip email</code>");
+    const r = await giveAccess(p.id, "forever");
+    return send(chatId, r ? `✅ <b>${esc(r.p.email)}</b> ← ${r.label}` : "❌ نەکرا.");
+  }
+
+  if (cmd === "/cancel") {
+    await endGive();
+    return tg("sendMessage", { chat_id: chatId, text: "❌ هەڵوەشێنرایەوە.", reply_markup: ADMIN_KEYBOARD });
   }
 
   if (cmd === "/remove") {
@@ -226,6 +326,15 @@ export async function POST(req) {
             text: `✅ چالاک کرا: <b>${esc(r.p.email)}</b>\nپلانی <b>$${r.plan.price}</b> (${r.plan.limit} پرسیار) تا <b>${fmtDate(r.until)}</b>`,
           });
         }
+      } else if (kind === "g") {
+        const r = await giveAccess(id, price === "forever" ? "forever" : Number(price));
+        await endGive();
+        await tg("answerCallbackQuery", { callback_query_id: cb.id, text: r ? "✅" : "❌" });
+        if (cb.message) await tg("editMessageText", { chat_id: cb.message.chat.id, message_id: cb.message.message_id, parse_mode: "HTML", text: r ? `✅ <b>${esc(r.p.email)}</b> ← ${r.label}` : "❌ نەکرا." });
+      } else if (kind === "gx") {
+        await endGive();
+        await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "❌" });
+        if (cb.message) await tg("editMessageText", { chat_id: cb.message.chat.id, message_id: cb.message.message_id, text: "❌ هەڵوەشێنرایەوە." });
       } else if (kind === "rp") {
         const r = await resetPassword(id);
         await tg("answerCallbackQuery", { callback_query_id: cb.id, text: r ? "✅" : "❌" });
@@ -281,9 +390,11 @@ export async function POST(req) {
     }
 
     if (c && isAdmin) {
+      if (c.cmd !== "/give") await endGive(); // any other command ends the give flow
       await handleAdmin(chatId, c.cmd, c.rest);
       return Response.json({ ok: true });
     }
+    if (isAdmin && text && !msg.photo && !msg.document && (await giveFlow(chatId, text))) return Response.json({ ok: true });
 
     if (c && !isAdmin && ["/stats", "/users", "/pro", "/remove", "/check"].includes(c.cmd)) {
       await send(chatId, `⛔ ئەم فەرمانە تەنها بۆ خاوەنی بۆتەکەیە.\nID ی تۆ: <code>${fromId}</code>`);
