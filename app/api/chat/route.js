@@ -101,6 +101,21 @@ ANSWER SHAPE
 - First write 1–4 short sentences in the user's language: what you built or changed, and the next step.
 - Then the file blocks. No other code blocks.`;
 
+const CONSTRUCT_PROMPT = `
+
+CONSTRUCTION STUDIO MODE (you are now an experienced architect + civil engineer + quantity surveyor who knows building in Kurdistan and Iraq)
+Help with: house and building design ideas (exterior and interior), preliminary room layouts, construction terms, and preliminary material and cost estimates.
+- Ask for missing key facts briefly when needed (land size, floors, rooms, budget, city), but if the user gave enough, answer directly.
+- DESIGN IDEAS: give 2–3 clear concepts (style, layout idea, facade materials and colours, light and ventilation, climate tips for hot summers / cold winters). Use headings and short bullets.
+- ROOM LAYOUTS: describe the layout with a room table (room, size in m, area m²), then draw a simple top-view floor-plan sketch as ONE fenced code block with the language "svg":
+  \`\`\`svg
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H"> … </svg>
+  \`\`\`
+  Rules for the sketch: scale 1 m = 40 units; white background; outer walls thick dark lines (stroke-width 6), inner walls stroke-width 3; each room a rectangle with its name (in the user's language, direction="rtl" for Kurdish/Arabic, font-family "'Noto Kufi Arabic','Vazirmatn',sans-serif") and its size (e.g. "4×5 m") in the centre; show the main door as a gap with an arc, and a north arrow and a scale bar. Make sure everything fits inside the viewBox. No <script>, <image> or links.
+- COST & MATERIALS: always show a table of quantities (concrete m³, cement bags, sand m³, gravel m³, steel tons, blocks/bricks count, plaster, tiles…) with the rule of thumb used for each line, then a cost table using the user's local prices. If the user gave no prices, use clearly labelled example price ranges and say they must be checked locally. Show the total range and cost per m².
+- TERMS: explain in simple words, with the English term in brackets.
+- ALWAYS end with one short line in the user's language: this is a preliminary estimate/idea only — not a certified plan, structural calculation or permit; a licensed engineer must review before building.`;
+
 const MAX_MESSAGES = 30;
 const MAX_FILE_CHARS = 1_500_000;
 const MAX_PROJECT_CHARS = 600_000;
@@ -119,7 +134,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Remember which "thinking" setting each model accepts, so later questions skip failed tries.
 // Deeper thinking = smarter answers. Code projects think the most, voice the least (it must be fast).
 const THINKING = [{ thinkingLevel: "medium" }, { thinkingLevel: "low" }, { thinkingLevel: "minimal" }, null];
-const START = { build: 0, file: 0, chat: 1, voice: 2 };
+const START = { build: 0, file: 0, construct: 0, chat: 1, voice: 2 };
 const thinkingOk = new Map();
 
 /*
@@ -194,6 +209,7 @@ export async function POST(req) {
 
     const lang = ["ckb", "ar", "en"].includes(body.lang) ? body.lang : "ckb";
     const build = body.mode === "build";
+    const construct = body.mode === "construct";
     const file = !build && body.file && typeof body.file.content === "string" ? body.file : null;
     const project =
       build && body.project && typeof body.project === "object"
@@ -264,7 +280,7 @@ VOICE CONVERSATION MODE (most important rules)
 - Then your spoken reply: natural, warm, conversational, short (1–4 sentences, longer only if they asked for an explanation). No Markdown, no lists, no symbols, no emojis, no links, no code — only words that sound good when read aloud. Write numbers so they can be spoken.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
+      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
       maxOutputTokens: file || build ? 32768 : 8192,
       safetySettings: GEMINI_SAFETY,
     };
@@ -282,7 +298,7 @@ VOICE CONVERSATION MODE (most important rules)
     // The answer keeps being made even if the phone disconnects (user left the app);
     // the full text is saved as a "job" so the app can show it when the user comes back.
     const jobId = validJobId(body.jobId);
-    const startLevel = START[body.voice ? "voice" : build ? "build" : file ? "file" : "chat"];
+    const startLevel = START[body.voice ? "voice" : build ? "build" : file ? "file" : construct ? "construct" : "chat"];
     let ctrl = null;
     let open = true;
     const send = (txt) => { if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; } };

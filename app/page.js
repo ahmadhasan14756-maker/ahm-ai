@@ -67,6 +67,8 @@ const Icon = {
   image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></>,
   open: <><path d="M14 4h6v6M20 4l-9 9" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></>,
   learn: <><path d="M2 9l10-5 10 5-10 5z" /><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5" /></>,
+  pen: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M14 6l4 4" /></>,
+  house: <><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M10 20v-6h4v6" /></>,
   wave: <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />,
   more: <><path d="M12 5v14M5 12h14" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
@@ -295,6 +297,11 @@ function CodeBlock({ className, children }) {
     return <div className="file-chip del" dir="ltr"><div className="del-row">🗑 <span>{lang.slice(7)}</span></div></div>;
   }
 
+  // Floor-plan sketches (construction studio) come as svg code: show the drawing itself.
+  if (lang === "svg" && /<svg[\s>]/i.test(text)) {
+    return <DesignTile d={{ name: t("planSketch"), svg: text }} kind="plan" />;
+  }
+
   if (lang.startsWith("file:")) {
     return (
       <div className="file-chip" dir="ltr">
@@ -502,6 +509,9 @@ function scopeSvg(svg) {
   const p = "s" + (++designSeq).toString(36) + "_";
   return String(svg)
     .replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, "")
+    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, "").replace(/<(image|iframe|embed|object)\b[\s\S]*?(\/>|<\/\1>)/gi, "")
+    .replace(/<\/?a\b[^>]*>/gi, "").replace(/((?:xlink:)?href\s*=\s*["'])(?!#)[^"']*(["'])/gi, "$1#$2")
+    .replace(/javascript:/gi, "").replace(/@import[^;]*;/gi, "")
     .replace(/\bid="([^"]+)"/g, (_m, id) => `id="${p}${id}"`)
     .replace(/url\(\s*#([^)\s]+)\s*\)/g, (_m, id) => `url(#${p}${id})`)
     .replace(/(href\s*=\s*")#([^"]+)"/g, (_m, a, id) => `${a}#${p}${id}"`);
@@ -621,7 +631,7 @@ function VoiceReply({ text, getToken, auto, onAutoDone, onVoiceLimit }) {
   );
 }
 
-function AnswerActions({ text, getToken }) {
+function AnswerActions({ text, getToken, exportName }) {
   const { t } = useLang();
   const [state, setState] = useState("idle"); // idle | loading | playing
   const [copied, setCopied] = useState(false);
@@ -664,6 +674,11 @@ function AnswerActions({ text, getToken }) {
       <button aria-label={state === "playing" ? t("stopListen") : t("listen")} title={t("listen")} className={state !== "idle" ? "on" : ""} onClick={speak}>
         {state === "loading" ? <span className="mini-spin" aria-hidden="true" /> : <Svg d={state === "playing" ? Icon.stop : Icon.speaker} size={16} />}
       </button>
+      {exportName && (
+        <button aria-label={t("exportSummary")} title={t("exportSummary")} className="export-btn" onClick={() => downloadText(exportName, text)}>
+          <Svg d={Icon.zip} size={16} /> <span>{t("exportSummary")}</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -1549,9 +1564,9 @@ function PlanEditor({ me, token, onSaved, onClose }) {
 }
 
 /* ---------------- Sidebar (chat history) ---------------- */
-function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard, onOwnerPlans, onNotice, onRelease, releaseReady }) {
+function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, onClose, me, onLearn, learnOn, onFeedback, onInvite, onDashboard, onOwnerPlans, onNotice, onRelease, releaseReady, onRename }) {
   const { t } = useLang();
-  const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image, studio: Icon.image };
+  const iconOf = { chat: Icon.chat, auto: Icon.chat, build: Icon.build, image: Icon.image, studio: Icon.image, construct: Icon.house };
   return (
     <>
       <div className={"side-bg" + (open ? " open" : "")} onClick={onClose} aria-hidden="true" />
@@ -1570,6 +1585,7 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
               <button className="side-pick" onClick={() => onPick(c.id)}>
                 <Svg d={iconOf[c.mode] || Icon.chat} size={15} /><span dir="auto">{c.title || "…"}</span>
               </button>
+              <button className="side-del side-ren" aria-label={t("renameChat")} title={t("renameChat")} onClick={() => onRename(c.id, c.title)}><Svg d={Icon.pen} size={15} /></button>
               <button className="side-del" aria-label={t("delete")} onClick={() => onDelete(c.id)}><Svg d={Icon.trash} size={15} /></button>
             </div>
           ))}
@@ -2073,7 +2089,7 @@ function Main({ session }) {
           } catch { target = "chat"; } finally { setDeciding(false); }
         }
       }
-      if (target !== "build") target = "chat";
+      if (target !== "build" && target !== "construct") target = "chat";
       setDraft((d) => ({ ...d, mode: target }));
     }
     const sentImages = [...images.filter((im) => !im.docName), ...extra]; // photos and voice work in every section
@@ -2349,9 +2365,9 @@ function Main({ session }) {
   const name = (session.user.email || "").split("@")[0].replace(/[._\d]+/g, " ").trim().split(" ")[0].replace(/^./, (c) => c.toUpperCase());
   const hasFiles = Object.keys(project).length > 0;
   const canPreview = useMemo(() => hasFiles && !!buildPreview(project), [project]);
-  const suggestions = t(mode === "build" ? "buildSugg" : mode === "studio" ? "studioSugg" : "chatSugg");
+  const suggestions = t(mode === "build" ? "buildSugg" : mode === "construct" ? "constructSugg" : "chatSugg");
   const chatLike = mode === "chat" || mode === "auto";
-  const toolName = { chat: t("capChat"), build: t("capBuild"), studio: t("capStudio"), image: t("capStudio") }[mode];
+  const toolName = { chat: t("capChat"), build: t("capBuild"), construct: t("capConstruct") }[mode];
 
   // Computer keyboard shortcuts: Ctrl/⌘+K new chat, "/" type, Esc close.
   keys.current = { startNew, closeSheet: () => setSheet(null), focus: () => ta.current?.focus() };
@@ -2376,7 +2392,8 @@ function Main({ session }) {
         onDashboard={() => { setSideOpen(false); setSheet({ type: "dashboard" }); }}
         onOwnerPlans={() => { setSideOpen(false); setSheet({ type: "admin" }); }}
         onNotice={() => { setSideOpen(false); setSheet({ type: "notice" }); }}
-        onRelease={() => { setSideOpen(false); setSheet({ type: "release" }); }} releaseReady={releaseReady} />
+        onRelease={() => { setSideOpen(false); setSheet({ type: "release" }); }} releaseReady={releaseReady}
+        onRename={(id, title) => { const v = prompt(t("renameChat"), title || ""); if (v != null && v.trim()) patchIf(id, (c) => ({ ...c, title: v.trim().slice(0, 80) })); }} />
 
       <div className="main-col">
         <header>
@@ -2440,14 +2457,25 @@ function Main({ session }) {
                         <button className="cap" onClick={() => chooseTool("chat")}><Svg d={Icon.chat} /><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
                         <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
                         <button className="cap" onClick={() => openVoice()}><Svg d={Icon.wave} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
+                        <button className="cap construct-cap" onClick={() => chooseTool("construct")}><Svg d={Icon.house} /><b>{t("capConstruct")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capConstructSub")}</span></button>
                         <button className="cap learn-cap" onClick={openLearn}><Svg d={Icon.learn} /><b>{t("learnLang")}</b><span>{t("learnLangSub")}</span></button>
                       </div>
                       <p className="auto-hint">{t("autoHint")}</p>
                     </>
                   ) : (
                     <>
-                      <h2 className="greet">{mode === "build" ? t("buildQ") : mode === "studio" ? t("studioQ") : t("helpQ")}</h2>
-                      <p className="muted">{mode === "build" ? t("buildSub") : mode === "studio" ? t("studioSub") : t("helpSub")}</p>
+                      <h2 className="greet">{mode === "build" ? t("buildQ") : mode === "construct" ? t("constructQ") : t("helpQ")}</h2>
+                      <p className="muted">{mode === "build" ? t("buildSub") : mode === "construct" ? t("constructSub") : t("helpSub")}</p>
+                      {mode === "construct" && (
+                        <div className="cs-tools">
+                          {[["🏠", "csIdeas"], ["📐", "csPlan"], ["🧱", "csCost"], ["📖", "csTerms"]].map(([ic, k]) => (
+                            <button key={k} onClick={() => { setInput(t(k + "Tpl")); setTimeout(() => { ta.current?.focus(); if (ta.current) { ta.current.style.height = "auto"; ta.current.style.height = Math.min(ta.current.scrollHeight, 160) + "px"; } }, 30); }}>
+                              <span className="cs-ic">{ic}</span><b>{t(k)}</b><small>{t(k + "Sub")}</small>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {mode === "construct" && <p className="cs-note">⚠️ {t("csDisclaimer")}</p>}
                       <div className="chips">
                         {suggestions.map((sg) => <button key={sg} onClick={() => send(sg)}>{sg}</button>)}
                       </div>
@@ -2480,7 +2508,7 @@ function Main({ session }) {
                       <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} onVoiceLimit={() => showLimit("voice")} />
                     )}
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !m.studio && !(busy && i === messages.length - 1) && (
-                      <AnswerActions text={m.content} getToken={token} />
+                      <AnswerActions text={m.content} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
                     )}
                     {mode === "build" && hasFiles && !busy && i === messages.length - 1 && m.role === "assistant" && !m.failed && (
                       <div className="app-actions">
@@ -2525,7 +2553,7 @@ function Main({ session }) {
               {messages.length === 0 && mode !== "auto" && (
                 <div className="tool-chip-row">
                   <span className="tool-chip">
-                    <Svg d={mode === "build" ? Icon.build : mode === "studio" ? Icon.image : Icon.chat} size={15} /> {toolName}
+                    <Svg d={mode === "build" ? Icon.build : mode === "construct" ? Icon.house : Icon.chat} size={15} /> {toolName}
                     <button aria-label={t("close")} onClick={() => chooseTool("auto")}><Svg d={Icon.close} size={13} w={2.6} /></button>
                   </span>
                 </div>
@@ -2564,7 +2592,7 @@ function Main({ session }) {
                 <button className="attach gallery" aria-label={t("gallery")} title={t("gallery")} disabled={busy || images.length >= 4}
                   onClick={() => fileInput.current?.click()}><Svg d={Icon.image} size={19} /></button>
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
-                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : mode === "studio" ? t("placeholderStudio") : file ? t("placeholderFile") : t("placeholder")}
+                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : mode === "construct" ? t("placeholderConstruct") : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}
