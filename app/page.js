@@ -10,6 +10,7 @@ import { importZip } from "../lib/zipimport";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace from "../components/Workspace";
 import Learn from "../components/Learn";
+import HouseStudio from "../components/HouseStudio";
 import VoiceMode from "../components/VoiceMode";
 import Landing from "../components/Landing";
 import { quickGuess } from "../lib/intent";
@@ -2403,7 +2404,7 @@ function Main({ session }) {
             <img src="/icon-192.png" alt="" aria-hidden="true" />
             <span className="brand-name">AHM <b>AI</b></span>
           </div>
-          <div className="head-title" dir="auto">{view === "learn" ? t("learnLang") : active.title || toolName || t("newChat")}</div>
+          <div className="head-title" dir="auto">{view === "learn" ? t("learnLang") : view === "house" ? t("houseCta") : active.title || toolName || t("newChat")}</div>
           <div className="head-tools">
             {me && (
               <button className={"quota-pill" + (me.unlimited || me.pro ? " pro" : "") + (me.lockedUntil ? " wait" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })}>
@@ -2443,6 +2444,8 @@ function Main({ session }) {
         {view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
             onLimit={() => showLimit()} />
+        ) : view === "house" ? (
+          <HouseStudio lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : (
         <div className="body">
           <div className="chat-col">
@@ -2467,6 +2470,12 @@ function Main({ session }) {
                     <>
                       <h2 className="greet">{mode === "build" ? t("buildQ") : mode === "construct" ? t("constructQ") : t("helpQ")}</h2>
                       <p className="muted">{mode === "build" ? t("buildSub") : mode === "construct" ? t("constructSub") : t("helpSub")}</p>
+                      {mode === "construct" && (
+                        <button className="house-cta" onClick={() => { setView("house"); setSideOpen(false); }}>
+                          <span className="hc-ic" aria-hidden="true">🏡</span>
+                          <span><b>{t("houseCta")} <em className="new-badge">{t("updateNew")}</em></b><small>{t("houseCtaSub")}</small></span>
+                        </button>
+                      )}
                       {mode === "construct" && (
                         <div className="cs-tools">
                           {[["🏠", "csIdeas"], ["📐", "csPlan"], ["🧱", "csCost"], ["📖", "csTerms"]].map(([ic, k]) => (
