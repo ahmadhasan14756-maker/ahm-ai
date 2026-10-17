@@ -104,7 +104,30 @@ WHAT TO BUILD
 
 ANSWER SHAPE
 - First write 1–4 short sentences in the user's language: what you built or changed, and the next step.
-- Then the file blocks. No other code blocks.`;
+- Then the file blocks.
+- At the very end add ONE block with the info string "suggest" holding exactly 3 lines, each starting with "- ": short, concrete next improvements the user could ask for (in the user's language, e.g. "- بەشی پەیوەندی بە فۆڕمی ناردن زیاد بکە"). No other code blocks.`;
+
+// What kind of project the user chose in the builder.
+const KIND_PROMPT = {
+  website: `
+PROJECT TYPE: WEBSITE — a public website (landing / business / portfolio / shop pages): beautiful hero, sections, navigation, gallery, contact, footer; fast and SEO-friendly (title, meta description); plain HTML + CSS + JS unless the user asked for another stack.`,
+  app: `
+PROJECT TYPE: APP — it must look and feel like a real phone app: app bar on top, bottom tab navigation (3–5 tabs), screens that switch without page reloads, big touch targets, smooth transitions, data saved in localStorage, works offline as an installable web app (add manifest.json with name, colours and icons, and a small service worker). On a computer show it centred like a phone or as a responsive layout.`,
+  system: `
+PROJECT TYPE: SYSTEM — a management system / dashboard (e.g. shop, school, clinic, stock, accounting): a login screen (demo user shown on screen), a sidebar menu, a dashboard with stat cards and a chart, data tables with search, add / edit / delete forms, simple user roles (admin / staff) and printable reports. Save all data in localStorage (one clear data layer in js/data.js so it can be moved to a real database later). Explain in README.md how to connect a real database later.`,
+};
+
+const PLAN_PROMPT = (kind) => `
+PLANNING STEP (do not build yet)
+The user wants a ${kind === "app" ? "phone app" : kind === "system" ? "management system / dashboard" : "website"}. Do NOT write any files and do not use file blocks now.
+Reply in the user's language with a clear, friendly plan they can approve:
+## 🎯 a 1–2 sentence summary of what will be built
+## 📄 the ${kind === "app" ? "screens" : "pages"} — each with a short list of what is on it
+## ⚙️ the main features
+## 🎨 the design: colours, style, fonts${kind === "system" ? "\n## 👥 the users / roles and what data is saved" : ""}
+Keep it short and easy to scan (max ~220 words). Fill in smart defaults for anything the user did not say.
+End with one line telling them to tap "✅ Build it" or write what to change.
+Then add ONE block with the info string "suggest" holding exactly 3 lines starting with "- ": extra features that would make it better (in the user's language).`;
 
 const CONSTRUCT_PROMPT = `
 
@@ -215,6 +238,8 @@ export async function POST(req) {
 
     const lang = ["ckb", "ar", "en"].includes(body.lang) ? body.lang : "ckb";
     const build = body.mode === "build";
+    const buildKind = ["website", "app", "system"].includes(body.buildKind) ? body.buildKind : "website";
+    const planOnly = build && body.planOnly === true;
     const construct = body.mode === "construct";
     const file = !build && body.file && typeof body.file.content === "string" ? body.file : null;
     const project =
@@ -261,7 +286,7 @@ export async function POST(req) {
     const proUser = usage.pro || usage.unlimited;
     // The big "pro" model is slow to start, so it is used only where depth matters most (code projects, files).
     // Everyday chat, construction and voice use the fast model, so the answer starts in a few seconds.
-    const deep = build || !!file;
+    const deep = (build && !planOnly) || !!file;
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
       : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
@@ -289,8 +314,8 @@ VOICE CONVERSATION MODE (most important rules)
 - Then your spoken reply: natural, warm, conversational, short (1–4 sentences, longer only if they asked for an explanation). No Markdown, no lists, no symbols, no emojis, no links, no code — only words that sound good when read aloud. Write numbers so they can be spoken.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? BUILD_PROMPT : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
-      maxOutputTokens: file || build ? 32768 : 8192,
+      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind) : BUILD_PROMPT + KIND_PROMPT[buildKind]) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
+      maxOutputTokens: (file || build) && !planOnly ? 32768 : 8192,
       safetySettings: GEMINI_SAFETY,
     };
     // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).
@@ -308,7 +333,7 @@ VOICE CONVERSATION MODE (most important rules)
     // the full text is saved as a "job" so the app can show it when the user comes back.
     const jobId = validJobId(body.jobId);
     const lastText = String(messages[messages.length - 1].content || "");
-    const kind = body.voice ? "voice" : build ? "build" : file ? "file" : construct ? "construct" : "chat";
+    const kind = body.voice ? "voice" : build && !planOnly ? "build" : file ? "file" : construct ? "construct" : "chat";
     // Short everyday questions think the least, so the first words appear fast.
     const startLevel = kind === "chat" && lastText.length < 300 && !attachments.length ? 2 : START[kind];
     let ctrl = null;

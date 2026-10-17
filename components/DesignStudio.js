@@ -158,6 +158,15 @@ const groupOf = (m) => { const w = words(m); for (const [k, , keys] of GROUPS) i
 const hangs = (m) => /chandelier|ceiling|pendant|hanging/.test(words(m));
 const onWall = (m) => /(^|[^a-z])(frame|painting|picture|mirror|clock|wall)([^a-z]|$)/.test(words(m)) && !/table|chair|sofa|cabinet/.test(words(m));
 const ICON = { interior: "🛋️", exterior: "🏡", plan: "📐", redesign: "✨", chat: "💬" };
+// Drawn icons for the studio tool cards (white on a coloured tile).
+const GLYPH = {
+  interior: <><path d="M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3" /><path d="M2 13a2 2 0 0 1 4 0v2h12v-2a2 2 0 0 1 4 0v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" /><path d="M5 19v2M19 19v2" /></>,
+  exterior: <><path d="M2 12l7-6 7 6" /><path d="M4 10.5V20h10v-9.5" /><path d="M8 20v-5h2v5" /><circle cx="19.5" cy="9.5" r="2.5" /><path d="M19.5 12v8" /></>,
+  plan: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 10h8v11M11 3v4M15 10h6M15 10v5" /></>,
+  redesign: <><path d="M4 20L16 8" /><path d="M14 6l4 4" /><path d="M8.5 3.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7zM18.5 13.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z" /></>,
+  chat: <><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.7A8.5 8.5 0 1 1 21 11.5z" /><path d="M8.5 11.5h7M8.5 8.5h4" /></>,
+};
+const Glyph = ({ k }) => <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{GLYPH[k]}</svg>;
 
 function shrink(file, max, q = 0.86) {
   return new Promise((ok, bad) => {
@@ -237,13 +246,13 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
         <div className="ds-tools">
           {tools.map(([k, t]) => (
             <button key={k} className={"ds-tool ds-" + k} onClick={() => (k === "plan" ? onOpenPlan() : setScreen(k))}>
-              <span className="ds-ic" aria-hidden="true">{ICON[k]}</span>
+              <span className="ds-ic" aria-hidden="true"><Glyph k={k} /></span>
               <b>{tx(t)}</b><small>{tx(t + "Sub")}</small>
               <i aria-hidden="true">{rtl ? "←" : "→"}</i>
             </button>
           ))}
           <button className="ds-tool ds-chat" onClick={onChat}>
-            <span className="ds-ic" aria-hidden="true">{ICON.chat}</span><b>{tx("t_chat")}</b><small>{tx("t_chatSub")}</small><i aria-hidden="true">{rtl ? "←" : "→"}</i>
+            <span className="ds-ic" aria-hidden="true"><Glyph k="chat" /></span><b>{tx("t_chat")}</b><small>{tx("t_chatSub")}</small><i aria-hidden="true">{rtl ? "←" : "→"}</i>
           </button>
         </div>
 

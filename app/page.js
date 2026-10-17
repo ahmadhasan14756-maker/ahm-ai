@@ -75,6 +75,8 @@ const Icon = {
   wave: <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />,
   more: <><path d="M12 5v14M5 12h14" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
+  sparkChat: <><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.7A8.5 8.5 0 1 1 21 11.5z" /><path d="M12.5 7.5l1 2.2 2.2 1-2.2 1-1 2.2-1-2.2-2.2-1 2.2-1z" fill="currentColor" stroke="none" /></>,
+  slides: <><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M12 16v4M8 20h8" /><path d="M7 12.5l3-3 2.2 2.2L16.5 7.5" /></>,
 };
 const Svg = ({ d, size = 20, w = 2 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w}
@@ -91,6 +93,32 @@ function LangPicker() {
           {l.name}
         </button>
       ))}
+    </div>
+  );
+}
+
+// Language button in the app's top bar: کوردی / العربية / English, one tap away.
+const LANG_SHORT = { ckb: "کوردی", ar: "عربي", en: "EN" };
+function LangSwitch() {
+  const { lang, setLang, t } = useLang();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="lang-sw">
+      <button className="lang-sw-btn" aria-label={t("langBtn")} title={t("langBtn")} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Svg d={Icon.globe} size={17} /><span>{LANG_SHORT[lang]}</span>
+      </button>
+      {open && (
+        <>
+          <div className="lang-sw-bg" onClick={() => setOpen(false)} />
+          <div className="lang-sw-menu" role="menu">
+            {LANGS.map((l) => (
+              <button key={l.id} role="menuitemradio" aria-checked={l.id === lang} className={l.id === lang ? "on" : ""} onClick={() => { setLang(l.id); setOpen(false); }}>
+                <span>{l.name}</span>{l.id === lang && <b aria-hidden="true">✓</b>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -305,6 +333,8 @@ function CodeBlock({ className, children }) {
     return <DesignTile d={{ name: t("planSketch"), svg: text }} kind="plan" />;
   }
 
+  if (lang === "suggest") return <Suggestions text={text} />;
+
   if (lang.startsWith("file:")) {
     return (
       <div className="file-chip" dir="ltr">
@@ -326,6 +356,27 @@ function CodeBlock({ className, children }) {
         </button>
       </div>
       <pre><code>{text}</code></pre>
+    </div>
+  );
+}
+// "💡 AI suggestions": copy one into your project, or let the AI do it straight away.
+function Suggestions({ text }) {
+  const { t } = useLang();
+  const [copied, setCopied] = useState(-1);
+  const items = text.split("\n").map((l) => l.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, "").trim()).filter(Boolean).slice(0, 5);
+  if (!items.length) return null;
+  return (
+    <div className="sug">
+      <div className="sug-title">{t("sugTitle")}</div>
+      {items.map((x, k) => (
+        <div key={k} className="sug-item">
+          <span dir="auto">{x}</span>
+          <div className="sug-btns">
+            <button onClick={() => { navigator.clipboard?.writeText(x).catch(() => {}); setCopied(k); setTimeout(() => setCopied(-1), 1500); }}>{copied === k ? "✓ " + t("copied") : "📋 " + t("sugCopy")}</button>
+            <button className="go" onClick={() => window.dispatchEvent(new CustomEvent("ahm-suggest", { detail: x }))}>▶ {t("sugDo")}</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -948,11 +999,25 @@ function ThemePicker() {
 }
 
 function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide, onAbout }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [loading, setLoading] = useState(false);
   return (
-    <Sheet label={t("settings")} onClose={onClose}>
-      <h3>{t("settings")}</h3>
+    <div className="set-page" dir={lang === "en" ? "ltr" : "rtl"}>
+      <div className="set-inner">
+      <button className="learn-back" onClick={onClose}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+        {t("back").replace("‹", "").trim()}
+      </button>
+      <h2 className="set-h"><Svg d={Icon.gear} size={22} /> {t("settings")}</h2>
+      {me && (
+        <button className="set-plan" onClick={onPlans}>
+          <div className="set-plan-top">
+            <span className="set-plan-name">{me.unlimited ? (me.vip ? "♾️ VIP" : "👑 Owner") : me.pro ? `⭐ ${me.planName}` : t("free")}</span>
+            <span className="set-plan-go">{t("plans")} {lang === "en" ? "›" : "‹"}</span>
+          </div>
+          <UsageBars me={me} />
+        </button>
+      )}
       <div className="set-row col">
         <div className="set-label"><Svg d={Icon.globe} size={18} /> {t("language")}</div>
         <LangPicker />
@@ -992,8 +1057,8 @@ function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onI
       <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
         <Svg d={Icon.logout} size={18} /> {t("logout")}
       </button>
-      <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
-    </Sheet>
+      </div>
+    </div>
   );
 }
 
@@ -1653,6 +1718,10 @@ function greeting(t) {
   return h < 12 ? t("greetMorning") : h < 18 ? t("greetDay") : t("greetEvening");
 }
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+// Website, phone app or management system? A first guess from the words; the user can change it.
+const guessKind = (s) => /(سیستەم|سیستم|سيستم|نظام|system|داشبۆرد|dashboard|بەڕێوەبردن|إدارة|management|admin|کۆگا|مخزون|inventory|ژمێریاری|محاسب|accounting|pos\b|crm)/i.test(s || "") ? "system"
+  : /(ئەپ|ئەپڵیکەیشن|ئاپ|تطبيق|\bapp\b|application|mobile app|مۆبایل)/i.test(s || "") ? "app" : "website";
+const KINDS = [["website", "🌐"], ["app", "📱"], ["system", "🗂️"]];
 const blank = (mode) => ({ id: newId(), mode, title: "", messages: [], project: {}, updated: Date.now() });
 
 function Main({ session }) {
@@ -1698,6 +1767,13 @@ function Main({ session }) {
   const [studioKind, setStudioKind] = useState("auto");
   const [studioRatio, setStudioRatio] = useState("square");
   const [hideUpdate, setHideUpdate] = useState(false);
+  const [planEdit, setPlanEdit] = useState(false);
+  const sendRef = useRef(null);
+  useEffect(() => { // "▶ Do it" on an AI suggestion
+    const go = (e) => { if (typeof e.detail === "string" && e.detail.trim()) sendRef.current?.(e.detail.trim()); };
+    window.addEventListener("ahm-suggest", go);
+    return () => window.removeEventListener("ahm-suggest", go);
+  }, []);
   const abortRef = useRef(null);
 
   const active = chats.find((c) => c.id === activeId) || draft;
@@ -2114,7 +2190,7 @@ function Main({ session }) {
     setActiveId(voice.chatId);
   }
 
-  async function send(preset, baseMessages, extra = [], forced) {
+  async function send(preset, baseMessages, extra = [], forced, opts = {}) {
     const typed = (preset ?? input).trim();
     const hasAttach = images.length || file || extra.length;
     let target = forced || (mode === "image" || mode === "studio" ? "chat" : mode); // image/design section was removed
@@ -2152,7 +2228,11 @@ function Main({ session }) {
     const sentFile = m === "chat" ? file : null;
     const base = project;
     const next = [...(baseMessages || messages), { role: "user", content: text, voice: isVoice || undefined, fileName: sentFile?.name, thumbs: sentImages.filter((im) => im.thumb).map((im) => im.thumb), docs: sentImages.filter((im) => im.docName).map((im) => im.docName) }];
-    const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, mode: m, messages: msgs, title: c.title || text.slice(0, 60) }));
+    // Website / app / system, and "plan first": a new project gets a plan to approve before anything is built.
+    const kindNow = active.buildKind || guessKind(text);
+    const planOnly = m === "build" && !Object.keys(base).length && !active.planned && !opts.fromPlan;
+    const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, mode: m, messages: msgs, title: c.title || text.slice(0, 60),
+      ...(m === "build" ? { buildKind: c.buildKind || kindNow } : {}), ...(opts.fromPlan ? { planned: true } : {}) }));
     // Every answer has a job id: if the phone leaves the app, the server keeps working and saves it.
     const jobId = newJobId();
     const pending = { job: jobId, kind: m, voice: isVoice || undefined };
@@ -2160,6 +2240,7 @@ function Main({ session }) {
     put([...next, { role: "assistant", content: "", pending }]);
     setActiveId(id);
     setInput("");
+    setPlanEdit(false);
     setFile(null);
     setImages([]);
     if (ta.current) ta.current.style.height = "auto";
@@ -2202,6 +2283,8 @@ function Main({ session }) {
           project: m === "build" ? Object.fromEntries(Object.entries(base).map(([k, v]) => [k, String(v).startsWith("data:") ? "data:" : v])) : undefined,
           tutor: active.tutor || undefined,
           voiceNote: isVoice || undefined,
+          buildKind: m === "build" ? kindNow : undefined,
+          planOnly: planOnly || undefined,
           jobId,
         }),
       });
@@ -2237,7 +2320,7 @@ function Main({ session }) {
         if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
         const ch = m === "build" ? applyChanges(base, acc) : null;
         const sp = split(acc);
-        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending }], ch?.changed ? { project: ch.files } : {});
+        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending, plan: planOnly || undefined }], ch?.changed ? { project: ch.files } : {});
       }
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
@@ -2406,6 +2489,12 @@ function Main({ session }) {
     }
   }
 
+  sendRef.current = (txt) => { if (!busy) { setPlanEdit(false); send(txt); } };
+  function setKind(k) {
+    if (chats.some((c) => c.id === active.id)) patchIf(active.id, (c) => ({ ...c, buildKind: k }));
+    else setDraft((d) => ({ ...d, buildKind: k }));
+  }
+
   function retry() {
     const idx = messages.map((x) => x.role).lastIndexOf("user");
     if (idx < 0 || busy) return;
@@ -2436,7 +2525,7 @@ function Main({ session }) {
     <div className={"app mode-" + mode}>
       <Sidebar open={sideOpen} chats={chats} activeId={activeId} me={me} onLearn={openLearn} learnOn={view === "learn"}
         onPick={pick} onNew={startNew} onDelete={remove} onClose={() => setSideOpen(false)}
-        onSettings={() => { setSideOpen(false); setSheet({ type: "settings" }); }}
+        onSettings={() => { if (busy) return; setSideOpen(false); setShowPreview(false); setView("settings"); }}
         onFeedback={() => { setSideOpen(false); setSheet({ type: "feedback" }); }}
         onInvite={() => { setSideOpen(false); setSheet({ type: "invite" }); }}
         onDashboard={() => { setSideOpen(false); setSheet({ type: "dashboard" }); }}
@@ -2452,7 +2541,7 @@ function Main({ session }) {
             <img src="/icon-192.png" alt="" aria-hidden="true" />
             <span className="brand-name">AHM <b>AI</b></span>
           </div>
-          <div className="head-title" dir="auto">{view === "learn" ? t("learnLang") : view === "house" ? t("houseCta") : view === "slides" ? t("capSlides") : view === "studio" ? t("capConstruct") : active.title || toolName || t("newChat")}</div>
+          <div className="head-title" dir="auto">{view === "settings" ? t("settings") : view === "learn" ? t("learnLang") : view === "house" ? t("houseCta") : view === "slides" ? t("capSlides") : view === "studio" ? t("capConstruct") : active.title || toolName || t("newChat")}</div>
           <div className="head-tools">
             {me && (
               <button className={"quota-pill" + (me.unlimited || me.pro ? " pro" : "") + (me.lockedUntil ? " wait" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })}>
@@ -2469,6 +2558,7 @@ function Main({ session }) {
             {me?.owner && <button className={"head-btn rel-head" + (releaseReady ? " ready" : "")} onClick={() => setSheet({ type: "release" })}><span aria-hidden="true">🚀</span> {t("releaseBtn")}</button>}
             <button className="head-btn" onClick={() => setSheet({ type: "feedback" })}><span aria-hidden="true">💬</span> {t("feedback")}</button>
           </div>
+          <LangSwitch />
           <button className="icon-btn new-chat-btn" aria-label={t("newChat")} title={t("newChat") + " (Ctrl+K)"} onClick={() => startNew("auto")}>
             <Svg d={Icon.plus} /><span className="new-chat-label">{t("newChat")}</span>
           </button>
@@ -2489,7 +2579,10 @@ function Main({ session }) {
           </div>
         )}
 
-        {view === "learn" ? (
+        {view === "settings" ? (
+          <Settings session={session} me={me} onClose={() => setView("chat")} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
+            inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />
+        ) : view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
             onLimit={() => showLimit()} />
         ) : view === "studio" ? (
@@ -2511,12 +2604,12 @@ function Main({ session }) {
                       <h2 className="greet">{greeting(t)}{name ? (lang === "en" ? ", " : "، ") + name : ""}</h2>
                       <p className="muted">{t("helpQ")}</p>
                       <div className="caps">
-                        <button className="cap" onClick={() => chooseTool("chat")}><Svg d={Icon.chat} /><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
-                        <button className="cap" onClick={() => chooseTool("build")}><Svg d={Icon.build} /><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
-                        <button className="cap" onClick={() => openVoice()}><Svg d={Icon.wave} /><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
-                        <button className="cap construct-cap" onClick={() => { if (!busy) { setView("studio"); setSideOpen(false); } }}><Svg d={Icon.house} /><b>{t("capConstruct")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capConstructSub")}</span></button>
-                        <button className="cap slides-cap" onClick={() => { if (!busy) { setView("slides"); setSideOpen(false); } }}><span className="cap-emoji" aria-hidden="true">🎞️</span><b>{t("capSlides")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capSlidesSub")}</span></button>
-                        <button className="cap learn-cap" onClick={openLearn}><Svg d={Icon.learn} /><b>{t("learnLang")}</b><span>{t("learnLangSub")}</span></button>
+                        <button className="cap c-chat" onClick={() => chooseTool("chat")}><span className="cap-ic" aria-hidden="true"><Svg d={Icon.sparkChat} size={22} /></span><b>{t("capChat")}</b><span>{t("capChatSub")}</span></button>
+                        <button className="cap c-build" onClick={() => chooseTool("build")}><span className="cap-ic" aria-hidden="true"><Svg d={Icon.build} size={22} /></span><b>{t("capBuild")}</b><span>{t("capBuildSub")}</span></button>
+                        <button className="cap c-voice" onClick={() => openVoice()}><span className="cap-ic" aria-hidden="true"><Svg d={Icon.wave} size={22} /></span><b>{t("capVoice")}</b><span>{t("capVoiceSub")}</span></button>
+                        <button className="cap construct-cap" onClick={() => { if (!busy) { setView("studio"); setSideOpen(false); } }}><span className="cap-ic" aria-hidden="true"><Svg d={Icon.house} size={22} /></span><b>{t("capConstruct")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capConstructSub")}</span></button>
+                        <button className="cap slides-cap" onClick={() => { if (!busy) { setView("slides"); setSideOpen(false); } }}><span className="cap-ic" aria-hidden="true"><Svg d={Icon.slides} size={22} /></span><b>{t("capSlides")} <em className="new-badge">{t("updateNew")}</em></b><span>{t("capSlidesSub")}</span></button>
+                        <button className="cap learn-cap" onClick={openLearn}><span className="cap-ic" aria-hidden="true"><Svg d={Icon.learn} size={22} /></span><b>{t("learnLang")}</b><span>{t("learnLangSub")}</span></button>
                       </div>
                       <p className="auto-hint">{t("autoHint")}</p>
                     </>
@@ -2574,6 +2667,12 @@ function Main({ session }) {
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !m.studio && !(busy && i === messages.length - 1) && (
                       <AnswerActions text={m.content} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
                     )}
+                    {mode === "build" && m.plan && !hasFiles && !busy && i === messages.length - 1 && !m.failed && (
+                      <div className="plan-actions">
+                        <button className="gold-btn" onClick={() => send(t("buildFromPlan"), undefined, [], "build", { fromPlan: true })}>{t("buildIt")}</button>
+                        <button className="ghost-btn" onClick={() => { setPlanEdit(true); setTimeout(() => ta.current?.focus(), 30); }}>{t("changePlan")}</button>
+                      </div>
+                    )}
                     {mode === "build" && hasFiles && !busy && i === messages.length - 1 && m.role === "assistant" && !m.failed && (
                       <div className="app-actions">
                         <button className="green-btn" onClick={() => { downloadZip(project); setSheet({ type: "zipGuide" }); }}>⬇️ {t("zipBtn")}</button>
@@ -2622,6 +2721,23 @@ function Main({ session }) {
                   </span>
                 </div>
               )}
+              {mode === "build" && !hasFiles && !busy && (
+                <div className="kind-wrap">
+                  {!messages.length && <div className="kind-q">{t("kindQ")}</div>}
+                  <div className="kind-row" role="radiogroup" aria-label={t("kindQ")}>
+                    {KINDS.map(([k, ic]) => {
+                      const on = (active.buildKind || guessKind(input)) === k;
+                      const K = k[0].toUpperCase() + k.slice(1);
+                      return (
+                        <button key={k} type="button" role="radio" aria-checked={on} className={"kind k-" + k + (on ? " on" : "")} onClick={() => setKind(k)}>
+                          <span className="kind-ic" aria-hidden="true">{ic}</span><b>{t("kind" + K)}</b><small>{t("kind" + K + "Sub")}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!messages.length && <p className="kind-note">{t("planFirst")}</p>}
+                </div>
+              )}
               {deciding && <div className="deciding" role="status"><span className="mini-spin" /> {t("deciding")}</div>}
               {images.length > 0 && (
                 <div className="img-tray">
@@ -2662,7 +2778,7 @@ function Main({ session }) {
                     onClick={() => docInput.current?.click()}><Svg d={Icon.clip} size={19} /></button>
                 )}
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
-                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : mode === "construct" ? t("placeholderConstruct") : file ? t("placeholderFile") : t("placeholder")}
+                  placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : planEdit ? t("changePlanPh") : t("placeholderBuild")) : mode === "construct" ? t("placeholderConstruct") : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}
@@ -2714,10 +2830,7 @@ function Main({ session }) {
       {sheet?.type === "feedback" && <Feedback token={token} onClose={() => setSheet(null)} />}
       {sheet?.type === "admin" && <PlanEditor me={me} token={token} onSaved={loadMe} onClose={() => setSheet({ type: "upgrade", reason: "info" })} />}
       {sheet?.type === "upgrade" && <Upgrade reason={sheet.reason} me={me} onClose={() => setSheet(null)} onEdit={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} onRelease={() => setSheet({ type: "release" })} />}
-      {sheet?.type === "settings" && (
-        <Settings session={session} me={me} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
-          inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />
-      )}
+
     </div>
   );
 }
