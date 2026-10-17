@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS } from "../lib/plans";
 import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/builder";
 import { importZip } from "../lib/zipimport";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
-import Workspace from "../components/Workspace";
+import Workspace, { DevicePreview } from "../components/Workspace";
 import Learn from "../components/Learn";
 import HouseStudio from "../components/HouseStudio";
 import SlidesStudio from "../components/SlidesStudio";
@@ -122,6 +122,53 @@ function LangSwitch() {
       )}
     </div>
   );
+}
+
+/* ---------------- "Notify me when it's done" (Web Push) ---------------- */
+const isIos = () => typeof navigator !== "undefined" && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+const standalone = () => typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone);
+function b64ToBytes(b64) {
+  const s = (b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+}
+function usePush(token) {
+  const [state, setState] = useState("unknown"); // unsupported | ios-install | blocked | off | on | busy
+  const check = async () => {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setState(isIos() && !standalone() ? "ios-install" : "unsupported"); return; }
+      if (Notification.permission === "denied") { setState("blocked"); return; }
+      const reg = await navigator.serviceWorker.ready;
+      setState((await reg.pushManager.getSubscription()) && Notification.permission === "granted" ? "on" : "off");
+    } catch { setState("unsupported"); }
+  };
+  useEffect(() => { check(); }, []);
+  async function enable() {
+    try {
+      setState("busy");
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { setState(perm === "denied" ? "blocked" : "off"); return false; }
+      const { publicKey } = await (await fetch("/api/push")).json();
+      if (!publicKey) { setState("unsupported"); return false; }
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+      setState(r.ok ? "on" : "off");
+      return r.ok;
+    } catch { await check(); return false; }
+  }
+  async function disable() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await fetch("/api/push", { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {});
+        await sub.unsubscribe();
+      }
+    } catch {}
+    setState("off");
+  }
+  return { state, enable, disable };
 }
 
 /* ---------------- Login / Sign up ---------------- */
@@ -352,6 +399,9 @@ function CodeBlock({ className, children }) {
     <div className="code" dir="ltr">
       <div className="code-head">
         <span>{lang || "code"}</span>
+        {(/^html?$/i.test(lang) || (/^(xml|markup|)$/i.test(lang) && /^\s*(<!doctype html|<html)/i.test(text))) && (
+          <button className="code-pv" onClick={() => window.dispatchEvent(new CustomEvent("ahm-preview", { detail: text }))}>{t("previewCode")}</button>
+        )}
         <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
           {copied ? "✓ " + t("copied") : t("copy")}
         </button>
@@ -999,7 +1049,7 @@ function ThemePicker() {
   );
 }
 
-function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide, onAbout }) {
+function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide, onAbout, push }) {
   const { t, lang } = useLang();
   const [loading, setLoading] = useState(false);
   const chev = "›"; // flips by itself in Kurdish / Arabic
@@ -1040,6 +1090,14 @@ function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onI
           <LangPicker />
           <div className="set-sub">🎨 {t("design")}</div>
           <ThemePicker />
+        </section>
+
+        <section className="set-card">
+          <h3>{t("notifyTitle")}</h3>
+          <Row icon="🔔" label={t("notifyOn")} disabled={push?.state === "busy" || push?.state === "unsupported"}
+            value={push?.state === "on" ? <em className="new-badge">{t("notifyActive")}</em> : push?.state === "busy" ? <span className="mini-spin" /> : chev}
+            onClick={() => (push?.state === "on" ? push.disable() : push?.state === "off" ? push.enable() : null)} />
+          <p className="set-hint">{push?.state === "ios-install" ? t("notifyIos") : push?.state === "blocked" ? t("notifyBlocked") : push?.state === "unsupported" ? t("notifyNo") : t("notifyOnSub")}</p>
         </section>
 
         <section className="set-card">
@@ -1812,6 +1870,9 @@ function Main({ session }) {
   const [zipBusy, setZipBusy] = useState(false);
   const [pendingImport, setPendingImport] = useState(null); // { id, text } — sent once the new chat is ready
   const update = useUpdateReady();
+  const push = usePush(token);
+  const [askNotify, setAskNotify] = useState(() => { try { return localStorage.getItem("ahm-notify-ask") !== "no"; } catch { return true; } });
+  const noAsk = () => { setAskNotify(false); try { localStorage.setItem("ahm-notify-ask", "no"); } catch {} };
   const liveJobs = useRef(new Set());  // answers this page is receiving right now
   const resuming = useRef(new Set());  // answers being fetched after the user came back
   const chatsRef = useRef([]);
@@ -1820,6 +1881,11 @@ function Main({ session }) {
   const [hideUpdate, setHideUpdate] = useState(false);
   const [planEdit, setPlanEdit] = useState(false);
   const sendRef = useRef(null);
+  useEffect(() => { // "▶ Preview" on HTML code in an answer
+    const show = (e) => { if (typeof e.detail === "string") setSheet({ type: "codePreview", html: buildPreview({ "index.html": e.detail }) }); };
+    window.addEventListener("ahm-preview", show);
+    return () => window.removeEventListener("ahm-preview", show);
+  }, []);
   useEffect(() => { // "▶ Do it" on an AI suggestion
     const go = (e) => { if (typeof e.detail === "string" && e.detail.trim()) sendRef.current?.(e.detail.trim()); };
     window.addEventListener("ahm-suggest", go);
@@ -2645,7 +2711,7 @@ function Main({ session }) {
         )}
 
         {view === "settings" ? (
-          <Settings session={session} me={me} onClose={() => setView("chat")} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
+          <Settings push={push} session={session} me={me} onClose={() => setView("chat")} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
             inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />
         ) : view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
@@ -2666,6 +2732,13 @@ function Main({ session }) {
                   <span className="kb-ic" aria-hidden="true">{KIND_IC[active.buildKind]}</span>
                   <b>{t("kind" + KindK(active.buildKind))}</b>
                   {!messages.length && !hasFiles && !busy && <button onClick={() => setKind(null)}>{t("kindChange")}</button>}
+                </div>
+              )}
+              {mode === "build" && active.buildKind && askNotify && (push.state === "off" || push.state === "ios-install") && (
+                <div className="notify-bar" role="status">
+                  <span>{push.state === "ios-install" ? t("notifyIos") : t("notifyOnSub")}</span>
+                  {push.state === "off" && <button className="go" onClick={async () => { if (await push.enable()) noAsk(); }}>{t("notifyOn")}</button>}
+                  <button className="x" aria-label={t("close")} onClick={noAsk}>✕</button>
                 </div>
               )}
               {mode === "build" && active.buildKind && (
@@ -2885,7 +2958,7 @@ function Main({ session }) {
 
           {mode === "build" && (
             <div className={"preview-col" + (showPreview ? " open" : "")}>
-              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing}
+              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); send(q); }} />
             </div>
           )}
@@ -2903,6 +2976,12 @@ function Main({ session }) {
       {sheet?.type === "release" && me?.owner && <ReleaseSheet token={token} onClose={() => setSheet(null)} onChanged={() => setReleaseReady(false)} />}
       {sheet?.type === "notice" && me?.owner && <NoticeComposer token={token} onClose={() => setSheet(null)} onSent={loadMe} />}
       {sheet?.type === "screen" && <ScreenGuide info={sheet} onClose={() => setSheet(null)} />}
+      {sheet?.type === "codePreview" && sheet.html && (
+        <Sheet label={t("preview")} onClose={() => setSheet(null)}>
+          <div className="pv-sheet"><DevicePreview html={sheet.html} t={t} /></div>
+          <button className="ghost-btn" onClick={() => setSheet(null)}>{t("close")}</button>
+        </Sheet>
+      )}
       {sheet?.type === "zipGuide" && <ZipGuide onClose={() => setSheet(null)} />}
       {sheet?.type === "published" && <Published info={sheet} onClose={() => setSheet(null)} />}
       {sheet?.type === "invite" && <Invite token={token} onClose={() => setSheet(null)} />}

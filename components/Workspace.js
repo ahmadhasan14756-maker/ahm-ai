@@ -22,7 +22,65 @@ const P = {
   trash: <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />,
   play: <path d="M7 4l13 8-13 8z" />,
   chevron: <path d="M9 6l6 6-6 6" />,
+  files: <><path d="M8 3h7l5 5v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M15 3v5h5" /><path d="M3 7v12a2 2 0 0 0 2 2h1" /></>,
+  down: <><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 20h14" /></>,
+  eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
 };
+
+// What each kind of project should have (shown in the Files tab; missing ones can be made with one tap).
+const NEEDED = {
+  website: [["index.html", /^index\.html$/], ["CSS", /\.css$/], ["JavaScript", /\.js$/], ["README.md", /^readme\.md$/i]],
+  app: [["index.html", /^index\.html$/], ["CSS", /\.css$/], ["JavaScript", /\.js$/], ["manifest.json", /(^|\/)manifest\.(json|webmanifest)$/], ["sw.js", /(^|\/)(sw|service-worker)\.js$/], ["README.md", /^readme\.md$/i]],
+  system: [["index.html", /^index\.html$/], ["CSS", /\.css$/], ["js/data.js", /(^|\/)data\.js$/], ["JavaScript", /\.js$/], ["README.md", /^readme\.md$/i]],
+};
+const kindOf = (f, v) => (String(v).startsWith("data:image") ? ["🖼️", "img"] : /\.html?$/i.test(f) ? ["📄", "page"] : /\.(css|scss)$/i.test(f) ? ["🎨", "style"] : /\.(js|mjs|ts|jsx|tsx)$/i.test(f) ? ["⚙️", "script"] : /\.json$/i.test(f) ? ["🧩", "data"] : /\.md$/i.test(f) ? ["📘", "doc"] : ["📃", "other"]);
+function saveOne(name, content) {
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(content);
+  const blob = m ? new Blob([Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0))], { type: m[1] }) : new Blob([content], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name.split("/").pop();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+
+// Phone / computer preview of any page (used by the workspace and by "▶ Preview" on code in the chat).
+export function DevicePreview({ html, t, page }) {
+  const [device, setDevice] = useState("iphone");
+  const [nonce, setNonce] = useState(0);
+  const stageRef = useRef(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => { try { const d = localStorage.getItem("ahm-device"); if (d) setDevice(d); } catch {} }, []);
+  useEffect(() => { try { localStorage.setItem("ahm-device", device); } catch {} }, [device]);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <>
+      <div className="ws-sub">
+        <div className="seg small">
+          <button className={device === "iphone" ? "on" : ""} onClick={() => setDevice("iphone")}> iPhone</button>
+          <button className={device === "android" ? "on" : ""} onClick={() => setDevice("android")}>🤖 Android</button>
+          <button className={device === "desktop" ? "on" : ""} onClick={() => setDevice("desktop")}>💻 {t("computer")}</button>
+        </div>
+        <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={P.refresh} /></button>
+      </div>
+      <div className="stage" ref={stageRef}>
+        {device === "desktop" ? <Desktop html={html} nonce={nonce} box={box} page={page} /> : (
+          <div className={"device " + device}>
+            <div className="screen">
+              {device === "iphone" ? <div className="island" aria-hidden="true" /> : <div className="punch" aria-hidden="true" />}
+              <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
 const Svg = ({ d, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
 );
@@ -68,13 +126,13 @@ function Tree({ node, prefix, open, toggle, active, onOpen, depth = 0 }) {
 
 // Computer preview: the page really renders at 1280×800 (desktop layout) and is scaled down to fit, inside a monitor frame.
 const PC_W = 1280, PC_H = 800, BAR = 34;
-function Desktop({ html, nonce, box }) {
+function Desktop({ html, nonce, box, page }) {
   const scale = box.w ? Math.min(1, (box.w - 8) / PC_W, (box.h - 40) / (PC_H + BAR)) : 0.4;
   return (
     <div className="pc" style={{ width: PC_W * scale }}>
       <div className="pc-screen" style={{ height: (PC_H + BAR) * scale }}>
         <div className="pc-inner" style={{ width: PC_W, height: PC_H + BAR, transform: `scale(${scale})` }}>
-          <div className="pc-bar" aria-hidden="true"><i /><i /><i /><span>index.html</span></div>
+          <div className="pc-bar" aria-hidden="true"><i /><i /><i /><span>{page || "index.html"}</span></div>
           <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" style={{ width: PC_W, height: PC_H }} />
         </div>
       </div>
@@ -84,7 +142,7 @@ function Desktop({ html, nonce, box }) {
   );
 }
 
-export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing }) {
+export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing, kind = "website" }) {
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
   const [device, setDevice] = useState("iphone");
@@ -92,7 +150,19 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
   const [open, setOpen] = useState({});
   const [showTree, setShowTree] = useState(true);
   const [nonce, setNonce] = useState(0);
-  const html = useMemo(() => buildPreview(files), [files]);
+  // the app's saved data in the preview, and which page is open (sent from inside the preview)
+  const store = useRef({});
+  const [page, setPage] = useState("index.html");
+  const [entry, setEntry] = useState(null); // a page chosen in the Files tab
+  useEffect(() => {
+    const on = (e) => {
+      if (e.data?.ahmStore && typeof e.data.ahmStore === "object") store.current = e.data.ahmStore;
+      if (typeof e.data?.ahmPage === "string") setPage(e.data.ahmPage.slice(0, 80));
+    };
+    window.addEventListener("message", on);
+    return () => window.removeEventListener("message", on);
+  }, []);
+  const html = useMemo(() => buildPreview(files, { store: store.current }), [files]);
   const stageRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -150,6 +220,9 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
           <button role="tab" aria-selected={tab === "preview"} className={tab === "preview" ? "on" : ""} onClick={() => setTab("preview")}>
             <Svg d={P.phone} size={15} /> {t("preview")}
           </button>
+          <button role="tab" aria-selected={tab === "files"} className={tab === "files" ? "on" : ""} onClick={() => setTab("files")}>
+            <Svg d={P.files} size={15} /> {t("filesTab")} <em className="ws-count">{names.length}</em>
+          </button>
           <button role="tab" aria-selected={tab === "code"} className={tab === "code" ? "on" : ""} onClick={() => setTab("code")}>
             <Svg d={P.code} size={15} /> {t("code")}
           </button>
@@ -171,36 +244,59 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
       </div>
 
       {tab === "preview" ? (
-        <>
-          {html && (
-            <div className="ws-sub">
-              <div className="seg small">
-                <button className={device === "iphone" ? "on" : ""} onClick={() => setDevice("iphone")}>iPhone</button>
-                <button className={device === "android" ? "on" : ""} onClick={() => setDevice("android")}>Android</button>
-                <button className={device === "desktop" ? "on" : ""} onClick={() => setDevice("desktop")}>💻 {t("computer")}</button>
+        html ? (
+          <DevicePreview key={entry || "index"} html={entry && files[entry] != null ? buildPreview(files, { entry, store: store.current }) : html} t={t} page={page} />
+        ) : (
+          <div className="stage">
+            <div className="ws-empty">
+              <Svg d={names.length ? P.code : P.phone} size={28} />
+              <p>{busy ? t("building") : names.length ? t("notWebProject") : t("previewEmpty")}</p>
+              {readme && <button className="ghost-btn" onClick={() => { setTab("code"); setActive(readme); }}>{t("openReadme")}</button>}
+            </div>
+          </div>
+        )
+      ) : tab === "files" ? (
+        <div className="ws-files">
+          <div className="wf-top">
+            <div><b>{names.length} {t("fileCount")}</b><small>{t("filesAllHint")}</small></div>
+            <button className="gold-btn small" disabled={!names.length} onClick={() => downloadZip(files)}><Svg d={P.down} size={16} /> {t("downloadAll")}</button>
+          </div>
+          {names.length > 0 && (
+            <div className="wf-need">
+              <div className="wf-need-title">{t("neededTitle")}</div>
+              <div className="wf-need-list">
+                {(NEEDED[kind] || NEEDED.website).map(([label, re]) => {
+                  const ok = names.some((n) => re.test(n));
+                  return (
+                    <span key={label} className={"wf-chip" + (ok ? " ok" : " miss")}>
+                      {ok ? "✓" : "✗"} {label}
+                      {!ok && <button disabled={busy} onClick={() => onAsk(t("makeMissing").replace("{f}", label))}>{t("makeIt")}</button>}
+                    </span>
+                  );
+                })}
               </div>
-              <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={P.refresh} /></button>
             </div>
           )}
-          <div className="stage" ref={stageRef}>
-            {html && device === "desktop" ? (
-              <Desktop html={html} nonce={nonce} box={box} />
-            ) : html ? (
-              <div className={"device " + device}>
-                <div className="screen">
-                  {device === "iphone" ? <div className="island" aria-hidden="true" /> : <div className="punch" aria-hidden="true" />}
-                  <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
-                </div>
-              </div>
-            ) : (
-              <div className="ws-empty">
-                <Svg d={names.length ? P.code : P.phone} size={28} />
-                <p>{busy ? t("building") : names.length ? t("notWebProject") : t("previewEmpty")}</p>
-                {readme && <button className="ghost-btn" onClick={() => { setTab("code"); setActive(readme); }}>{t("openReadme")}</button>}
-              </div>
-            )}
-          </div>
-        </>
+          <ul className="wf-list" dir="ltr">
+            {[...names].sort((a, b) => (a.split("/").length - b.split("/").length) || a.localeCompare(b)).map((f) => {
+              const v = String(files[f] ?? "");
+              const [ic] = kindOf(f, v);
+              const img = v.startsWith("data:image");
+              return (
+                <li key={f}>
+                  <span className="wf-ic" aria-hidden="true">{ic}</span>
+                  <button className="wf-name" onClick={() => { setActive(f); setTab("code"); }}>
+                    <b>{f.split("/").pop()}</b>
+                    <small>{f.includes("/") ? f.slice(0, f.lastIndexOf("/") + 1) : "/"} · {img ? Math.round(v.length * 0.75 / 1024) + " KB" : v.split("\n").length + " " + t("lines")}</small>
+                  </button>
+                  {/\.html?$/i.test(f) && html && <button className="wf-btn" aria-label={t("preview")} title={t("preview")} onClick={() => { setTab("preview"); setEntry(f); setPage(f); }}><Svg d={P.eye} size={16} /></button>}
+                  <button className="wf-btn" aria-label={t("fileDownload")} title={t("fileDownload")} onClick={() => saveOne(f, v)}><Svg d={P.down} size={16} /></button>
+                </li>
+              );
+            })}
+          </ul>
+          {!names.length && <div className="ws-empty"><p>{busy ? t("building") : t("emptyProject")}</p></div>}
+        </div>
       ) : (
         <div className={"ide" + (showTree ? " tree-open" : "")}>
           <div className="explorer">

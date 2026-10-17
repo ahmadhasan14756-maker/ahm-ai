@@ -1,5 +1,5 @@
 // Simple service worker: caches the app shell so it opens fast and works like an app.
-const CACHE = "ahm-v2";
+const CACHE = "ahm-v3";
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/logo.png"];
 
 self.addEventListener("install", (e) => {
@@ -28,4 +28,21 @@ self.addEventListener("fetch", (e) => {
       })
       .catch(() => caches.match(e.request).then((r) => r || caches.match("/")))
   );
+});
+
+// "Your answer is ready" notifications.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { title: "AHM AI", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "AHM AI", {
+    body: d.body || "", icon: "/icon-192.png", badge: "/icon-192.png", tag: d.tag || "ahm", renotify: true, data: { url: d.url || "/" },
+  }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || "/", self.location.origin).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const c of list) if (c.url.startsWith(self.location.origin)) { c.focus(); return; }
+    return self.clients.openWindow(url);
+  }));
 });

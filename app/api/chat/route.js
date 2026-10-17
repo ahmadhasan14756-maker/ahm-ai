@@ -8,6 +8,7 @@ import { waitUntil } from "@vercel/functions";
 import { saveJob, validJobId } from "../../../lib/jobs";
 import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
 import { randomUUID } from "crypto";
+import { sendPush } from "../../../lib/push";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -101,7 +102,9 @@ COMPLETE, NOT A DEMO (very important)
 
 WHAT TO BUILD
 - Any language or stack the user asks for: websites (HTML/CSS/JS), Python, Node.js, PHP, Java, C#, Flutter, React, etc.
-- If the user does not name a stack and wants a website or app, use plain HTML + CSS + JavaScript with index.html at the root, style.css and script.js linked by relative paths. This runs instantly in the live phone and computer preview.
+- If the user does not name a stack and wants a website or app, use plain HTML + CSS + JavaScript. This runs instantly in the live phone and computer preview.
+- ALWAYS SPLIT THE PROJECT INTO SEPARATE FILES — never put the whole project inside index.html. Minimum: index.html, css/style.css, js/app.js and README.md, plus one file per extra page, screen or module. Link them with relative paths (href="css/style.css", src="js/app.js").
+- Moving between pages: use normal links (<a href="about.html">) or in-page #hash routes. Never use location.href / window.location / window.open for the project's own pages (the live preview supports links and #hash only).
 - RESPONSIVE FOR PHONE AND COMPUTER: the user previews every site on iPhone, Android AND a 1280px computer screen. Build a real desktop layout at ≥1024px — not a stretched phone column: e.g. a fixed sidebar or top navigation, multi-column grids, cards side by side, dashboards with stat cards, charts and tables, wider containers (max-width 1200–1400px). On phones the same page collapses to one column with a hamburger/bottom navigation. Use CSS grid/flex and @media (min-width: 768px / 1024px) queries.
 - Mobile-first, beautiful, professional design: clear colour palette, good spacing, readable fonts (Google Fonts allowed), smooth touch targets. Use dir="rtl" for Kurdish or Arabic content. Fully working, not a mock-up; use localStorage when useful.
 - Libraries for web pages only from https://cdnjs.cloudflare.com or https://cdn.jsdelivr.net.
@@ -115,11 +118,14 @@ ANSWER SHAPE
 // What kind of project the user chose in the builder.
 const KIND_PROMPT = {
   website: `
-PROJECT TYPE: WEBSITE — a public website (landing / business / portfolio / shop pages): beautiful hero, sections, navigation, gallery, contact, footer; fast and SEO-friendly (title, meta description); plain HTML + CSS + JS unless the user asked for another stack.`,
+PROJECT TYPE: WEBSITE — a public website (landing / business / portfolio / shop pages): beautiful hero, sections, navigation, gallery, contact, footer; fast and SEO-friendly (title, meta description); plain HTML + CSS + JS unless the user asked for another stack.
+FILES: index.html + one .html file for every page in the plan (e.g. about.html, services.html, contact.html), the same header/footer on every page, css/style.css, js/main.js, assets/ for SVG logos and icons drawn in code, README.md.`,
   app: `
-PROJECT TYPE: APP — it must look and feel like a real phone app: app bar on top, bottom tab navigation (3–5 tabs), screens that switch without page reloads, big touch targets, smooth transitions, data saved in localStorage, works offline as an installable web app (add manifest.json with name, colours and icons, and a small service worker). On a computer show it centred like a phone or as a responsive layout.`,
+PROJECT TYPE: APP — it must look and feel like a real phone app: app bar on top, bottom tab navigation (3–5 tabs), screens that switch without page reloads, big touch targets, smooth transitions, data saved in localStorage, works offline as an installable web app (add manifest.json with name, colours and icons, and a small service worker). On a computer show it centred like a phone or as a responsive layout.
+FILES: index.html (the app shell), css/app.css, js/app.js (router: screens switch with #hash), js/screens/<name>.js — one file per screen, js/storage.js (all saving), manifest.json, sw.js, icons/icon.svg, README.md.`,
   system: `
-PROJECT TYPE: SYSTEM — a management system / dashboard (e.g. shop, school, clinic, stock, accounting): a login screen (demo user shown on screen), a sidebar menu, a dashboard with stat cards and a chart, data tables with search, add / edit / delete forms, simple user roles (admin / staff) and printable reports. Save all data in localStorage (one clear data layer in js/data.js so it can be moved to a real database later). Explain in README.md how to connect a real database later.`,
+PROJECT TYPE: SYSTEM — a management system / dashboard (e.g. shop, school, clinic, stock, accounting): a login screen (demo user shown on screen), a sidebar menu, a dashboard with stat cards and a chart, data tables with search, add / edit / delete forms, simple user roles (admin / staff) and printable reports. Save all data in localStorage (one clear data layer in js/data.js so it can be moved to a real database later). Explain in README.md how to connect a real database later.
+FILES: index.html (login + app shell, pages switch with #hash routes), css/style.css, js/data.js (all data + saving), js/auth.js (login, roles), js/app.js (router, sidebar), js/pages/<module>.js — one file per module in the plan (e.g. products.js, sales.js, reports.js, users.js), README.md.`,
 };
 
 const PLAN_PROMPT = (kind) => `
@@ -355,7 +361,8 @@ VOICE CONVERSATION MODE (most important rules)
     const startLevel = kind === "chat" && lastText.length < 300 && !attachments.length ? 2 : START[kind];
     let ctrl = null;
     let open = true;
-    const send = (txt) => { if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; } };
+    let left = false; // the user left the app before the answer was finished → send a notification
+    const send = (txt) => { if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; left = true; } };
     const work = (async () => {
       let full = "";
       // Saved in the background (don't make the user wait for the database).
@@ -381,11 +388,17 @@ VOICE CONVERSATION MODE (most important rules)
       }
       if (started) await started;
       if (jobId) await saveJob(user.id, jobId, "done", full);
+      if (left) {
+        const done = { ckb: ["✅ AHM AI — تەواو بوو", build ? "پرۆژەکەت ئامادەیە. بۆ بینین دایبگرە." : "وەڵامەکەت ئامادەیە. بۆ بینین دایبگرە."],
+          ar: ["✅ AHM AI — انتهى", build ? "مشروعك جاهز. اضغط لعرضه." : "ردّك جاهز. اضغط لعرضه."],
+          en: ["✅ AHM AI — done", build ? "Your project is ready. Tap to see it." : "Your answer is ready. Tap to see it."] }[lang];
+        await sendPush(user.id, { title: done[0], body: done[1], url: "/", tag: jobId || "ahm" });
+      }
     })();
     waitUntil(work);
     const readable = new ReadableStream({
       start(controller) { ctrl = controller; },
-      cancel() { open = false; }, // the phone left: keep working, stop sending
+      cancel() { open = false; left = true; }, // the phone left: keep working, stop sending
     });
 
     return new Response(readable, {
