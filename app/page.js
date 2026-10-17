@@ -1001,62 +1001,65 @@ function ThemePicker() {
 function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide, onAbout }) {
   const { t, lang } = useLang();
   const [loading, setLoading] = useState(false);
+  const chev = "›"; // flips by itself in Kurdish / Arabic
+  const Row = ({ icon, label, value, onClick, cls = "", disabled }) => (
+    <button className={"set-row set-btn " + cls} disabled={disabled} onClick={onClick}>
+      <div className="set-label"><span className="set-ri" aria-hidden="true">{icon}</span> {label}</div>
+      <div className="set-val">{value ?? chev}</div>
+    </button>
+  );
   return (
     <div className="set-page" dir={lang === "en" ? "ltr" : "rtl"}>
       <div className="set-inner">
-      <button className="learn-back" onClick={onClose}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
-        {t("back").replace("‹", "").trim()}
-      </button>
-      <h2 className="set-h"><Svg d={Icon.gear} size={22} /> {t("settings")}</h2>
-      {me && (
-        <button className="set-plan" onClick={onPlans}>
-          <div className="set-plan-top">
-            <span className="set-plan-name">{me.unlimited ? (me.vip ? "♾️ VIP" : "👑 Owner") : me.pro ? `⭐ ${me.planName}` : t("free")}</span>
-            <span className="set-plan-go">{t("plans")} {lang === "en" ? "›" : "‹"}</span>
-          </div>
-          <UsageBars me={me} />
+        <button className="learn-back" onClick={onClose}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+          {t("back").replace("‹", "").trim()}
         </button>
-      )}
-      <div className="set-row col">
-        <div className="set-label"><Svg d={Icon.globe} size={18} /> {t("language")}</div>
-        <LangPicker />
-      </div>
-      <div className="set-row col">
-        <div className="set-label">🎨 {t("design")}</div>
-        <ThemePicker />
-      </div>
-      <div className="set-row">
-        <div className="set-label">{t("account")}</div>
-        <div className="set-val" dir="ltr">{session.user.email}</div>
-      </div>
-      {me && (
-        <button className="set-row set-btn" onClick={onPlans}>
-          <div className="set-label">{t("plans")}</div>
-          <div className="set-val gold">{me.unlimited ? (me.vip ? "♾️ VIP" : "👑") : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</div>
+        <h2 className="set-h"><Svg d={Icon.gear} size={22} /> {t("settings")}</h2>
+
+        {me && (
+          <button className="set-plan" onClick={onPlans}>
+            <div className="set-plan-top">
+              <span className="set-plan-name">{me.unlimited ? (me.vip ? "♾️ VIP" : "👑 Owner") : me.pro ? `⭐ ${me.planName}` : t("free")}</span>
+              <span className="set-plan-go">{t("plans")} {chev}</span>
+            </div>
+            <UsageBars me={me} />
+          </button>
+        )}
+
+        <section className="set-card">
+          <h3>{t("setAccount")}</h3>
+          <div className="set-row"><div className="set-label"><span className="set-ri" aria-hidden="true">✉️</span> {t("account")}</div><div className="set-val" dir="ltr">{session.user.email}</div></div>
+          <Row icon="🔐" label={t("changePw")} onClick={onPassword} />
+        </section>
+
+        <section className="set-card">
+          <h3>{t("setLook")}</h3>
+          <div className="set-sub"><Svg d={Icon.globe} size={16} /> {t("language")}</div>
+          <LangPicker />
+          <div className="set-sub">🎨 {t("design")}</div>
+          <ThemePicker />
+        </section>
+
+        <section className="set-card">
+          <h3>{t("setAppSec")}</h3>
+          <Row icon="🔄" label={t("refreshApp")} cls={"refresh-row" + (update ? " new" : "")} disabled={loading}
+            value={loading ? <span className="mini-spin" /> : update ? <em className="new-badge">{t("updateNew")}</em> : chev}
+            onClick={() => { setLoading(true); refreshApp(); }} />
+          <Row icon="📲" label={t("addToScreen")} cls={"a2-row" + (inst?.installed ? " done" : "")} disabled={inst?.installed}
+            value={inst?.installed ? <em className="new-badge">✓ {t("installedYes")}</em> : <span className="a2-go">{t("a2Tap")}</span>}
+            onClick={async () => { if (inst?.installed) return; if (await inst?.install?.()) return; onInstallGuide?.(); }} />
+        </section>
+
+        <section className="set-card">
+          <h3>{t("setAboutSec")}</h3>
+          <Row icon="👨‍💻" label={t("aboutDev")} cls="about-row" onClick={onAbout} />
+          <div className="set-legal"><a href="/privacy" target="_blank" rel="noreferrer">{t("privacy")}</a><a href="/terms" target="_blank" rel="noreferrer">{t("terms")}</a></div>
+        </section>
+
+        <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
+          <Svg d={Icon.logout} size={18} /> {t("logout")}
         </button>
-      )}
-      <button className={"set-row set-btn refresh-row" + (update ? " new" : "")} disabled={loading} onClick={() => { setLoading(true); refreshApp(); }}>
-        <div className="set-label">🔄 {t("refreshApp")}</div>
-        <div className="set-val">{loading ? <span className="mini-spin" /> : update ? <em className="new-badge">{t("updateNew")}</em> : "›"}</div>
-      </button>
-      <button className={"set-row set-btn a2-row" + (inst?.installed ? " done" : "")} disabled={inst?.installed}
-        onClick={async () => { if (inst?.installed) return; if (await inst?.install?.()) return; onInstallGuide?.(); }}>
-        <div className="set-label">📲 {t("addToScreen")}</div>
-        <div className="set-val">{inst?.installed ? <em className="new-badge">✓ {t("installedYes")}</em> : <span className="a2-go">{t("a2Tap")}</span>}</div>
-      </button>
-      <button className="set-row set-btn" onClick={onPassword}>
-        <div className="set-label">🔐 {t("changePw")}</div>
-        <div className="set-val">›</div>
-      </button>
-      <button className="set-row set-btn about-row" onClick={onAbout}>
-        <div className="set-label">👨‍💻 {t("aboutDev")}</div>
-        <div className="set-val">›</div>
-      </button>
-      <div className="set-legal"><a href="/privacy" target="_blank" rel="noreferrer">{t("privacy")}</a><a href="/terms" target="_blank" rel="noreferrer">{t("terms")}</a></div>
-      <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
-        <Svg d={Icon.logout} size={18} /> {t("logout")}
-      </button>
       </div>
     </div>
   );
@@ -1722,6 +1725,53 @@ const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2
 const guessKind = (s) => /(سیستەم|سیستم|سيستم|نظام|system|داشبۆرد|dashboard|بەڕێوەبردن|إدارة|management|admin|کۆگا|مخزون|inventory|ژمێریاری|محاسب|accounting|pos\b|crm)/i.test(s || "") ? "system"
   : /(ئەپ|ئەپڵیکەیشن|ئاپ|تطبيق|\bapp\b|application|mobile app|مۆبایل)/i.test(s || "") ? "app" : "website";
 const KINDS = [["website", "🌐"], ["app", "📱"], ["system", "🗂️"]];
+const KIND_IC = { website: "🌐", app: "📱", system: "🗂️" };
+const KindK = (k) => { const v = KIND_IC[k] ? k : "website"; return v[0].toUpperCase() + v.slice(1); };
+
+// "📝 My plan": idea → plan → build, always visible at the top of a website / app / system page.
+function PlanPanel({ step, planMsg, busy, onOwn, onBuild, onChange }) {
+  const { t } = useLang();
+  const [own, setOwn] = useState("");
+  const [open, setOpen] = useState(step < 3);
+  useEffect(() => { setOpen(step < 3); }, [step]);
+  return (
+    <section className={"plan-panel s" + step}>
+      <button type="button" className="pp-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <b>{t("planTitle")}</b>
+        <ol className="pp-steps">
+          {["planStep1", "planStep2", "planStep3"].map((k, i) => <li key={k} className={i + 1 < step ? "done" : i + 1 === step ? "on" : ""}><em>{i + 1 < step ? "✓" : i + 1}</em>{t(k)}</li>)}
+        </ol>
+        <span className="pp-chev" aria-hidden="true">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className="pp-body">
+          {step === 1 && (
+            <>
+              <p className="muted">{t("planOwnHelp")}</p>
+              <textarea rows={4} value={own} dir="auto" onChange={(e) => setOwn(e.target.value.slice(0, 4000))} placeholder={t("planOwnPh")} />
+              <button className="gold-btn" disabled={busy || !own.trim()} onClick={() => { onOwn(own.trim()); setOwn(""); }}>{t("planMake")}</button>
+            </>
+          )}
+          {step >= 2 && planMsg && (
+            <>
+              <p className="pp-note">{step === 2 ? t("planReady") : t("planBuilt")}</p>
+              {step === 2 && (
+                <div className="plan-actions">
+                  <button className="gold-btn" disabled={busy} onClick={onBuild}>{t("buildIt")}</button>
+                  <button className="ghost-btn" disabled={busy} onClick={onChange}>{t("changePlan")}</button>
+                </div>
+              )}
+              <details className="pp-view">
+                <summary>{t("planView")}</summary>
+                <div className="pp-md" dir="auto"><ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{planMsg.content}</ReactMarkdown></div>
+              </details>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 const blank = (mode) => ({ id: newId(), mode, title: "", messages: [], project: {}, updated: Date.now() });
 
 function Main({ session }) {
@@ -2491,8 +2541,9 @@ function Main({ session }) {
 
   sendRef.current = (txt) => { if (!busy) { setPlanEdit(false); send(txt); } };
   function setKind(k) {
-    if (chats.some((c) => c.id === active.id)) patchIf(active.id, (c) => ({ ...c, buildKind: k }));
-    else setDraft((d) => ({ ...d, buildKind: k }));
+    if (chats.some((c) => c.id === active.id)) patchIf(active.id, (c) => ({ ...c, buildKind: k || undefined }));
+    else setDraft((d) => ({ ...d, buildKind: k || undefined }));
+    if (k) setTimeout(() => ta.current?.focus(), 60);
   }
 
   function retry() {
@@ -2504,7 +2555,10 @@ function Main({ session }) {
   const name = (session.user.email || "").split("@")[0].replace(/[._\d]+/g, " ").trim().split(" ")[0].replace(/^./, (c) => c.toUpperCase());
   const hasFiles = Object.keys(project).length > 0;
   const canPreview = useMemo(() => hasFiles && !!buildPreview(project), [project]);
-  const suggestions = t(mode === "build" ? "buildSugg" : mode === "construct" ? "constructSugg" : "chatSugg");
+  const suggestions = t(mode === "build" ? (active.buildKind ? "kind" + KindK(active.buildKind) + "Sugg" : "buildSugg") : mode === "construct" ? "constructSugg" : "chatSugg");
+  // Builder: first pick website / app / system (a page for each), then plan, then build.
+  const pickingKind = mode === "build" && !active.buildKind && !hasFiles && !messages.length;
+  const planMsg = mode === "build" ? [...messages].reverse().find((x) => x.plan && x.content && !x.failed) : null;
   const chatLike = mode === "chat" || mode === "auto";
   const toolName = { chat: t("capChat"), build: t("capBuild"), construct: t("capConstruct") }[mode];
 
@@ -2596,6 +2650,19 @@ function Main({ session }) {
         <div className="body">
           <div className="chat-col">
             <main>
+              {mode === "build" && active.buildKind && (
+                <div className={"kind-bar k-" + active.buildKind}>
+                  <span className="kb-ic" aria-hidden="true">{KIND_IC[active.buildKind]}</span>
+                  <b>{t("kind" + KindK(active.buildKind))}</b>
+                  {!messages.length && !hasFiles && !busy && <button onClick={() => setKind(null)}>{t("kindChange")}</button>}
+                </div>
+              )}
+              {mode === "build" && active.buildKind && (
+                <PlanPanel step={hasFiles ? 3 : planMsg ? 2 : 1} planMsg={planMsg} busy={busy}
+                  onOwn={(txt) => send(t("planOwnPrefix") + "\n" + txt)}
+                  onBuild={() => send(t("buildFromPlan"), undefined, [], "build", { fromPlan: true })}
+                  onChange={() => { setPlanEdit(true); setTimeout(() => ta.current?.focus(), 30); }} />
+              )}
               {messages.length === 0 && (
                 <div className="empty">
                   <img src="/icon-192.png" alt="" aria-hidden="true" className="empty-logo" />
@@ -2613,10 +2680,33 @@ function Main({ session }) {
                       </div>
                       <p className="auto-hint">{t("autoHint")}</p>
                     </>
+                  ) : pickingKind ? (
+                    <>
+                      <h2 className="greet">{t("kindQ")}</h2>
+                      <p className="muted">{t("kindPickSub")}</p>
+                      <div className="kind-cards">
+                        {KINDS.map(([k, ic]) => {
+                          const K = k[0].toUpperCase() + k.slice(1);
+                          return (
+                            <button key={k} type="button" className={"kind-card k-" + k} onClick={() => setKind(k)}>
+                              <span className="kc-ic" aria-hidden="true">{ic}</span>
+                              <b>{t("kind" + K)}</b>
+                              <small>{t("kind" + K + "Sub")}</small>
+                              <ul>{t("kind" + K + "Ex").map((x) => <li key={x}>{x}</li>)}</ul>
+                              <i>{t("kindOpen")} {lang === "en" ? "→" : "←"}</i>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button className="zip-import-card" disabled={zipBusy} onClick={() => zipInput.current?.click()}>
+                        <span className="zic-ic">{zipBusy ? <span className="mini-spin" /> : "📦"}</span>
+                        <span><b>{t("zipImport")}</b><small>{t("zipImportSub")}</small></span>
+                      </button>
+                    </>
                   ) : (
                     <>
-                      <h2 className="greet">{mode === "build" ? t("buildQ") : mode === "construct" ? t("constructQ") : t("helpQ")}</h2>
-                      <p className="muted">{mode === "build" ? t("buildSub") : mode === "construct" ? t("constructSub") : t("helpSub")}</p>
+                      <h2 className="greet">{mode === "build" ? (KIND_IC[active.buildKind] || "") + " " + t("kind" + KindK(active.buildKind)) : mode === "construct" ? t("constructQ") : t("helpQ")}</h2>
+                      <p className="muted">{mode === "build" ? t("kind" + KindK(active.buildKind) + "Intro") : mode === "construct" ? t("constructSub") : t("helpSub")}</p>
                       {mode === "construct" && (
                         <button className="house-cta" onClick={() => { setView("house"); setSideOpen(false); }}>
                           <span className="hc-ic" aria-hidden="true">🏡</span>
@@ -2707,7 +2797,7 @@ function Main({ session }) {
               <div ref={bottom} />
             </main>
 
-            <footer>
+            <footer className={pickingKind ? "picking" : ""}>
               {mode === "build" && hasFiles && (
                 <button className="open-preview" onClick={() => setShowPreview(true)}>
                   <Svg d={Icon.phone} size={18} /> {t("preview")}
@@ -2719,23 +2809,6 @@ function Main({ session }) {
                     <Svg d={mode === "build" ? Icon.build : mode === "construct" ? Icon.house : Icon.chat} size={15} /> {toolName}
                     <button aria-label={t("close")} onClick={() => chooseTool("auto")}><Svg d={Icon.close} size={13} w={2.6} /></button>
                   </span>
-                </div>
-              )}
-              {mode === "build" && !hasFiles && !busy && (
-                <div className="kind-wrap">
-                  {!messages.length && <div className="kind-q">{t("kindQ")}</div>}
-                  <div className="kind-row" role="radiogroup" aria-label={t("kindQ")}>
-                    {KINDS.map(([k, ic]) => {
-                      const on = (active.buildKind || guessKind(input)) === k;
-                      const K = k[0].toUpperCase() + k.slice(1);
-                      return (
-                        <button key={k} type="button" role="radio" aria-checked={on} className={"kind k-" + k + (on ? " on" : "")} onClick={() => setKind(k)}>
-                          <span className="kind-ic" aria-hidden="true">{ic}</span><b>{t("kind" + K)}</b><small>{t("kind" + K + "Sub")}</small>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {!messages.length && <p className="kind-note">{t("planFirst")}</p>}
                 </div>
               )}
               {deciding && <div className="deciding" role="status"><span className="mini-spin" /> {t("deciding")}</div>}
