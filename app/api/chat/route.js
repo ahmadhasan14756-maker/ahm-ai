@@ -11,7 +11,8 @@ import { randomUUID } from "crypto";
 import { sendPush } from "../../../lib/push";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Big projects take more than a minute to write: allow up to 5 minutes (the answer keeps streaming the whole time).
+export const maxDuration = 300;
 // Run next to the database (Supabase is in Frankfurt) so each step is faster.
 export const preferredRegion = "fra1";
 
@@ -95,6 +96,9 @@ UPLOADED PROJECTS (the user brought a ZIP)
 - When the request says a ZIP was uploaded: first understand the whole project. If the structure is messy (files in odd places, missing index.html for a website, missing README.md, broken links between files), fix it with file blocks.
 - Then explain in the user's language, short and clear: what the project is, what already works, what is missing or broken, and give 3 numbered next steps you can do for them. Ask which one to start with.
 
+SPEED
+- Write compact, clean code: no long comment blocks, no repeated code, short README. Start writing files straight away.
+
 COMPLETE, NOT A DEMO (very important)
 - Build EVERYTHING in the agreed plan: every page / screen / section listed must exist as a real file with real content and working code. Every link, menu item and button must work. No "coming soon", no empty pages, no lorem ipsum, no fake buttons.
 - Use a clean folder structure (css/, js/, assets/ …) and keep files consistent with each other (same class names, same data keys, every linked file exists).
@@ -173,8 +177,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Remember which "thinking" setting each model accepts, so later questions skip failed tries.
 // Deeper thinking = smarter answers. Code projects think the most, voice the least (it must be fast).
 const THINKING = [{ thinkingLevel: "medium" }, { thinkingLevel: "low" }, { thinkingLevel: "minimal" }, null];
-const START = { build: 0, file: 0, construct: 1, chat: 1, voice: 2 };
+// Building starts with "low" thinking: the medium level made people wait a long time before the first word.
+const START = { build: 1, file: 0, construct: 1, chat: 1, voice: 2 };
 const thinkingOk = new Map();
+const searchOff = new Set(); // models where Google search is not allowed
 
 /*
   Streams the answer as text pieces. Tries hard before giving up:
@@ -198,7 +204,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
   };
   for (const model of models) {
     let level = Math.max(start, thinkingOk.get(model + ":" + start) ?? start);
-    let search = useSearch;
+    let search = useSearch && !searchOff.has(model);
     let transientTries = 0;
     let keyTries = 0;
     while (level < THINKING.length) {
@@ -230,10 +236,10 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         console.error("gemini", model, level, errText(e));
         if (/SAFETY|PROHIBITED_CONTENT|BLOCKLIST/i.test(errText(e))) { if (yield* refuseOrRetry()) return; break; }
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
+        if (search && (isBadConfig(e) || isRateLimit(e))) { search = false; searchOff.add(model); continue; }
         if (isRateLimit(e) && keyTries < keyCount() - 1) { keyTries++; continue; } // same model, another key
         if (isRateLimit(e) || isModelMissing(e)) break;
         if (isTransient(e) && transientTries < 2) { transientTries++; await sleep(700 * transientTries); continue; }
-        if (search && isBadConfig(e)) { search = false; continue; }
         if (isBadConfig(e)) { level++; continue; }
         break;
       }
@@ -308,7 +314,9 @@ export async function POST(req) {
     const proUser = usage.pro || usage.unlimited;
     // The big "pro" model is slow to start, so it is used only where depth matters most (code projects, files).
     // Everyday chat, construction and voice use the fast model, so the answer starts in a few seconds.
-    const deep = (build && !planOnly) || !!file;
+    // Only fixing an uploaded file uses the slow big model. Building uses the fast model (it writes code well and
+    // starts in a few seconds instead of a long wait).
+    const deep = !!file;
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
       : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
