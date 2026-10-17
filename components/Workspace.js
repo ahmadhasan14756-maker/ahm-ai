@@ -43,6 +43,14 @@ function saveOne(name, content) {
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 }
 
+// The phone frame gets an exact size from the space it has (iPhone Safari does not size it from percentages).
+function phoneSize(box) {
+  const W = box.w || 360, H = box.h || 680;
+  let h = Math.min(H - 24, 760), w = (h * 9) / 19.5;
+  if (w > W - 16) { w = W - 16; h = (w * 19.5) / 9; }
+  return { width: Math.max(160, Math.round(w)), height: Math.max(340, Math.round(h)), maxWidth: "none", maxHeight: "none", aspectRatio: "auto" };
+}
+
 // Phone / computer preview of any page (used by the workspace and by "▶ Preview" on code in the chat).
 export function DevicePreview({ html, t, page }) {
   const [device, setDevice] = useState("iphone");
@@ -70,7 +78,7 @@ export function DevicePreview({ html, t, page }) {
       </div>
       <div className="stage" ref={stageRef}>
         {device === "desktop" ? <Desktop html={html} nonce={nonce} box={box} page={page} /> : (
-          <div className={"device " + device}>
+          <div className={"device " + device} style={phoneSize(box)}>
             <div className="screen">
               {device === "iphone" ? <div className="island" aria-hidden="true" /> : <div className="punch" aria-hidden="true" />}
               <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
@@ -84,6 +92,11 @@ export function DevicePreview({ html, t, page }) {
 const Svg = ({ d, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
 );
+
+const LANG = { html: "HTML", htm: "HTML", css: "CSS", scss: "SCSS", js: "JavaScript", mjs: "JavaScript", jsx: "React JSX", ts: "TypeScript", tsx: "React TSX", json: "JSON", md: "Markdown", py: "Python", php: "PHP", svg: "SVG", txt: "Text" };
+const langName = (f) => LANG[(f.split(".").pop() || "").toLowerCase()] || "Text";
+const DOT = { html: "#e44d26", htm: "#e44d26", css: "#2965f1", scss: "#cd6799", js: "#f7df1e", mjs: "#f7df1e", jsx: "#61dafb", ts: "#3178c6", tsx: "#3178c6", json: "#cbcb41", md: "#9aa4b2", py: "#3572a5", svg: "#ffb13b", png: "#a074c4", jpg: "#a074c4", jpeg: "#a074c4", webp: "#a074c4" };
+const dotColor = (f) => DOT[(f.split(".").pop() || "").toLowerCase()] || "#8b949e";
 
 // Turn flat paths into a sorted folder tree.
 function buildTree(paths) {
@@ -117,7 +130,7 @@ function Tree({ node, prefix, open, toggle, active, onOpen, depth = 0 }) {
       })}
       {files.map((f) => (
         <button key={f} className={"tree-row" + (f === active ? " on" : "")} style={{ paddingLeft: 24 + depth * 14 }} onClick={() => onOpen(f)}>
-          <Svg d={P.file} size={15} /> <span>{f.split("/").pop()}</span>
+          <span className="vsc-dot" style={{ background: dotColor(f) }} /> <span>{f.split("/").pop()}</span>
         </button>
       ))}
     </>
@@ -142,13 +155,18 @@ function Desktop({ html, nonce, box, page }) {
   );
 }
 
-export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing, kind = "website" }) {
+export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing, kind = "website", name = "" }) {
+  const zipName = (String(name).replace(/[\\/:*?"<>|#%]+/g, " ").replace(/\s+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "AHM-AI-" + kind);
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
   const [device, setDevice] = useState("iphone");
   const [active, setActive] = useState(null);
   const [open, setOpen] = useState({});
   const [showTree, setShowTree] = useState(true);
+  const [tabs, setTabs] = useState([]); // open files, like VS Code
+  const [side, setSide] = useState(true); // the file list (phones show it over the editor)
+  useEffect(() => { if (active && !tabs.includes(active)) setTabs((x) => [...x, active].slice(-8)); }, [active]);
+  const closeTab = (f) => { const rest = tabs.filter((x) => x !== f); setTabs(rest); if (f === active) setActive(rest[rest.length - 1] || null); };
   const [nonce, setNonce] = useState(0);
   // the app's saved data in the preview, and which page is open (sent from inside the preview)
   const store = useRef({});
@@ -184,7 +202,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
 
   function openFile(p) {
     setActive(p);
-    if (window.innerWidth < 900) setShowTree(false);
+    if (window.innerWidth < 900) setSide(false);
   }
   function newFile() {
     const raw = prompt(t("fileNamePrompt"), "new-file.js");
@@ -220,11 +238,8 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
           <button role="tab" aria-selected={tab === "preview"} className={tab === "preview" ? "on" : ""} onClick={() => setTab("preview")}>
             <Svg d={P.phone} size={15} /> {t("preview")}
           </button>
-          <button role="tab" aria-selected={tab === "files"} className={tab === "files" ? "on" : ""} onClick={() => setTab("files")}>
-            <Svg d={P.files} size={15} /> {t("filesTab")} <em className="ws-count">{names.length}</em>
-          </button>
           <button role="tab" aria-selected={tab === "code"} className={tab === "code" ? "on" : ""} onClick={() => setTab("code")}>
-            <Svg d={P.code} size={15} /> {t("code")}
+            <Svg d={P.files} size={15} /> {t("filesTab")} <em className="ws-count">{names.length}</em>
           </button>
         </div>
         <div className="ws-actions">
@@ -236,7 +251,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
           <button className="icon-btn sm" aria-label={t("howToRun")} title={t("howToRun")} disabled={busy || !names.length} onClick={() => onAsk(t("howToRunAsk"))}>
             <Svg d={P.play} />
           </button>
-          <button className="icon-btn sm gold" aria-label={t("zip")} title={t("zip")} disabled={!names.length} onClick={() => downloadZip(files)}>
+          <button className="icon-btn sm gold" aria-label={t("zip")} title={t("zip")} disabled={!names.length} onClick={() => downloadZip(files, zipName)}>
             <Svg d={P.zip} />
           </button>
           <button className="icon-btn sm pv-close" aria-label={t("close")} onClick={onClose}><Svg d={P.close} /></button>
@@ -255,86 +270,71 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
             </div>
           </div>
         )
-      ) : tab === "files" ? (
-        <div className="ws-files">
-          <div className="wf-top">
-            <div><b>{names.length} {t("fileCount")}</b><small>{t("filesAllHint")}</small></div>
-            <button className="gold-btn small" disabled={!names.length} onClick={() => downloadZip(files)}><Svg d={P.down} size={16} /> {t("downloadAll")}</button>
-          </div>
-          {names.length > 0 && (
-            <div className="wf-need">
-              <div className="wf-need-title">{t("neededTitle")}</div>
-              <div className="wf-need-list">
-                {(NEEDED[kind] || NEEDED.website).map(([label, re]) => {
-                  const ok = names.some((n) => re.test(n));
-                  return (
-                    <span key={label} className={"wf-chip" + (ok ? " ok" : " miss")}>
-                      {ok ? "✓" : "✗"} {label}
-                      {!ok && <button disabled={busy} onClick={() => onAsk(t("makeMissing").replace("{f}", label))}>{t("makeIt")}</button>}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <ul className="wf-list" dir="ltr">
-            {[...names].sort((a, b) => (a.split("/").length - b.split("/").length) || a.localeCompare(b)).map((f) => {
-              const v = String(files[f] ?? "");
-              const [ic] = kindOf(f, v);
-              const img = v.startsWith("data:image");
-              return (
-                <li key={f}>
-                  <span className="wf-ic" aria-hidden="true">{ic}</span>
-                  <button className="wf-name" onClick={() => { setActive(f); setTab("code"); }}>
-                    <b>{f.split("/").pop()}</b>
-                    <small>{f.includes("/") ? f.slice(0, f.lastIndexOf("/") + 1) : "/"} · {img ? Math.round(v.length * 0.75 / 1024) + " KB" : v.split("\n").length + " " + t("lines")}</small>
-                  </button>
-                  {/\.html?$/i.test(f) && html && <button className="wf-btn" aria-label={t("preview")} title={t("preview")} onClick={() => { setTab("preview"); setEntry(f); setPage(f); }}><Svg d={P.eye} size={16} /></button>}
-                  <button className="wf-btn" aria-label={t("fileDownload")} title={t("fileDownload")} onClick={() => saveOne(f, v)}><Svg d={P.down} size={16} /></button>
-                </li>
-              );
-            })}
-          </ul>
-          {!names.length && <div className="ws-empty"><p>{busy ? t("building") : t("emptyProject")}</p></div>}
-        </div>
       ) : (
-        <div className={"ide" + (showTree ? " tree-open" : "")}>
-          <div className="explorer">
-            <div className="explorer-head">
-              <button className="explorer-toggle" onClick={() => setShowTree(!showTree)} aria-expanded={showTree}>
-                <span className={"chev" + (showTree ? " open" : "")}><Svg d={P.chevron} size={13} /></span>
-                {t("explorer")} <em>{names.length}</em>
-              </button>
-              <button className="icon-btn sm" aria-label={t("newFile")} title={t("newFile")} disabled={busy} onClick={newFile}><Svg d={P.plus} /></button>
+        <div className={"vsc" + (side ? " side-open" : "")}>
+          <aside className="vsc-side" dir="ltr">
+            <div className="vsc-side-head">
+              <span>{t("explorer")} <em>{names.length}</em></span>
+              <button className="icon-btn sm" aria-label={t("newFile")} title={t("newFile")} disabled={busy} onClick={newFile}><Svg d={P.plus} size={16} /></button>
+              <button className="icon-btn sm gold" aria-label={t("downloadAll")} title={t("downloadAll")} disabled={!names.length} onClick={() => downloadZip(files, zipName)}><Svg d={P.zip} size={16} /></button>
             </div>
-            {showTree && (
-              <div className="tree" dir="ltr">
-                {names.length ? (
-                  <Tree node={tree} prefix="" open={open} toggle={(k) => setOpen({ ...open, [k]: open[k] === false })} active={active} onOpen={openFile} />
-                ) : (
-                  <p className="tree-empty">{t("emptyProject")}</p>
-                )}
+            {names.length > 0 && (
+              <div className="wf-need">
+                <div className="wf-need-title">{t("neededTitle")}</div>
+                <div className="wf-need-list">
+                  {(NEEDED[kind] || NEEDED.website).map(([label, re]) => {
+                    const ok = names.some((n) => re.test(n));
+                    return (
+                      <span key={label} className={"wf-chip" + (ok ? " ok" : " miss")}>
+                        {ok ? "✓" : "✗"} {label}
+                        {!ok && <button disabled={busy} onClick={() => onAsk(t("makeMissing").replace("{f}", label))}>{t("makeIt")}</button>}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             )}
-          </div>
-          <div className="editor-pane">
-            {active ? (
-              <>
-                <div className="editor-tab" dir="ltr">
-                  <Svg d={P.file} size={14} /> <span>{active}</span>
-                  <div className="editor-tools">
-                    <button className="icon-btn sm" aria-label={t("rename")} title={t("rename")} disabled={busy} onClick={renameFile}><Svg d={P.pen} size={16} /></button>
-                    <button className="icon-btn sm" aria-label={t("deleteFile")} title={t("deleteFile")} disabled={busy} onClick={deleteFile}><Svg d={P.trash} size={16} /></button>
+            <div className="tree">
+              {names.length ? (
+                <Tree node={tree} prefix="" open={open} toggle={(k) => setOpen({ ...open, [k]: open[k] === false })} active={active} onOpen={openFile} />
+              ) : (
+                <p className="tree-empty">{busy ? t("building") : t("emptyProject")}</p>
+              )}
+            </div>
+            <button className="gold-btn vsc-zip" disabled={!names.length} onClick={() => downloadZip(files, zipName)}><Svg d={P.down} size={16} /> {t("downloadAll")}</button>
+          </aside>
+          <div className="vsc-main" dir="ltr">
+            <div className="vsc-tabs">
+              <button className="vsc-burger" aria-label={t("explorer")} onClick={() => setSide(!side)}><Svg d={P.files} size={16} /></button>
+              <div className="vsc-tablist">
+                {tabs.filter((f) => files[f] != null).map((f) => (
+                  <div key={f} className={"vsc-tab" + (f === active ? " on" : "")}>
+                    <button onClick={() => setActive(f)} title={f}><span className="vsc-dot" style={{ background: dotColor(f) }} />{f.split("/").pop()}</button>
+                    <button className="x" aria-label={t("close")} onClick={() => closeTab(f)}>×</button>
                   </div>
-                </div>
+                ))}
+              </div>
+            </div>
+            {active && files[active] != null ? (
+              <>
+                <div className="vsc-path">{active.split("/").join(" › ")}</div>
                 <div className="editor-body">
                   {String(files[active] ?? "").startsWith("data:image")
                     ? <div className="ws-image"><img src={files[active]} alt={active} /></div>
                     : <CodeEditor path={active} value={files[active] ?? ""} readOnly={busy} onChange={(v) => setFiles({ ...files, [active]: v })} />}
                 </div>
+                <div className="vsc-status">
+                  <span>{langName(active)}</span>
+                  <span>{String(files[active] ?? "").split("\n").length} {t("lines")}</span>
+                  <span className="vsc-sp" />
+                  {/\.html?$/i.test(active) && html && <button onClick={() => { setTab("preview"); setEntry(active); setPage(active); }} title={t("preview")}><Svg d={P.eye} size={14} /></button>}
+                  <button onClick={renameFile} disabled={busy} title={t("rename")}><Svg d={P.pen} size={14} /></button>
+                  <button onClick={deleteFile} disabled={busy} title={t("deleteFile")}><Svg d={P.trash} size={14} /></button>
+                  <button onClick={() => saveOne(active, String(files[active] ?? ""))} title={t("fileDownload")}><Svg d={P.down} size={14} /></button>
+                </div>
               </>
             ) : (
-              <div className="ws-empty"><p>{t("emptyProject")}</p></div>
+              <div className="ws-empty"><p>{names.length ? t("pickFile") : busy ? t("building") : t("emptyProject")}</p></div>
             )}
           </div>
         </div>

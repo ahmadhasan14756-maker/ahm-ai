@@ -1789,3 +1789,46 @@ footer.picking .composer, footer.picking .tool-chip-row { display: none; }
 .notify-bar .go { background: var(--gold, #d8b26a); color: #111; font-weight: 700; }
 .notify-bar .x { background: none; color: var(--muted); }
 .set-hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; line-height: 1.6; }
+
+/* iPhone Safari: give the editor and the preview a real size (percent heights inside flex boxes come out as 0) */
+.editor-body { position: relative; }
+.editor-body > div, .editor-body > .ws-image { position: absolute; inset: 0; height: auto !important; }
+.stage { position: relative; }
+.device { flex: none; }
+.screen { height: 100% !important; }
+
+/* ===== VS Code-like files & code ===== */
+.vsc { flex: 1; min-height: 0; display: flex; position: relative; background: #0e0f12; color: #d4d7dd; }
+.vsc-side { width: 250px; flex: none; display: flex; flex-direction: column; background: #16181d; border-right: 1px solid #2b2e35; min-height: 0; text-align: left; }
+.vsc-side-head { display: flex; align-items: center; gap: 4px; padding: 6px 8px 6px 12px; font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: #9aa1ad; }
+.vsc-side-head span { flex: 1; }
+.vsc-side-head em { font-style: normal; background: #2b2e35; border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+.vsc-side .wf-need { margin: 0 8px 8px; padding: 8px; border-color: #2b2e35; }
+.vsc-side .wf-need-title { font-size: 11.5px; color: #9aa1ad; }
+.vsc-side .wf-chip { background: #22252c; font-size: 11.5px; }
+.vsc-side .tree { flex: 1; max-height: none; overflow-y: auto; }
+.vsc-side .tree-row { color: #c9ccd3; font-size: 13px; min-height: 30px; }
+.vsc-side .tree-row.on { background: #2a2d34; color: #fff; box-shadow: inset 2px 0 0 var(--gold, #d8b26a); }
+.vsc-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.vsc-zip { margin: 8px !important; width: auto !important; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.vsc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; }
+.vsc-tabs { display: flex; align-items: stretch; background: #16181d; border-bottom: 1px solid #2b2e35; min-height: 38px; }
+.vsc-burger { display: none; width: 40px; border: 0; background: none; color: #c9ccd3; border-right: 1px solid #2b2e35; cursor: pointer; }
+.vsc-tablist { display: flex; overflow-x: auto; scrollbar-width: none; }
+.vsc-tab { display: flex; align-items: center; border-right: 1px solid #2b2e35; background: #1b1d22; }
+.vsc-tab.on { background: #0e0f12; box-shadow: inset 0 2px 0 var(--gold, #d8b26a); }
+.vsc-tab button { border: 0; background: none; color: #aeb3bd; font: 12.5px var(--mono, monospace); padding: 0 6px 0 12px; height: 37px; display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+.vsc-tab.on button { color: #fff; }
+.vsc-tab .x { padding: 0 10px 0 4px; font-size: 16px; opacity: .6; }
+.vsc-path { font: 11.5px var(--mono, monospace); color: #8b919c; padding: 4px 12px; border-bottom: 1px solid #22252c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vsc-main .editor-body { flex: 1; min-height: 0; }
+.vsc-status { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 12px; min-height: 30px; background: #1f2229; border-top: 1px solid #2b2e35; font-size: 11.5px; color: #aeb3bd; }
+.vsc-sp { flex: 1; }
+.vsc-status button { border: 0; background: none; color: #c9ccd3; width: 30px; height: 28px; display: grid; place-items: center; border-radius: 6px; cursor: pointer; }
+.vsc-status button:hover { background: #2a2d34; }
+.vsc .ws-empty { flex: 1; display: grid; place-items: center; color: #8b919c; }
+@media (max-width: 899px) {
+  .vsc-burger { display: block; }
+  .vsc-side { position: absolute; inset: 0 auto 0 0; z-index: 3; width: min(86%, 320px); transform: translateX(-102%); transition: transform .25s var(--ease-out, ease); box-shadow: 10px 0 30px rgba(0,0,0,.4); }
+  .vsc.side-open .vsc-side { transform: none; }
+}

@@ -2849,7 +2849,7 @@ function Main({ session }) {
                     )}
                     {mode === "build" && hasFiles && !busy && i === messages.length - 1 && m.role === "assistant" && !m.failed && (
                       <div className="app-actions">
-                        <button className="green-btn" onClick={() => { downloadZip(project); setSheet({ type: "zipGuide" }); }}>⬇️ {t("zipBtn")}</button>
+                        <button className="green-btn" onClick={() => { downloadZip(project, (active.title || "AHM-AI").replace(/[\\/:*?"<>|#%]+/g, " ").replace(/\s+/g, "-").slice(0, 40)); setSheet({ type: "zipGuide" }); }}>⬇️ {t("zipBtn")}</button>
                         {canPreview && (
                           <button className="green-btn" disabled={publishing} onClick={() => publishSite("screen")}>
                             {publishing ? <span className="mini-spin" /> : "📲"} {t("screenBtn")}
@@ -2958,7 +2958,7 @@ function Main({ session }) {
 
           {mode === "build" && (
             <div className={"preview-col" + (showPreview ? " open" : "")}>
-              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"}
+              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); send(q); }} />
             </div>
           )}
