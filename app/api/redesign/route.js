@@ -262,6 +262,8 @@ export async function POST(req) {
 
     if (body.action === "make") {
       if (!(await allow("ds:" + user.id, 8, 60000))) return tooMany();
+      // free pictures only for confirmed e-mails (stops fake accounts using up everyone's free pictures)
+      if (!usage.unlimited && !usage.pro && user.confirmed === false) return err("verify_email", 403);
       const tool = TOOLS.includes(body.tool) ? body.tool : "redesign";
       const style = body.style in STYLES ? body.style : "modern";
       const mode = ["furnish", "pano", "compose"].includes(body.mode) ? body.mode : "design";

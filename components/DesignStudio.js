@@ -103,6 +103,7 @@ const TX = {
   e_cf_failed: L("وێنەکە دروست نەبوو. دووبارە هەوڵ بدەرەوە.", "لم تُنشأ الصورة. أعد المحاولة.", "The picture was not made. Try again."),
   e_bad_image: L("ئەم وێنەیە نەکرایەوە. وێنەیەکی تر تاقی بکەرەوە.", "تعذر فتح الصورة. جرّب أخرى.", "This photo could not be opened. Try another."),
   e_unsafe: L("ئەم داواکارییە ڕێگەپێدراو نییە.", "هذا الطلب غير مسموح.", "This request is not allowed."),
+  e_verify_email: L("بۆ وێنەی بەخۆڕایی، سەرەتا ئیمەیڵەکەت پشتڕاست بکەرەوە (کۆدەکەی ناو ئیمەیڵەکەت).", "لتحصل على الصور المجانية، أكّد بريدك الإلكتروني أولاً.", "Please confirm your e-mail first to get free pictures."),
   e_slow_down: L("زۆر خێرایت 🙂 کەمێک چاوەڕێ بکە.", "أنت سريع جداً 🙂 انتظر قليلاً.", "Too fast 🙂 wait a moment."),
   e_net: L("کێشەیەک هەبوو. دووبارە هەوڵ بدەرەوە.", "حدث خطأ. أعد المحاولة.", "Something went wrong. Try again."),
 };

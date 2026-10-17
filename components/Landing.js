@@ -16,6 +16,8 @@ const COPY = {
       ["phone", "ئەپەکەت لەسەر شاشە", "ئەوەی دروستی دەکەیت بە ZIP دابگرە، یان بە چەند کلیکێک بیکە بە ئایکۆنێک لەسەر مۆبایل و کۆمپیوتەر."],
       ["wave", "گفتوگۆی دەنگی", "قسە بکە و بە دەنگ وەڵام وەربگرە، بێ ئەوەی پێویست بکات بنووسیت یان بخوێنیتەوە."],
       ["learn", "فێربوونی زمان", "تاقیکردنەوەی ئاست، وانەی ڕۆژانە، ڕاهێنانی قسەکردن و مامۆستایەکی زیرەک."],
+      ["house", "دیزاینی خانوو و ژوور", "وێنەی ژوورەکەت یان نەخشەی خانووەکەت بنێرە: دیزاینی ناوەوە و دەرەوە، کەلوپەلی 3D و وێنەی 360°."],
+      ["pen", "پێشکەشکردن (PowerPoint)", "بابەتێک یان فایلێک بنێرە، سلایدی جوان و پڕۆفیشناڵ وەردەگریت بە PPTX و PDF."],
     ],
     everyTitle: "یەک هەژمار، هەموو ئامێرەکانت",
     everySub: "لە مۆبایل دەست پێبکە و لە کۆمپیوتەر بەردەوام بە. چاتەکانت لەسەر هەژمارەکەت پاشەکەوت دەبن. دەتوانیت وەک ئەپ لەسەر ئایفۆن، ئەندرۆید و ویندۆز دایبمەزرێنیت.",
@@ -26,6 +28,7 @@ const COPY = {
     rounds: (h) => `پرسیارەکان هەر ${h} کاتژمێر جارێک نوێ دەبنەوە، لەگەڵ سنوورێکی هەفتانە.`,
     h: " کاتژمێر", week: "لە هەفتەیەکدا",
     pay: "پارەدان بە FIB، لە ڕێگەی بۆتی تێلێگرامەوە.",
+    extras: (x) => `بەخۆڕایی: ${x.house.free} وێنەی خانوو، ${x.design.free} وێنەی دیزاین و ${x.slides.free} پێشکەشکردن. Pro: هەر ڕۆژێک ${x.house.pro} وێنەی خانوو، ${x.design.pro} وێنەی دیزاین و ${x.slides.pro} پێشکەشکردن، لەگەڵ زیرەکترین مۆدێل.`,
     endTitle: "ئامادەیت؟",
     endSub: "دروستکردنی هەژمار کەمتر لە خولەکێکی دەوێت.",
     privacy: "پاراستنی زانیاری",
@@ -49,6 +52,8 @@ const COPY = {
       ["phone", "تطبيقك على الشاشة", "نزّل ما تنشئه بملف ZIP، أو حوّله ببضع نقرات إلى أيقونة على الهاتف والكمبيوتر."],
       ["wave", "محادثة صوتية", "تحدّث واسمع الإجابة، دون الحاجة إلى الكتابة أو القراءة."],
       ["learn", "تعلّم اللغات", "اختبار مستوى، دروس يومية، تدريب على النطق ومعلّم ذكي."],
+      ["house", "تصميم المنزل والغرف", "أرسل صورة غرفتك أو مخطط منزلك: تصميم داخلي وخارجي، أثاث 3D وصور 360°."],
+      ["pen", "عروض تقديمية (PowerPoint)", "أرسل موضوعاً أو ملفاً واحصل على شرائح احترافية بصيغة PPTX وPDF."],
     ],
     everyTitle: "حساب واحد، كل أجهزتك",
     everySub: "ابدأ على الهاتف وأكمل على الكمبيوتر. محادثاتك محفوظة في حسابك. ويمكنك تثبيته كتطبيق على آيفون وأندرويد وويندوز.",
@@ -59,6 +64,7 @@ const COPY = {
     rounds: (h) => `تتجدد الأسئلة كل ${h} ساعات، مع حد أسبوعي.`,
     h: " ساعات", week: "أسبوعياً",
     pay: "الدفع عبر FIB من خلال بوت تيليغرام.",
+    extras: (x) => `المجاني: ${x.house.free} صور منزل، ${x.design.free} صور تصميم و${x.slides.free} عروض. Pro: يومياً ${x.house.pro} صور منزل، ${x.design.pro} صور تصميم و${x.slides.pro} عروض، مع أذكى نموذج.`,
     endTitle: "جاهز؟",
     endSub: "إنشاء الحساب يستغرق أقل من دقيقة.",
     privacy: "الخصوصية",
@@ -82,6 +88,8 @@ const COPY = {
       ["phone", "Your app on your screen", "Download what you build as a ZIP, or turn it into an icon on your phone or computer in a few taps."],
       ["wave", "Voice conversation", "Talk and hear the answer — no need to type or read."],
       ["learn", "Learn a language", "Level test, daily lessons, speaking practice and a smart tutor."],
+      ["house", "House & room design", "Send a photo of your room or your house plan: interior and exterior designs, 3D furniture and 360° views."],
+      ["pen", "Presentations (PowerPoint)", "Send a topic or a file and get beautiful, professional slides as PPTX and PDF."],
     ],
     everyTitle: "One account, all your devices",
     everySub: "Start on your phone, continue on your computer. Your chats are saved to your account, and you can install it as an app on iPhone, Android and Windows.",
@@ -92,6 +100,7 @@ const COPY = {
     rounds: (h) => `Questions renew every ${h} hours, with a weekly limit.`,
     h: "h", week: "a week",
     pay: "Pay with FIB through our Telegram bot.",
+    extras: (x) => `Free: ${x.house.free} house pictures, ${x.design.free} design pictures and ${x.slides.free} presentations. Pro: every day ${x.house.pro} house pictures, ${x.design.pro} design pictures and ${x.slides.pro} presentations, plus the smartest model.`,
     endTitle: "Ready?",
     endSub: "Creating an account takes less than a minute.",
     privacy: "Privacy",
@@ -148,7 +157,7 @@ export default function Landing({ lang, picker, onStart, Svg, Icon, botUrl }) {
   const c = COPY[lang] || COPY.ckb;
   const [plans, setPlans] = useState(null);
   useEffect(() => { fetch("/api/plans").then((r) => r.json()).then(setPlans).catch(() => {}); }, []);
-  const freeN = plans?.freeLimit ?? 30;
+  const freeN = plans?.freeLimit ?? 15;
   return (
     <div className="ld">
       <nav className="ld-nav">
@@ -214,6 +223,7 @@ export default function Landing({ lang, picker, onStart, Svg, Icon, botUrl }) {
           ))}
         </div>
         <p className="ld-small">{c.rounds(plans?.windowHours || 5)} {c.pay}</p>
+        {plans?.extras && <p className="ld-small">{c.extras(plans.extras)}</p>}
       </section>
 
       <section className="ld-end">

@@ -4,6 +4,7 @@ import { webhookSecret } from "../../../lib/telegram";
 import { adminDb, isPaidActive, usageOf, getSettings, dropProfile } from "../../../lib/server";
 import { cacheGet, cacheSet, cacheDel } from "../../../lib/redis";
 import { planById, planByPrice } from "../../../lib/plans";
+import { extraLimits } from "../../../lib/extras";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,12 +47,25 @@ const ADMIN_KEYBOARD = {
 
 const fmtDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "-");
 
-const PLAN_LINES = (st) => st.paid.map((p) => `• <b>${esc(p.name)}</b> — <b>$${p.price}</b> ← ${p.limit} پرسیار بۆ ${p.days} ڕۆژ`).join("\n");
+const PLAN_LINES = (st) => st.paid.map((p) => `• <b>${esc(p.name)}</b> — <b>$${p.price}</b> ← ${p.limit} پرسیار هەر ${st.windowHours || 5} کاتژمێر، بۆ ${p.days} ڕۆژ`).join("\n");
+// What Pro gives besides questions (same numbers as in the app).
+const PRO_PERKS = () => {
+  const x = extraLimits();
+  return `<b>هەموو پلانێکی Pro ئەمانەشی تێدایە:</b>
+🧠 زیرەکترین مۆدێلی AI و پێشخستن لە ڕیزدا
+🏡 ${x.house.pro} وێنەی دیزاینی خانوو لە ڕۆژێکدا
+🛋️ ${x.design.pro} وێنەی ستۆدیۆی دیزاین و 3D لە ڕۆژێکدا
+🎞️ ${x.slides.pro} پێشکەشکردنی PowerPoint لە ڕۆژێکدا
+📎 ناردنی فایلی کۆد و داگرتنی فایلی چاککراو
+(بەخۆڕایی: ${x.house.free} وێنەی خانوو، ${x.design.free} وێنەی دیزاین و ${x.slides.free} پێشکەشکردن بە گشتی)`;
+};
 
 const WELCOME = (st) => `سڵاو! 👋 بەخێربێیت بۆ <b>AHM AI</b>
 
 ⭐ <b>پلانەکانی Pro</b>
 ${PLAN_LINES(st)}
+
+${PRO_PERKS()}
 
 💳 ${esc(st.payment || process.env.PAYMENT_INFO || "ژمارەی FIB بەم زووانە دادەنرێت.")}
 
@@ -65,7 +79,9 @@ ${PLAN_LINES(st)}
 // Sent when the user tapped "Buy" on a specific plan in the app (t.me/bot?start=<planId>).
 const CHOSEN = (st, p) => `سڵاو! 👋 تۆ پلانی <b>${esc(p.name)}</b>ت هەڵبژارد:
 
-⭐ <b>$${p.price}</b> ← ${p.limit} پرسیار بۆ ${p.days} ڕۆژ
+⭐ <b>$${p.price}</b> ← ${p.limit} پرسیار هەر ${st.windowHours || 5} کاتژمێر، بۆ ${p.days} ڕۆژ
+
+${PRO_PERKS()}
 
 💳 ${esc(st.payment || process.env.PAYMENT_INFO || "ژمارەی FIB بەم زووانە دادەنرێت.")}
 

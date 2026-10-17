@@ -876,7 +876,8 @@ function Upgrade({ reason, me, onClose, onEdit, onNotice, onRelease }) {
       </div>
       {plans.payment && <p className="pay-info" dir="auto">💳 {plans.payment}</p>}
       {me?.voice?.limit != null && <p className="muted voice-today">🎤 {t("voiceToday").replace("{u}", Math.min(me.voice.used, me.voice.limit)).replace("{l}", me.voice.limit)}</p>}
-      <ul className="perks"><li>{t("perkModel")}</li><li>{t("perk1")}</li><li>{t("perk2")}</li><li>{t("windowInfo").replace("{h}", plans.windowHours || 5)}</li></ul>
+      <Compare me={me} plans={plans} chosen={chosen} />
+      <ul className="perks"><li>{t("windowInfo").replace("{h}", plans.windowHours || 5)}</li></ul>
       {buyUrl ? (
         <a className="gold-btn" href={buyUrl} target="_blank" rel="noreferrer">
           {chosen ? <>{t("buy")} {chosen.name} · <span dir="ltr">${chosen.price}</span></> : t("buyTelegram")}
@@ -885,6 +886,37 @@ function Upgrade({ reason, me, onClose, onEdit, onNotice, onRelease }) {
 
       <button className="ghost-btn" onClick={onClose}>{t("close")}</button>
     </Sheet>
+  );
+}
+
+// Free vs Pro, side by side: questions, voice, model, pictures, presentations, files.
+function Compare({ me, plans, chosen }) {
+  const { t } = useLang();
+  const x = me?.extras || { house: { free: 10, pro: 30 }, design: { free: 10, pro: 30 }, slides: { free: 10, pro: 30 } };
+  const p = chosen || plans.paid.find((q) => q.best) || plans.paid[0];
+  if (!p) return null;
+  const h = plans.windowHours || 5;
+  const total = (n) => t("cmpTotal").replace("{n}", n), daily = (n) => t("cmpDaily").replace("{n}", n);
+  const rows = [
+    [t("cmpQ").replace("{h}", h), plans.freeLimit, p.limit],
+    [t("cmpWeek"), plans.freeWeekly ?? plans.freeLimit * 4, p.weekly ?? p.limit * 4],
+    [t("cmpVoice"), plans.freeVoice ?? 10, p.voice ?? 60],
+    [t("cmpModel"), t("cmpFast"), t("cmpSmart")],
+    [t("cmpHouse"), total(x.house.free), daily(x.house.pro)],
+    [t("cmpDesign"), total(x.design.free), daily(x.design.pro)],
+    [t("cmpSlides"), total(x.slides.free), daily(x.slides.pro)],
+    [t("cmpFiles"), "—", "✓"],
+    [t("cmpLine"), "—", "✓"],
+  ];
+  return (
+    <div className="cmp">
+      <div className="cmp-title">{t("cmpTitle")}</div>
+      <table>
+        <thead><tr><th /><th>{t("cmpFree")}</th><th className="pro">{p.name}</th></tr></thead>
+        <tbody>{rows.map(([label, a, b]) => <tr key={label}><td>{label}</td><td><bdi>{a}</bdi></td><td className="pro"><bdi>{b}</bdi></td></tr>)}</tbody>
+      </table>
+      <p className="cmp-note">{t("cmpNote")}</p>
+    </div>
   );
 }
 
@@ -1656,6 +1688,7 @@ function Main({ session }) {
   const ta = useRef(null);
   const fileInput = useRef(null);
   const zipInput = useRef(null);
+  const docInput = useRef(null);
   const [zipBusy, setZipBusy] = useState(false);
   const [pendingImport, setPendingImport] = useState(null); // { id, text } — sent once the new chat is ready
   const update = useUpdateReady();
@@ -2109,10 +2142,10 @@ function Main({ session }) {
       if (target !== "build" && target !== "construct") target = "chat";
       setDraft((d) => ({ ...d, mode: target }));
     }
-    const sentImages = [...images.filter((im) => !im.docName), ...extra]; // photos and voice work in every section
+    const sentImages = [...images, ...extra]; // photos, PDFs and voice work in every section
     const isVoice = extra.some((x) => x.voice);
-    const photoCount = sentImages.filter((im) => !im.voice).length;
-    const text = (preset ?? input).trim() || (file ? t("fixFile") : target === "studio" && photoCount ? t(photoCount > 1 ? "studioMergeDefault" : "studioEditDefault") : sentImages.length ? t("describeImage") : "");
+    const photoCount = sentImages.filter((im) => !im.voice && !im.docName).length;
+    const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.some((im) => im.docName) && !photoCount ? t("readDoc") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
     const id = active.id;
     const m = target;
@@ -2616,12 +2649,18 @@ function Main({ session }) {
               <div className="composer">
                 <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={pickPhotos} />
                 <input ref={zipInput} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden onChange={pickZip} />
+                <input ref={docInput} type="file" hidden onChange={pickFile}
+                  accept=".pdf,application/pdf,.txt,.md,.csv,.json,.html,.htm,.css,.js,.jsx,.ts,.tsx,.py,.php,.java,.kt,.swift,.dart,.c,.h,.cpp,.cs,.go,.rs,.rb,.vue,.svelte,.xml,.yml,.yaml,.sql,.sh,text/*" />
                 {(mode === "build" || mode === "auto") && (
                   <button className="attach gallery zip-btn" aria-label={t("zipImport")} title={t("zipImport")} disabled={busy || zipBusy}
                     onClick={() => zipInput.current?.click()}>{zipBusy ? <span className="mini-spin" /> : "📦"}</button>
                 )}
                 <button className="attach gallery" aria-label={t("gallery")} title={t("gallery")} disabled={busy || images.length >= 4}
                   onClick={() => fileInput.current?.click()}><Svg d={Icon.image} size={19} /></button>
+                {chatLike && (
+                  <button className="attach gallery" aria-label={t("attachFile")} title={t("attachFile")} disabled={busy || !!file || images.length >= 4}
+                    onClick={() => docInput.current?.click()}><Svg d={Icon.clip} size={19} /></button>
+                )}
                 <textarea ref={ta} rows={1} value={input} aria-label={t("placeholder")}
                   placeholder={mode === "build" ? (hasFiles ? t("placeholderEdit") : t("placeholderBuild")) : mode === "construct" ? t("placeholderConstruct") : file ? t("placeholderFile") : t("placeholder")}
                   dir={input ? (isRTL(input) ? "rtl" : "ltr") : undefined}

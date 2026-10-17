@@ -1604,3 +1604,13 @@ header { position: relative; z-index: 5; }
 .fu-360 small { font-weight: 500; opacity: .75; font-size: 11px; }
 .fu-quick { display: flex; flex-wrap: wrap; gap: 8px; }
 .fu-quick .ghost-btn { flex: 1 1 200px; width: auto; margin: 0; min-height: 48px; padding: 0 12px; }
+
+/* Free vs Pro table in the plans sheet */
+.cmp { margin: 14px 0 6px; border: 1px solid var(--line, rgba(127,127,127,.22)); border-radius: 16px; overflow: hidden; background: var(--surface-2); }
+.cmp-title { font-weight: 700; padding: 12px 14px 6px; font-size: 15px; }
+.cmp table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.cmp th, .cmp td { padding: 9px 10px; text-align: center; border-top: 1px solid var(--line, rgba(127,127,127,.16)); }
+.cmp th { font-size: 12.5px; opacity: .85; font-weight: 700; }
+.cmp td:first-child, .cmp th:first-child { text-align: start; width: 46%; }
+.cmp .pro { color: var(--gold-text, #d8b26a); font-weight: 700; }
+.cmp-note { font-size: 12px; opacity: .72; padding: 8px 14px 12px; margin: 0; line-height: 1.6; }

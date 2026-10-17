@@ -130,6 +130,8 @@ export async function POST(req) {
 
     if (body.action === "image") {
       if (!(await allow("sl-img:" + user.id, 8, 60000))) return tooMany();
+      // slide pictures use the shared free picture service: a daily cap per account
+      if (!usage.unlimited && !(await allow("sl-imgd:" + user.id, usage.pro ? 60 : 9, 86400000))) return err("limit", 402);
       const idea = String(body.prompt || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 300).trim();
       if (!idea) return err("bad_request");
       const pic = await makeImage({ prompt: `${idea}. Professional presentation image, clean composition, soft natural light, high quality, photorealistic or elegant modern illustration. No text, no letters, no words, no watermark, no logo.`, width: 1280, height: 768, seed: Math.floor(Math.random() * 1e9) });
