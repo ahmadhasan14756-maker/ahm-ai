@@ -1884,3 +1884,20 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .sd-logout { margin-top: 6px; }
 .sd-part .set-card { margin-top: 0; }
 .sd-part .gold-btn { margin: 0; }
+
+/* ===== Phone models in the preview ===== */
+.dev-pick { gap: 6px; padding-top: 6px; }
+.dev-pick select { max-width: 62%; min-height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; padding: 0 8px; }
+.dev-size { font: 12px var(--mono, monospace); color: var(--muted); padding: 2px 8px; border-radius: 8px; background: var(--surface-2); }
+.dev-pick .icon-btn.on { color: var(--gold-text, #d8b26a); }
+.phone3 { position: relative; flex: none; box-sizing: border-box; border-radius: 44px; background: linear-gradient(145deg, #3a3d44, #15171b 55%, #2a2d33); box-shadow: inset 0 0 0 2px #50545c, inset 0 0 0 5px #0b0c0e, 0 30px 60px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04); }
+.phone3.k-home { border-radius: 40px; }
+.phone3.k-punch { border-radius: 30px; background: linear-gradient(145deg, #2c2f35, #101215 60%, #24272c); }
+.phone3.land { border-radius: 36px; }
+.p3-screen { position: relative; overflow: hidden; background: #fff; }
+.p3-screen iframe { position: absolute; top: 0; left: 0; border: 0; display: block; background: #fff; }
+.p3-island { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; background: #000; border-radius: 999px; pointer-events: none; }
+.p3-notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 2; background: #000; border-radius: 0 0 18px 18px; pointer-events: none; }
+.p3-punch { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; background: #000; border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 2px rgba(0,0,0,.25); }
+.p3-speaker { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 46px; height: 5px; border-radius: 9px; background: #0b0c0e; box-shadow: inset 0 1px 1px rgba(255,255,255,.08); }
+.p3-home { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 32px; height: 32px; border-radius: 50%; border: 2px solid #4a4e56; background: #15171b; }

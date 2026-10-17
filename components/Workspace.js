@@ -52,13 +52,85 @@ function phoneSize(box) {
 }
 
 // Phone / computer preview of any page (used by the workspace and by "▶ Preview" on code in the chat).
+// Real screen sizes (the size a browser uses, in CSS pixels), from the oldest supported phones to the newest.
+// kind: "home" = home button, "notch", "island" = Dynamic Island, "punch" = camera hole.
+export const PHONES = {
+  iphone: [
+    ["iPhone 5 / 5s / SE (1)", 320, 568, "home"],
+    ["iPhone 6 / 6s / 7 / 8", 375, 667, "home"],
+    ["iPhone SE (2, 3)", 375, 667, "home"],
+    ["iPhone 6 / 7 / 8 Plus", 414, 736, "home"],
+    ["iPhone X / XS / 11 Pro", 375, 812, "notch"],
+    ["iPhone XR / 11", 414, 896, "notch"],
+    ["iPhone XS Max / 11 Pro Max", 414, 896, "notch"],
+    ["iPhone 12 mini / 13 mini", 375, 812, "notch"],
+    ["iPhone 12 / 13 / 14 / 16e", 390, 844, "notch"],
+    ["iPhone 12 / 13 Pro Max, 14 Plus", 428, 926, "notch"],
+    ["iPhone 14 Pro / 15 / 15 Pro / 16", 393, 852, "island"],
+    ["iPhone 14 Pro Max / 15 Plus / 15 Pro Max / 16 Plus", 430, 932, "island"],
+    ["iPhone 16 Pro / 17 / 17 Pro", 402, 874, "island"],
+    ["iPhone Air", 420, 912, "island"],
+    ["iPhone 16 Pro Max / 17 Pro Max", 440, 956, "island"],
+    ["iPhone 18 Pro", 402, 874, "island"],
+    ["iPhone 18 Pro Max", 440, 956, "island"],
+  ],
+  android: [
+    ["Small Android (Galaxy A10, Redmi 7…)", 360, 640, "punch"],
+    ["Samsung Galaxy S8 / S9", 360, 740, "punch"],
+    ["Samsung Galaxy S20 – S23", 360, 780, "punch"],
+    ["Samsung Galaxy S24 / S25", 384, 832, "punch"],
+    ["Samsung Galaxy S24 / S25 Ultra", 384, 824, "punch"],
+    ["Samsung Galaxy A14 / A15 / A54 / A55", 412, 915, "punch"],
+    ["Samsung Galaxy Z Flip", 412, 1004, "punch"],
+    ["Samsung Galaxy Z Fold (open)", 690, 841, "punch"],
+    ["Xiaomi Redmi 9 / 10 / Note 9", 393, 851, "punch"],
+    ["Xiaomi Redmi Note 11 / 12 / 13", 393, 873, "punch"],
+    ["Xiaomi 13 / 14 / Poco", 393, 873, "punch"],
+    ["Google Pixel 7 / 8 / 9", 412, 915, "punch"],
+    ["Huawei P30 / P40", 360, 780, "punch"],
+    ["Oppo / Realme / Vivo", 360, 800, "punch"],
+    ["Android tablet", 800, 1280, "punch"],
+  ],
+};
+
+function PhoneFrame({ m, landscape, box, html, nonce }) {
+  const [, w0, h0, kind] = m;
+  const vw = landscape ? h0 : w0, vh = landscape ? w0 : h0;
+  const home = kind === "home";
+  const side = 12, top = home && !landscape ? 46 : 12, bottom = top;
+  const W = box.w || 360, H = box.h || 680;
+  const scale = Math.min(1, (W - 20 - side * 2) / vw, (H - 20 - top - bottom) / vh);
+  const sw = Math.round(vw * scale), sh = Math.round(vh * scale);
+  return (
+    <div className={"phone3 k-" + kind + (landscape ? " land" : "")} style={{ width: sw + side * 2, height: sh + top + bottom, padding: `${top}px ${side}px ${bottom}px` }}>
+      {home && !landscape && <i className="p3-speaker" aria-hidden="true" />}
+      <div className="p3-screen" style={{ width: sw, height: sh, borderRadius: home ? 4 : Math.round(38 * scale) }}>
+        {!landscape && kind === "island" && <i className="p3-island" aria-hidden="true" style={{ width: Math.round(122 * scale), height: Math.round(36 * scale), top: Math.round(11 * scale) }} />}
+        {!landscape && kind === "notch" && <i className="p3-notch" aria-hidden="true" style={{ width: Math.round(160 * scale), height: Math.round(30 * scale) }} />}
+        {!landscape && kind === "punch" && <i className="p3-punch" aria-hidden="true" style={{ width: Math.max(6, Math.round(12 * scale)), height: Math.max(6, Math.round(12 * scale)), top: Math.round(10 * scale) }} />}
+        <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups"
+          style={{ width: vw, height: vh, transform: `scale(${scale})`, transformOrigin: "0 0" }} />
+      </div>
+      {home && !landscape && <i className="p3-home" aria-hidden="true" />}
+    </div>
+  );
+}
+
+// Phone / computer preview of any page (used by the workspace and by "▶ Preview" on code in the chat).
 export function DevicePreview({ html, t, page }) {
   const [device, setDevice] = useState("iphone");
+  const [pick, setPick] = useState({ iphone: 12, android: 2 });
+  const [landscape, setLandscape] = useState(false);
   const [nonce, setNonce] = useState(0);
   const stageRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
-  useEffect(() => { try { const d = localStorage.getItem("ahm-device"); if (d) setDevice(d); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem("ahm-device", device); } catch {} }, [device]);
+  useEffect(() => {
+    try {
+      const d = localStorage.getItem("ahm-device"); if (d && (d === "desktop" || PHONES[d])) setDevice(d);
+      const p = JSON.parse(localStorage.getItem("ahm-device-pick") || "null"); if (p) setPick((x) => ({ ...x, ...p }));
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem("ahm-device", device); localStorage.setItem("ahm-device-pick", JSON.stringify(pick)); } catch {} }, [device, pick]);
   useEffect(() => {
     const el = stageRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -66,6 +138,8 @@ export function DevicePreview({ html, t, page }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  const list = PHONES[device];
+  const m = list ? list[Math.min(pick[device] ?? 0, list.length - 1)] : null;
   return (
     <>
       <div className="ws-sub">
@@ -76,14 +150,18 @@ export function DevicePreview({ html, t, page }) {
         </div>
         <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={P.refresh} /></button>
       </div>
+      {m && (
+        <div className="ws-sub dev-pick" dir="ltr">
+          <select value={pick[device] ?? 0} onChange={(e) => setPick({ ...pick, [device]: +e.target.value })} aria-label={t("deviceModel")}>
+            {list.map((x, i) => <option key={i} value={i}>{x[0]}</option>)}
+          </select>
+          <span className="dev-size">{landscape ? `${m[2]}×${m[1]}` : `${m[1]}×${m[2]}`}</span>
+          <button className={"icon-btn sm" + (landscape ? " on" : "")} aria-label={t("rotate")} title={t("rotate")} onClick={() => setLandscape(!landscape)}>⟲</button>
+        </div>
+      )}
       <div className="stage" ref={stageRef}>
-        {device === "desktop" ? <Desktop html={html} nonce={nonce} box={box} page={page} /> : (
-          <div className={"device " + device} style={phoneSize(box)}>
-            <div className="screen">
-              {device === "iphone" ? <div className="island" aria-hidden="true" /> : <div className="punch" aria-hidden="true" />}
-              <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
-            </div>
-          </div>
+        {device === "desktop" || !m ? <Desktop html={html} nonce={nonce} box={box} page={page} /> : (
+          <PhoneFrame m={m} landscape={landscape} box={box} html={html} nonce={nonce} />
         )}
       </div>
     </>
