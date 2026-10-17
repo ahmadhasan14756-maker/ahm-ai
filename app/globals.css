@@ -1733,3 +1733,27 @@ footer.picking .composer, footer.picking .tool-chip-row { display: none; }
 .pp-view summary { cursor: pointer; font-weight: 700; font-size: 14px; color: var(--gold-text, #d8b26a); }
 .pp-md { margin-top: 8px; padding: 10px 12px; border-radius: 14px; background: var(--surface); font-size: 14px; max-height: 50vh; overflow: auto; }
 @media (max-width: 480px) { .pp-steps li { font-size: 11px; } .pp-steps { justify-content: flex-start; flex-basis: 100%; } }
+
+/* ===== 3D icons (glossy, raised tiles) ===== */
+.caps .cap .cap-ic, .ds-tool .ds-ic, .kc-ic {
+  transform: perspective(320px) rotateX(10deg) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform .35s var(--ease-out, ease), box-shadow .35s var(--ease-out, ease);
+}
+.caps .cap .cap-ic { width: 54px; height: 54px; border-radius: 17px;
+  background: radial-gradient(120% 90% at 30% 15%, color-mix(in srgb, var(--g1) 85%, #fff), var(--g1) 38%, var(--g2) 100%);
+  box-shadow: inset 0 2px 1px rgba(255,255,255,.6), inset 0 -5px 9px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.18),
+    0 3px 0 color-mix(in srgb, var(--g2) 65%, #000), 0 16px 26px -10px var(--g2); }
+.caps .cap .cap-ic::before, .ds-tool .ds-ic::before { content: ""; position: absolute; inset: 3px 4px 52% 4px; border-radius: 14px 14px 50% 50% / 14px 14px 30% 30%; z-index: 1;
+  background: linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.04)); pointer-events: none; }
+.caps .cap .cap-ic > svg { width: 26px; height: 26px; stroke-width: 2.3; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)) drop-shadow(0 0 6px rgba(255,255,255,.25)); z-index: 2; }
+.caps .cap:hover .cap-ic, .caps .cap:focus-visible .cap-ic { transform: perspective(320px) rotateX(0deg) translateY(-4px) scale(1.06); box-shadow: inset 0 2px 1px rgba(255,255,255,.6), inset 0 -5px 9px rgba(0,0,0,.3), 0 4px 0 color-mix(in srgb, var(--g2) 65%, #000), 0 22px 30px -10px var(--g2); }
+.caps .cap:active .cap-ic { transform: perspective(320px) rotateX(14deg) translateY(1px) scale(.97); }
+.ds-tool .ds-ic { background: radial-gradient(120% 90% at 30% 15%, color-mix(in srgb, var(--g1) 85%, #fff), var(--g1) 38%, var(--g2) 100%) !important;
+  box-shadow: inset 0 2px 1px rgba(255,255,255,.6), inset 0 -5px 9px rgba(0,0,0,.3), 0 3px 0 color-mix(in srgb, var(--g2) 65%, #000), 0 16px 26px -10px var(--g2) !important; }
+.ds-tool .ds-ic svg { z-index: 2; stroke-width: 2.2; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
+.ds-tool:hover .ds-ic { transform: perspective(320px) rotateX(0) translateY(-4px) scale(1.06); }
+.kc-ic { font-size: 32px; background: radial-gradient(120% 90% at 30% 15%, color-mix(in srgb, var(--kc) 55%, #fff), color-mix(in srgb, var(--kc) 70%, #000) 100%) !important;
+  box-shadow: inset 0 2px 1px rgba(255,255,255,.55), inset 0 -5px 9px rgba(0,0,0,.3), 0 3px 0 color-mix(in srgb, var(--kc) 55%, #000), 0 18px 28px -12px var(--kc) !important; }
+.kind-card:hover .kc-ic { transform: perspective(320px) rotateX(0) translateY(-4px) scale(1.06) rotate(-4deg); }
+@media (prefers-reduced-motion: reduce) { .caps .cap .cap-ic, .ds-tool .ds-ic, .kc-ic { transition: none; } }

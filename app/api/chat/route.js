@@ -1,6 +1,6 @@
 import { serverEnv } from "../../../lib/env";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
-import { SAFETY_RULES, GEMINI_SAFETY, REFUSAL, isSafetyStop } from "../../../lib/safety";
+import { SAFETY_RULES, GEMINI_SAFETY, GEMINI_SAFETY_RELAXED, REFUSAL, isSafetyStop } from "../../../lib/safety";
 import { gemini, keyCount } from "../../../lib/gemini";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
@@ -94,6 +94,11 @@ UPLOADED PROJECTS (the user brought a ZIP)
 - When the request says a ZIP was uploaded: first understand the whole project. If the structure is messy (files in odd places, missing index.html for a website, missing README.md, broken links between files), fix it with file blocks.
 - Then explain in the user's language, short and clear: what the project is, what already works, what is missing or broken, and give 3 numbered next steps you can do for them. Ask which one to start with.
 
+COMPLETE, NOT A DEMO (very important)
+- Build EVERYTHING in the agreed plan: every page / screen / section listed must exist as a real file with real content and working code. Every link, menu item and button must work. No "coming soon", no empty pages, no lorem ipsum, no fake buttons.
+- Use a clean folder structure (css/, js/, assets/ …) and keep files consistent with each other (same class names, same data keys, every linked file exists).
+- If the project is too big for one answer, build the core fully working first, list what is left in the summary, and continue when the user asks.
+
 WHAT TO BUILD
 - Any language or stack the user asks for: websites (HTML/CSS/JS), Python, Node.js, PHP, Java, C#, Flutter, React, etc.
 - If the user does not name a stack and wants a website or app, use plain HTML + CSS + JavaScript with index.html at the root, style.css and script.js linked by relative paths. This runs instantly in the live phone and computer preview.
@@ -175,13 +180,23 @@ const thinkingOk = new Map();
 async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb, start = 1) {
   let lastErr = null;
   let sentAny = false;
+  // Google's filter often stops normal Kurdish answers by mistake. The first time, start again quietly
+  // with the next model and a softer filter ("\u0000RESET" tells the app to clear what it showed).
+  let safetyRetry = false;
+  const refuseOrRetry = function* () {
+    if (safetyRetry) { yield (sentAny ? "\n\n" : "") + refusal; return true; }
+    safetyRetry = true;
+    if (sentAny) yield "\u0000RESET\n";
+    sentAny = false;
+    return false;
+  };
   for (const model of models) {
     let level = Math.max(start, thinkingOk.get(model + ":" + start) ?? start);
     let search = useSearch;
     let transientTries = 0;
     let keyTries = 0;
     while (level < THINKING.length) {
-      const config = { ...baseConfig };
+      const config = { ...baseConfig, ...(safetyRetry ? { safetySettings: GEMINI_SAFETY_RELAXED } : {}) };
       if (THINKING[level]) config.thinkingConfig = THINKING[level];
       if (search) config.tools = [{ googleSearch: {} }];
       try {
@@ -200,14 +215,14 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         if (sentAny && sources.size) {
           yield "\n\n---\n" + [...sources].slice(0, 6).map(([u, t], i) => `${i + 1}. [${t.replace(/[\[\]]/g, "")}](${u})`).join("\n");
         }
-        if (stopped) { yield (sentAny ? "\n\n" : "") + refusal; return; } // blocked by the content filter
+        if (stopped) { if (yield* refuseOrRetry()) return; break; } // blocked by the content filter: try once more
         if (sentAny) return;
         lastErr = new Error("empty answer");
         break; // empty: try the next model
       } catch (e) {
         lastErr = e;
         console.error("gemini", model, level, errText(e));
-        if (/SAFETY|PROHIBITED_CONTENT|BLOCKLIST/i.test(errText(e))) { yield (sentAny ? "\n\n" : "") + refusal; return; }
+        if (/SAFETY|PROHIBITED_CONTENT|BLOCKLIST/i.test(errText(e))) { if (yield* refuseOrRetry()) return; break; }
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
         if (isRateLimit(e) && keyTries < keyCount() - 1) { keyTries++; continue; } // same model, another key
         if (isRateLimit(e) || isModelMissing(e)) break;
@@ -218,6 +233,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       }
     }
   }
+  if (safetyRetry && !sentAny) { yield refusal; return; }
   yield isRateLimit(lastErr) ? "\u0000ERR:busy" : "\u0000ERR:ai";
 }
 
@@ -319,7 +335,8 @@ VOICE CONVERSATION MODE (most important rules)
       safetySettings: GEMINI_SAFETY,
     };
     // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).
-    const useSearch = !build && usage.pro && serverEnv("ENABLE_SEARCH") === "1";
+    // The plan step looks things up on Google (free daily amount on the free AI key); it switches off by itself if not allowed.
+    const useSearch = (!build && usage.pro && serverEnv("ENABLE_SEARCH") === "1") || (planOnly && serverEnv("PLAN_SEARCH") !== "0");
 
     const encoder = new TextEncoder();
     let counted = false;

@@ -16,6 +16,7 @@ import DesignStudio from "../components/DesignStudio";
 import VoiceMode from "../components/VoiceMode";
 import Landing from "../components/Landing";
 import { quickGuess } from "../lib/intent";
+import { REFUSAL } from "../lib/safety";
 import { useUpdateReady, refreshApp } from "../lib/update";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
@@ -2360,6 +2361,10 @@ function Main({ session }) {
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
+        // The server started the answer again (a filter stopped the first try): drop what was shown.
+        const ri = acc.lastIndexOf("\u0000RESET\n");
+        if (ri >= 0) acc = acc.slice(ri + 7);
+        if (/\u0000[A-Z]{1,5}$/.test(acc) && !ERR.test(acc)) continue; // half of a marker: wait for the rest
         // Place in the waiting line ("\u0000Q:3\n"): show it, keep it out of the answer.
         const places = acc.match(/\u0000Q:(\d+)\n/g);
         if (places) {
@@ -2392,6 +2397,10 @@ function Main({ session }) {
         const busyErr = /ERR:busy/.test(acc);
         put([...next, { role: "assistant", content: busyErr ? t("errBusy") : t("errAi"), failed: true }]);
       } else if (result === "ok") {
+        if (planOnly) { // a refused or broken plan must not show the "Build it" button
+          const sp = split(acc), body = clean(sp.body).trim();
+          if (Object.values(REFUSAL).some((r) => body.endsWith(r)) || ERR.test(acc)) put([...sp.msgs, { role: "assistant", content: body, failed: ERR.test(acc) || undefined }]);
+        }
         if (sentFile) {
           const { out, applied, failed } = applyEdits(sentFile.content, acc);
           put([...next, { role: "assistant", content: clean(acc), fixed: applied ? { name: fixedName(sentFile.name), content: out } : null, fixInfo: { applied, failed } }]);
@@ -2472,6 +2481,8 @@ function Main({ session }) {
             return;
           }
           let txt = String(j.result || "");
+          const rs = txt.lastIndexOf("\u0000RESET\n");
+          if (rs >= 0) txt = txt.slice(rs + 7);
           const bad = /\u0000ERR:(busy|ai)\s*$/.exec(txt);
           txt = txt.replace(/\n*\u0000ERR:(busy|ai)\s*$/, "");
           const heard = msg.pending.voice ? /^\s*⟦([^⟧]*)⟧[ \t]*\n?/.exec(txt) : null;
