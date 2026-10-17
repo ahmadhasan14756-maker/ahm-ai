@@ -1049,77 +1049,115 @@ function ThemePicker() {
   );
 }
 
+// Settings: a panel that slides out like the menu. A list of big buttons; each one opens its own part.
 function Settings({ session, me, onClose, onPlans, onPassword, update, inst, onInstallGuide, onAbout, push }) {
   const { t, lang } = useLang();
+  const [part, setPart] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [shut, setShut] = useState(false);
+  const close = () => { setShut(true); setTimeout(onClose, 220); };
   const chev = "›"; // flips by itself in Kurdish / Arabic
+  const theme = typeof document !== "undefined" ? currentTheme() : "d";
+  const planName = me ? (me.unlimited ? (me.vip ? "♾️ VIP" : "👑 Owner") : me.pro ? `⭐ ${me.planName}` : t("free")) : "";
   const Row = ({ icon, label, value, onClick, cls = "", disabled }) => (
     <button className={"set-row set-btn " + cls} disabled={disabled} onClick={onClick}>
       <div className="set-label"><span className="set-ri" aria-hidden="true">{icon}</span> {label}</div>
       <div className="set-val">{value ?? chev}</div>
     </button>
   );
+  const PARTS = [
+    ["plan", "⭐", "g-gold", t("plans"), planName],
+    ["account", "👤", "g-blue", t("setAccount").replace(/^\S+\s/, ""), ""],
+    ["lang", "🌐", "g-teal", t("language"), LANGS.find((l) => l.id === lang)?.name],
+    ["look", "🎨", "g-pink", t("design"), t("theme_" + theme)],
+    ["notify", "🔔", "g-orange", t("notifyTitle").replace(/^\S+\s/, ""), push?.state === "on" ? t("notifyActive") : ""],
+    ["app", "📲", "g-green", t("setAppSec").replace(/^\S+\s/, ""), update ? t("updateNew") : ""],
+    ["about", "ℹ️", "g-violet", t("setAboutSec").replace(/^\S+\s/, ""), ""],
+  ];
+  const cur = PARTS.find((x) => x[0] === part);
   return (
-    <div className="set-page" dir={lang === "en" ? "ltr" : "rtl"}>
-      <div className="set-inner">
-        <button className="learn-back" onClick={onClose}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
-          {t("back").replace("‹", "").trim()}
-        </button>
-        <h2 className="set-h"><Svg d={Icon.gear} size={22} /> {t("settings")}</h2>
+    <div className={"set-drawer-bg" + (shut ? " shut" : "")} onClick={close}>
+      <aside className={"set-drawer" + (shut ? " shut" : "")} dir={lang === "en" ? "ltr" : "rtl"} role="dialog" aria-label={t("settings")} onClick={(e) => e.stopPropagation()}>
+        <div className="sd-head">
+          {part ? (
+            <button className="sd-back" onClick={() => setPart(null)} aria-label={t("back")}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+          ) : <span className="sd-gear" aria-hidden="true"><Svg d={Icon.gear} size={20} /></span>}
+          <b>{cur ? cur[3] : t("settings")}</b>
+          <button className="sd-x" onClick={close} aria-label={t("close")}><Svg d={Icon.close} size={18} /></button>
+        </div>
 
-        {me && (
-          <button className="set-plan" onClick={onPlans}>
-            <div className="set-plan-top">
-              <span className="set-plan-name">{me.unlimited ? (me.vip ? "♾️ VIP" : "👑 Owner") : me.pro ? `⭐ ${me.planName}` : t("free")}</span>
-              <span className="set-plan-go">{t("plans")} {chev}</span>
+        {!part ? (
+          <div className="sd-body">
+            <div className="sd-user">
+              <span className="sd-avatar" aria-hidden="true">{(session.user.email || "?")[0].toUpperCase()}</span>
+              <div><b dir="ltr">{session.user.email}</b><small>{planName} · {usageText(me, t)}</small></div>
             </div>
-            <UsageBars me={me} />
-          </button>
+            <nav className="sd-menu">
+              {PARTS.map(([k, ic, g, label, val]) => (
+                <button key={k} className="sd-item" onClick={() => setPart(k)}>
+                  <span className={"tile3d " + g} aria-hidden="true">{ic}</span>
+                  <span className="sd-label">{label}</span>
+                  {val ? <em className="sd-val">{val}</em> : null}
+                  <span className="sd-chev" aria-hidden="true">{chev}</span>
+                </button>
+              ))}
+            </nav>
+            <button className="ghost-btn danger sd-logout" onClick={() => supabase.auth.signOut()}>
+              <Svg d={Icon.logout} size={18} /> {t("logout")}
+            </button>
+          </div>
+        ) : (
+          <div className="sd-body sd-part" key={part}>
+            {part === "plan" && me && (
+              <>
+                <button className="set-plan" onClick={onPlans}>
+                  <div className="set-plan-top">
+                    <span className="set-plan-name">{planName}</span>
+                    <span className="set-plan-go">{t("plans")} {chev}</span>
+                  </div>
+                  <UsageBars me={me} />
+                </button>
+                <button className="gold-btn" onClick={onPlans}>⭐ {t("plans")}</button>
+              </>
+            )}
+            {part === "account" && (
+              <section className="set-card">
+                <div className="set-row"><div className="set-label"><span className="set-ri" aria-hidden="true">✉️</span> {t("account")}</div><div className="set-val" dir="ltr">{session.user.email}</div></div>
+                <Row icon="🔐" label={t("changePw")} onClick={onPassword} />
+                <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}><Svg d={Icon.logout} size={18} /> {t("logout")}</button>
+              </section>
+            )}
+            {part === "lang" && <section className="set-card"><div className="set-sub"><Svg d={Icon.globe} size={16} /> {t("language")}</div><LangPicker /></section>}
+            {part === "look" && <section className="set-card"><div className="set-sub">🎨 {t("design")}</div><ThemePicker /></section>}
+            {part === "notify" && (
+              <section className="set-card">
+                <Row icon="🔔" label={t("notifyOn")} disabled={push?.state === "busy" || push?.state === "unsupported"}
+                  value={push?.state === "on" ? <em className="new-badge">{t("notifyActive")}</em> : push?.state === "busy" ? <span className="mini-spin" /> : chev}
+                  onClick={() => (push?.state === "on" ? push.disable() : push?.state === "off" ? push.enable() : null)} />
+                <p className="set-hint">{push?.state === "ios-install" ? t("notifyIos") : push?.state === "blocked" ? t("notifyBlocked") : push?.state === "unsupported" ? t("notifyNo") : t("notifyOnSub")}</p>
+              </section>
+            )}
+            {part === "app" && (
+              <section className="set-card">
+                <Row icon="🔄" label={t("refreshApp")} cls={"refresh-row" + (update ? " new" : "")} disabled={loading}
+                  value={loading ? <span className="mini-spin" /> : update ? <em className="new-badge">{t("updateNew")}</em> : chev}
+                  onClick={() => { setLoading(true); refreshApp(); }} />
+                <Row icon="📲" label={t("addToScreen")} cls={"a2-row" + (inst?.installed ? " done" : "")} disabled={inst?.installed}
+                  value={inst?.installed ? <em className="new-badge">✓ {t("installedYes")}</em> : <span className="a2-go">{t("a2Tap")}</span>}
+                  onClick={async () => { if (inst?.installed) return; if (await inst?.install?.()) return; onInstallGuide?.(); }} />
+              </section>
+            )}
+            {part === "about" && (
+              <section className="set-card">
+                <Row icon="👨‍💻" label={t("aboutDev")} cls="about-row" onClick={onAbout} />
+                <div className="set-legal"><a href="/privacy" target="_blank" rel="noreferrer">{t("privacy")}</a><a href="/terms" target="_blank" rel="noreferrer">{t("terms")}</a></div>
+              </section>
+            )}
+          </div>
         )}
-
-        <section className="set-card">
-          <h3>{t("setAccount")}</h3>
-          <div className="set-row"><div className="set-label"><span className="set-ri" aria-hidden="true">✉️</span> {t("account")}</div><div className="set-val" dir="ltr">{session.user.email}</div></div>
-          <Row icon="🔐" label={t("changePw")} onClick={onPassword} />
-        </section>
-
-        <section className="set-card">
-          <h3>{t("setLook")}</h3>
-          <div className="set-sub"><Svg d={Icon.globe} size={16} /> {t("language")}</div>
-          <LangPicker />
-          <div className="set-sub">🎨 {t("design")}</div>
-          <ThemePicker />
-        </section>
-
-        <section className="set-card">
-          <h3>{t("notifyTitle")}</h3>
-          <Row icon="🔔" label={t("notifyOn")} disabled={push?.state === "busy" || push?.state === "unsupported"}
-            value={push?.state === "on" ? <em className="new-badge">{t("notifyActive")}</em> : push?.state === "busy" ? <span className="mini-spin" /> : chev}
-            onClick={() => (push?.state === "on" ? push.disable() : push?.state === "off" ? push.enable() : null)} />
-          <p className="set-hint">{push?.state === "ios-install" ? t("notifyIos") : push?.state === "blocked" ? t("notifyBlocked") : push?.state === "unsupported" ? t("notifyNo") : t("notifyOnSub")}</p>
-        </section>
-
-        <section className="set-card">
-          <h3>{t("setAppSec")}</h3>
-          <Row icon="🔄" label={t("refreshApp")} cls={"refresh-row" + (update ? " new" : "")} disabled={loading}
-            value={loading ? <span className="mini-spin" /> : update ? <em className="new-badge">{t("updateNew")}</em> : chev}
-            onClick={() => { setLoading(true); refreshApp(); }} />
-          <Row icon="📲" label={t("addToScreen")} cls={"a2-row" + (inst?.installed ? " done" : "")} disabled={inst?.installed}
-            value={inst?.installed ? <em className="new-badge">✓ {t("installedYes")}</em> : <span className="a2-go">{t("a2Tap")}</span>}
-            onClick={async () => { if (inst?.installed) return; if (await inst?.install?.()) return; onInstallGuide?.(); }} />
-        </section>
-
-        <section className="set-card">
-          <h3>{t("setAboutSec")}</h3>
-          <Row icon="👨‍💻" label={t("aboutDev")} cls="about-row" onClick={onAbout} />
-          <div className="set-legal"><a href="/privacy" target="_blank" rel="noreferrer">{t("privacy")}</a><a href="/terms" target="_blank" rel="noreferrer">{t("terms")}</a></div>
-        </section>
-
-        <button className="ghost-btn danger" onClick={() => supabase.auth.signOut()}>
-          <Svg d={Icon.logout} size={18} /> {t("logout")}
-        </button>
-      </div>
+      </aside>
     </div>
   );
 }
@@ -1745,7 +1783,7 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
           <button className="icon-btn sm side-x" aria-label={t("close")} onClick={onClose}><Svg d={Icon.close} size={18} /></button>
         </div>
         <button className="new-btn" onClick={() => onNew("auto")}><Svg d={Icon.plus} size={18} /> {t("newChat")}</button>
-        <button className={"new-btn alt" + (learnOn ? " on" : "")} onClick={onLearn}><Svg d={Icon.learn} size={18} /> {t("learnLang")}</button>
+        <button className={"new-btn alt" + (learnOn ? " on" : "")} onClick={onLearn}><span className="tile3d sm g-teal" aria-hidden="true"><Svg d={Icon.learn} size={16} /></span> {t("learnLang")}</button>
         <div className="side-list">
           <div className="side-title">{t("recent")}</div>
           {!chats.length && <div className="side-empty">{t("noHistory")}</div>}
@@ -1759,14 +1797,14 @@ function Sidebar({ open, chats, activeId, onPick, onNew, onDelete, onSettings, o
             </div>
           ))}
         </div>
-        {me?.owner && <button className={"side-fb gift rel-side" + (releaseReady ? " ready" : "")} onClick={onRelease}>🚀 <span>{t("releaseBtn")}</span>{releaseReady && <em className="new-badge">{t("updateNew")}</em>}</button>}
-        {me?.owner && <button className="side-fb gift" onClick={onDashboard}>📊 <span>{t("dashboard")}</span></button>}
-        {me?.owner && <button className="side-fb gift" onClick={onOwnerPlans}>✏️ <span>{t("editPlans")}</span></button>}
-        {me?.owner && <button className="side-fb gift" onClick={onNotice}>📢 <span>{t("noticeBtn")}</span></button>}
-        <button className="side-fb gift" onClick={onInvite}>🎁 <span>{t("invite")}</span></button>
-        <button className="side-fb" onClick={onFeedback}>💬 <span>{t("feedback")}</span></button>
+        {me?.owner && <button className={"side-fb gift rel-side" + (releaseReady ? " ready" : "")} onClick={onRelease}><span className="tile3d sm g-orange" aria-hidden="true">🚀</span> <span>{t("releaseBtn")}</span>{releaseReady && <em className="new-badge">{t("updateNew")}</em>}</button>}
+        {me?.owner && <button className="side-fb gift" onClick={onDashboard}><span className="tile3d sm g-blue" aria-hidden="true">📊</span> <span>{t("dashboard")}</span></button>}
+        {me?.owner && <button className="side-fb gift" onClick={onOwnerPlans}><span className="tile3d sm g-gold" aria-hidden="true">✏️</span> <span>{t("editPlans")}</span></button>}
+        {me?.owner && <button className="side-fb gift" onClick={onNotice}><span className="tile3d sm g-pink" aria-hidden="true">📢</span> <span>{t("noticeBtn")}</span></button>}
+        <button className="side-fb gift" onClick={onInvite}><span className="tile3d sm g-green" aria-hidden="true">🎁</span> <span>{t("invite")}</span></button>
+        <button className="side-fb" onClick={onFeedback}><span className="tile3d sm g-violet" aria-hidden="true">💬</span> <span>{t("feedback")}</span></button>
         <button className="side-settings" onClick={onSettings}>
-          <Svg d={Icon.gear} size={18} /> <span>{t("settings")}</span>
+          <span className="tile3d sm g-slate" aria-hidden="true"><Svg d={Icon.gear} size={16} /></span> <span>{t("settings")}</span>
           {me && <em>{me.unlimited ? (me.vip ? "♾️ VIP" : "👑") : me.pro ? `⭐ ${me.planName}` : t("free")} · {usageText(me, t)}</em>}
         </button>
       </aside>
@@ -1880,6 +1918,7 @@ function Main({ session }) {
   const [studioRatio, setStudioRatio] = useState("square");
   const [hideUpdate, setHideUpdate] = useState(false);
   const [planEdit, setPlanEdit] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const sendRef = useRef(null);
   useEffect(() => { // "▶ Preview" on HTML code in an answer
     const show = (e) => { if (typeof e.detail === "string") setSheet({ type: "codePreview", html: buildPreview({ "index.html": e.detail }) }); };
@@ -2656,7 +2695,7 @@ function Main({ session }) {
     <div className={"app mode-" + mode}>
       <Sidebar open={sideOpen} chats={chats} activeId={activeId} me={me} onLearn={openLearn} learnOn={view === "learn"}
         onPick={pick} onNew={startNew} onDelete={remove} onClose={() => setSideOpen(false)}
-        onSettings={() => { if (busy) return; setSideOpen(false); setShowPreview(false); setView("settings"); }}
+        onSettings={() => { setSideOpen(false); setSettingsOpen(true); }}
         onFeedback={() => { setSideOpen(false); setSheet({ type: "feedback" }); }}
         onInvite={() => { setSideOpen(false); setSheet({ type: "invite" }); }}
         onDashboard={() => { setSideOpen(false); setSheet({ type: "dashboard" }); }}
@@ -2672,7 +2711,7 @@ function Main({ session }) {
             <img src="/icon-192.png" alt="" aria-hidden="true" />
             <span className="brand-name">AHM <b>AI</b></span>
           </div>
-          <div className="head-title" dir="auto">{view === "settings" ? t("settings") : view === "learn" ? t("learnLang") : view === "house" ? t("houseCta") : view === "slides" ? t("capSlides") : view === "studio" ? t("capConstruct") : active.title || toolName || t("newChat")}</div>
+          <div className="head-title" dir="auto">{view === "learn" ? t("learnLang") : view === "house" ? t("houseCta") : view === "slides" ? t("capSlides") : view === "studio" ? t("capConstruct") : active.title || toolName || t("newChat")}</div>
           <div className="head-tools">
             {me && (
               <button className={"quota-pill" + (me.unlimited || me.pro ? " pro" : "") + (me.lockedUntil ? " wait" : "")} onClick={() => setSheet({ type: "upgrade", reason: "info" })}>
@@ -2710,10 +2749,7 @@ function Main({ session }) {
           </div>
         )}
 
-        {view === "settings" ? (
-          <Settings push={push} session={session} me={me} onClose={() => setView("chat")} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
-            inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />
-        ) : view === "learn" ? (
+        {view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
             onLimit={() => showLimit()} />
         ) : view === "studio" ? (
@@ -2975,6 +3011,10 @@ function Main({ session }) {
       {sheet?.type === "dashboard" && <Dashboard token={token} onClose={() => setSheet(null)} onPlans={() => setSheet({ type: "admin" })} onNotice={() => setSheet({ type: "notice" })} onRelease={() => setSheet({ type: "release" })} />}
       {sheet?.type === "release" && me?.owner && <ReleaseSheet token={token} onClose={() => setSheet(null)} onChanged={() => setReleaseReady(false)} />}
       {sheet?.type === "notice" && me?.owner && <NoticeComposer token={token} onClose={() => setSheet(null)} onSent={loadMe} />}
+      {settingsOpen && (
+        <Settings push={push} session={session} me={me} onClose={() => setSettingsOpen(false)} onPlans={() => setSheet({ type: "upgrade", reason: "info" })} onPassword={() => setSheet({ type: "password" })} update={update}
+          inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />
+      )}
       {sheet?.type === "screen" && <ScreenGuide info={sheet} onClose={() => setSheet(null)} />}
       {sheet?.type === "codePreview" && sheet.html && (
         <Sheet label={t("preview")} onClose={() => setSheet(null)}>
