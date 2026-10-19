@@ -1952,3 +1952,14 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
   .publish-btn .pub-txt { display: none; }
   .publish-btn { padding-inline: 10px; }
 }
+
+/* ===== Slides: brand (logo + colour) and professional styles ===== */
+.sl-styles button { position: relative; }
+.sl-pro { position: absolute; top: -7px; inset-inline-end: 6px; font-style: normal; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: var(--gold); color: var(--gold-ink, #1a1200); }
+.sl-brand { margin-top: 10px; }
+.sl-brand-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sl-logo { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 12px 4px 6px; border-radius: 12px; border: 1px dashed var(--line); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; }
+.sl-logo img, .sl-logo span { width: 34px; height: 34px; border-radius: 8px; object-fit: contain; background: #fff; display: grid; place-items: center; color: #555; font-size: 18px; }
+.sl-color { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; font-size: 13.5px; }
+.sl-color input { width: 30px; height: 30px; border: 0; padding: 0; background: none; cursor: pointer; }
+.sl-mini { width: auto; min-height: 36px; padding: 0 12px; font-size: 13px; }

@@ -2,7 +2,7 @@
 // 🎞️ AI presentation designer: a topic or an existing PowerPoint / PDF / Word file → AHM AI rewrites, fixes and
 // designs every slide → preview, edit, ask for changes → download an editable PowerPoint and a PDF.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { THEMES, layoutSlide, renderSlide, exportPptx, exportPdf, readSource } from "../lib/deck";
+import { THEMES, brandTheme, layoutSlide, renderSlide, exportPptx, exportPdf, readSource } from "../lib/deck";
 
 const TX = {
   title: { ckb: "دیزاینەری پێشکەشکردن", ar: "مصمم العروض التقديمية", en: "Presentation designer" },
@@ -57,9 +57,30 @@ const TX = {
   e_unsafe: { ckb: "ئەم داواکارییە ڕێگەپێدراو نییە.", ar: "هذا الطلب غير مسموح.", en: "This request is not allowed." },
   e_net: { ckb: "کێشەیەک هەبوو. دووبارە هەوڵ بدەرەوە.", ar: "حدث خطأ. أعد المحاولة.", en: "Something went wrong. Try again." },
   picsSkipped: { ckb: "هەندێک وێنە دروست نەبوون، بەبێ ئەوان بەردەوام بووین.", ar: "تعذر إنشاء بعض الصور، فتابعنا بدونها.", en: "Some pictures could not be made; continued without them." },
+  brand: { ckb: "🏷️ لۆگۆ و ڕەنگی براندەکەت", ar: "🏷️ شعارك ولون علامتك", en: "🏷️ Your logo and brand colour" },
+  logoAdd: { ckb: "لۆگۆ زیاد بکە", ar: "أضف الشعار", en: "Add logo" },
+  logoChange: { ckb: "گۆڕینی لۆگۆ", ar: "تغيير الشعار", en: "Change logo" },
+  remove: { ckb: "لابردن", ar: "إزالة", en: "Remove" },
+  color: { ckb: "ڕەنگ", ar: "اللون", en: "Colour" },
+  colorReset: { ckb: "ڕەنگی شێواز", ar: "لون النمط", en: "Style colour" },
+  brandHint: { ckb: "لۆگۆکەت لە سەر هەموو سلایدەکان دەردەکەوێت.", ar: "يظهر شعارك على كل الشرائح.", en: "Your logo appears on every slide." },
+  proStyles: { ckb: "پڕۆفیشناڵ", ar: "احترافي", en: "Professional" },
+  fItems: { ckb: "بەشەکان (هەر دێڕێک بەشێک)", ar: "الأقسام (كل سطر قسم)", en: "Items (one per line)" },
   note: { ckb: "دەتوانیت فایلی PowerPoint لە PowerPoint، Keynote یان Google Slides بکەیتەوە و هەموو شتێکی دەستکاری بکەیت.", ar: "يمكنك فتح ملف PowerPoint في PowerPoint أو Keynote أو Google Slides وتعديل كل شيء.", en: "Open the PowerPoint file in PowerPoint, Keynote or Google Slides and edit everything." },
 };
 const STORE = "ahm-deck-v1";
+const BRAND = "ahm-brand-v1";
+// a picked logo → a small PNG (keeps the saved data and the PowerPoint file light)
+const shrinkLogo = (file) => new Promise((ok, bad) => {
+  const url = URL.createObjectURL(file), im = new Image();
+  im.onload = () => {
+    const k = Math.min(1, 480 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL("image/png"));
+  };
+  im.onerror = () => { URL.revokeObjectURL(url); bad(new Error("bad_type")); };
+  im.src = url;
+});
 
 function save(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -76,7 +97,8 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
   const [topic, setTopic] = useState("");
   const [src, setSrc] = useState(null); // { text | pdf, name, count }
   const [deckLang, setDeckLang] = useState("auto");
-  const [style, setStyle] = useState("noir");
+  const [style, setStyle] = useState("corporate");
+  const [brand, setBrand] = useState({ logo: "", color: "" });
   const [count, setCount] = useState("");
   const [keep, setKeep] = useState(false);
   const [withPics, setWithPics] = useState(true);
@@ -107,13 +129,16 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
   // bring back the last presentation (text only; pictures are not kept)
   useEffect(() => { try { const d = JSON.parse(localStorage.getItem(STORE) || "null"); if (d?.deck?.slides?.length) { setDeck(d.deck); setStyle(d.style || "noir"); } } catch {} }, []);
   useEffect(() => { try { if (deck) localStorage.setItem(STORE, JSON.stringify({ deck, style })); } catch {} }, [deck, style]);
+  useEffect(() => { try { const b = JSON.parse(localStorage.getItem(BRAND) || "null"); if (b) setBrand({ logo: b.logo || "", color: b.color || "" }); } catch {} }, []);
+  const saveBrand = (b) => { setBrand(b); try { localStorage.setItem(BRAND, JSON.stringify(b)); } catch {} };
 
   const rtl = deck ? deck.lang !== "en" : uiRtl;
-  const theme = THEMES[style] || THEMES.noir;
+  const theme = useMemo(() => brandTheme(THEMES[style] || THEMES.corporate, brand.color), [style, brand.color]);
+  const date = useMemo(() => { try { return new Date().toLocaleDateString(deck?.lang === "en" ? "en-GB" : "ar-IQ", { year: "numeric", month: "long", day: "numeric" }); } catch { return ""; } }, [deck?.lang]);
   const layouts = useMemo(() => {
     if (!deck) return [];
-    return deck.slides.map((sl, i) => layoutSlide(sl, theme, { rtl, index: i, total: deck.slides.length, deckTitle: deck.title, image: pics[i] }));
-  }, [deck, theme, rtl, pics]);
+    return deck.slides.map((sl, i) => layoutSlide(sl, theme, { rtl, index: i, total: deck.slides.length, deckTitle: deck.title, image: pics[i], logo: brand.logo, date }));
+  }, [deck, theme, rtl, pics, brand.logo, date]);
 
   // draw the previews whenever the deck, style or pictures change
   useEffect(() => {
@@ -130,7 +155,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
   useEffect(() => { if (deck && sel >= deck.slides.length) setSel(0); }, [deck]);
   useEffect(() => {
     const s = deck?.slides[sel];
-    setForm(s ? { title: s.title || "", sub: s.subtitle || s.text || s.quote || "", bullets: (s.bullets || []).join("\n"), notes: s.notes || "" } : null);
+    setForm(s ? { title: s.title || "", sub: s.subtitle || s.text || s.quote || "", bullets: (s.layout === "agenda" ? s.items || [] : s.bullets || []).join("\n"), notes: s.notes || "" } : null);
   }, [deck, sel]);
 
   async function onFile(e) {
@@ -192,7 +217,8 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
         if (i !== sel) return s;
         const n = { ...s, title: form.title, notes: form.notes };
         if (s.layout === "quote") n.quote = form.sub; else if ("subtitle" in s && ["title", "section", "closing"].includes(s.layout)) n.subtitle = form.sub; else n.text = form.sub;
-        n.bullets = form.bullets.split("\n").map((b) => b.trim()).filter(Boolean).slice(0, 6);
+        const lines = form.bullets.split("\n").map((b) => b.trim()).filter(Boolean);
+        if (s.layout === "agenda") n.items = lines.slice(0, 7); else n.bullets = lines.slice(0, 6);
         return n;
       });
       return { ...d, slides };
@@ -261,6 +287,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
               </label>
             </div>
             <StylePicker style={style} setStyle={setStyle} lang={lang} tx={tx} />
+            <BrandPicker brand={brand} setBrand={saveBrand} theme={THEMES[style] || THEMES.corporate} tx={tx} onError={(c) => setError(errText(c))} />
             {quota?.images && (
               <label className="house-check"><input type="checkbox" checked={withPics} onChange={(e) => setWithPics(e.target.checked)} /><span><b>{tx("images")}</b></span></label>
             )}
@@ -280,6 +307,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
               <button className="ghost-btn" disabled={!!busy} onClick={() => { setDeck(null); setPics({}); setThumbs([]); try { localStorage.removeItem(STORE); } catch {} }}>{tx("newDeck")}</button>
             </div>
             <StylePicker style={style} setStyle={setStyle} lang={lang} tx={tx} />
+            <BrandPicker brand={brand} setBrand={saveBrand} theme={THEMES[style] || THEMES.corporate} tx={tx} onError={(c) => setError(errText(c))} />
             <figure className="sl-main" dir="ltr">
               {thumbs[sel] ? <img src={thumbs[sel]} alt={`${tx("slide")} ${sel + 1}`} /> : <div className="sl-wait"><span className="mini-spin" /></div>}
               <figcaption dir={uiRtl ? "rtl" : "ltr"}>
@@ -307,8 +335,8 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
                 <summary><h3>{tx("edit")} ({sel + 1})</h3></summary>
                 <label className="house-label">{tx("fTitle")}<textarea rows={1} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
                 <label className="house-label">{tx("fSub")}<textarea rows={2} value={form.sub} onChange={(e) => setForm({ ...form, sub: e.target.value })} /></label>
-                {["bullets", "image", "chart"].includes(deck.slides[sel]?.layout) && (
-                  <label className="house-label">{tx("fBullets")}<textarea rows={5} value={form.bullets} onChange={(e) => setForm({ ...form, bullets: e.target.value })} /></label>
+                {["bullets", "image", "chart", "agenda"].includes(deck.slides[sel]?.layout) && (
+                  <label className="house-label">{deck.slides[sel]?.layout === "agenda" ? tx("fItems") : tx("fBullets")}<textarea rows={5} value={form.bullets} onChange={(e) => setForm({ ...form, bullets: e.target.value })} /></label>
                 )}
                 <label className="house-label">{tx("fNotes")}<textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
                 <button className="gold-btn" onClick={applyEdit}>{tx("apply")}</button>
@@ -329,15 +357,46 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
   );
 }
 
+function BrandPicker({ brand, setBrand, theme, tx, onError }) {
+  const ref = useRef(null);
+  async function pick(e) {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    if (f.size > 8_000_000) { onError("too_big"); return; }
+    try { setBrand({ ...brand, logo: await shrinkLogo(f) }); } catch { onError("bad_type"); }
+  }
+  return (
+    <div className="sl-brand">
+      <p className="sl-label">{tx("brand")}</p>
+      <div className="sl-brand-row">
+        <input ref={ref} type="file" hidden accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={pick} />
+        <button type="button" className="sl-logo" onClick={() => ref.current?.click()}>
+          {brand.logo ? <img src={brand.logo} alt="" /> : <span aria-hidden="true">＋</span>}
+          <b>{brand.logo ? tx("logoChange") : tx("logoAdd")}</b>
+        </button>
+        {brand.logo && <button type="button" className="ghost-btn sl-mini" onClick={() => setBrand({ ...brand, logo: "" })}>{tx("remove")}</button>}
+        <label className="sl-color">
+          <input type="color" value={"#" + (brand.color || theme.accent)} onChange={(e) => setBrand({ ...brand, color: e.target.value.replace("#", "").toUpperCase() })} />
+          <span>{tx("color")}</span>
+        </label>
+        {brand.color && <button type="button" className="ghost-btn sl-mini" onClick={() => setBrand({ ...brand, color: "" })}>{tx("colorReset")}</button>}
+      </div>
+      <small className="muted">{tx("brandHint")}</small>
+    </div>
+  );
+}
+
 function StylePicker({ style, setStyle, lang, tx }) {
+  const all = Object.entries(THEMES).sort((a, b) => (b[1].pro ? 1 : 0) - (a[1].pro ? 1 : 0));
   return (
     <div>
       <p className="sl-label">{tx("style")}</p>
       <div className="sl-styles">
-        {Object.entries(THEMES).map(([k, t]) => (
+        {all.map(([k, t]) => (
           <button key={k} className={style === k ? "on" : ""} aria-pressed={style === k} onClick={() => setStyle(k)}>
             <i style={{ background: `linear-gradient(135deg, #${t.bg}, #${t.bg2})` }}><b style={{ background: `#${t.accent}` }} /><b style={{ background: `#${t.text}`, width: "60%" }} /></i>
             <span>{t.name[lang] || t.name.ckb}</span>
+            {t.pro && <em className="sl-pro">{tx("proStyles")}</em>}
           </button>
         ))}
       </div>
