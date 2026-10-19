@@ -1,13 +1,13 @@
 import { serverEnv } from "../../../lib/env";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 import { SAFETY_RULES, GEMINI_SAFETY, GEMINI_SAFETY_RELAXED, REFUSAL, isSafetyStop } from "../../../lib/safety";
-import { gemini, keyCount } from "../../../lib/gemini";
+import { gemini, keyCount, jsonCall } from "../../../lib/gemini";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
 import { saveJob, validJobId } from "../../../lib/jobs";
 import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
-import { randomUUID } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { sendPush } from "../../../lib/push";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -134,6 +134,40 @@ FILES: index.html (the app shell), css/app.css, js/app.js (router: screens switc
   system: `
 PROJECT TYPE: SYSTEM — a management system / dashboard (e.g. shop, school, clinic, stock, accounting): a login screen (demo user shown on screen), a sidebar menu, a dashboard with stat cards and a chart, data tables with search, add / edit / delete forms, simple user roles (admin / staff) and printable reports. Save all data in localStorage (one clear data layer in js/data.js so it can be moved to a real database later). Explain in README.md how to connect a real database later.
 FILES: index.html (login + app shell, pages switch with #hash routes), css/style.css, js/data.js (all data + saving), js/auth.js (login, roles), js/app.js (router, sidebar), js/pages/<module>.js — one file per module in the plan (e.g. products.js, sales.js, reports.js, users.js), README.md.`,
+};
+
+// ---- Building a new project ONE FILE AFTER ANOTHER (like a developer) ----
+// 1) the AI lists the files, 2) each file is written in its own step with all earlier files in view,
+// so big projects come out complete and consistent. The app shows "file 3 / 8 — js/app.js".
+// If the 5-minute server limit gets close, a signed "continue" note is sent and the app continues by itself.
+const FILELIST_PROMPT = (kind, lang) => `You are a senior developer planning the files of a ${kind === "app" ? "phone app" : kind === "system" ? "management system" : "website"} that the user agreed on in this conversation (the plan is in the conversation).
+${KIND_PROMPT[kind]}
+Return JSON only: {"intro": "1-3 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you are building now, file by file", "files": [{"path": "index.html", "about": "what this file contains, in English, max 25 words"}]}
+Rules: 4 to 18 files. Follow the FILES list of the project type above and the pages/screens/modules of the plan — every page/screen/module gets its own file. Order: files others depend on first (styles, data/storage, auth, router/app), then the pages / screens / modules, README.md last. Paths: forward slashes, no leading slash. Only text files (HTML, CSS, JS, JSON, MD, SVG) — no photos.`;
+const STEP_RULES = `
+ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
+- You are writing the project ONE FILE AT A TIME. You get the full file list and every file already written.
+- Write ONLY the file you are asked for, as exactly one \`\`\`file:PATH block with its COMPLETE content. No sentences before or after it.
+- Keep it 100% consistent with the files already written and with the file list: the same class names, ids, function names, global variables, data keys and links. Link only to files in the list.`;
+const STEP_SECRET = () => serverEnv("PUSH_SECRET") || serverEnv("SUPABASE_SERVICE_ROLE_KEY") || "ahm-dev";
+const signStep = (data) => { const b = Buffer.from(JSON.stringify(data)).toString("base64url"); return b + "." + createHmac("sha256", "ahm-step:" + STEP_SECRET()).update(b).digest("base64url"); };
+function readStep(tok, uid) {
+  try {
+    const [b, sig] = String(tok || "").split(".");
+    const want = createHmac("sha256", "ahm-step:" + STEP_SECRET()).update(b).digest("base64url");
+    if (!sig || sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+    const d = JSON.parse(Buffer.from(b, "base64url").toString());
+    return d.u === uid && d.e > Date.now() && Array.isArray(d.f) && d.f.length ? d : null;
+  } catch { return null; }
+}
+const cleanList = (files) => (Array.isArray(files) ? files : [])
+  .map((f) => ({ path: String(f?.path || "").trim().replace(/^\.?\/+/, "").replace(/\\/g, "/").slice(0, 120), about: String(f?.about || "").slice(0, 200) }))
+  .filter((f) => f.path && !f.path.includes("..") && /\.(html?|css|m?js|json|md|svg|txt|webmanifest|py|php|java|cs|ts|tsx|jsx|dart|xml|yml|yaml|sql)$/i.test(f.path))
+  .filter((f, i, a) => a.findIndex((x) => x.path === f.path) === i)
+  .slice(0, 18);
+const blockOf = (text, path) => {
+  const m = new RegExp("```file:" + path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[ \\t]*\\n([\\s\\S]*?)\\n```").exec(text);
+  return m ? m[1] : null;
 };
 
 const PLAN_PROMPT = (kind) => `
@@ -356,8 +390,24 @@ VOICE CONVERSATION MODE (most important rules)
     // The plan step looks things up on Google (free daily amount on the free AI key); it switches off by itself if not allowed.
     const useSearch = (!build && usage.pro && serverEnv("ENABLE_SEARCH") === "1") || (planOnly && serverEnv("PLAN_SEARCH") !== "0");
 
+    // A new project is built one file after another; "cont" = a signed note to continue the same build (not counted again).
+    const contTok = build && !planOnly && !file ? readStep(body.cont, user.id) : null;
+    const stepBuild = build && !planOnly && !file && serverEnv("STEP_BUILD") !== "0" && (!!contTok || project.length === 0);
+    const stepContents = (extra, written) => messages.map((m, i) => {
+      let text = m.content.slice(0, 30000);
+      const last = i === messages.length - 1;
+      if (last) {
+        const all = [...project, ...Object.entries(written)];
+        const files = all.length ? all.map(([k, v]) => `\`\`\`file:${k}\n${v}\n\`\`\``).join("\n\n") : "(empty project)";
+        text = `Current project files:\n\n${files}\n\nRequest: ${text}\n\n${extra}`;
+      }
+      const parts = [{ text }];
+      if (last && attachments.length) parts.unshift(...attachments.map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } })));
+      return { role: m.role === "assistant" ? "model" : "user", parts };
+    });
+
     const encoder = new TextEncoder();
-    let counted = false;
+    let counted = !!contTok;
     const countUsage = async () => {
       if (counted) return;
       counted = true;
@@ -384,10 +434,53 @@ VOICE CONVERSATION MODE (most important rules)
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
         { onPlace: (n) => send(`\u0000Q:${n}\n`) });
       try {
-        for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
-          if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
-          full += piece;
-          send(piece);
+        let list = null, total = 0, doneN = 0;
+        if (stepBuild) {
+          if (contTok) { list = cleanList(contTok.f); doneN = Number(contTok.d) || 0; total = Number(contTok.n) || doneN + list.length; }
+          else {
+            const convo = messages.slice(-10).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 6000)).join("\n\n");
+            try {
+              const out = await jsonCall(SYSTEM_PROMPT(lang) + FILELIST_PROMPT(buildKind, lang), [{ text: convo }], { maxTokens: 4000, think: "low" });
+              list = cleanList(out?.files);
+              if (list.length >= 2) {
+                total = list.length;
+                const intro = String(out?.intro || "").replace(/\u0000/g, "").trim().slice(0, 600);
+                if (intro) { full += intro + "\n\n"; send(intro + "\n\n"); }
+                countUsage();
+              }
+            } catch (e) { console.error("file list", errText(e)); list = null; }
+          }
+        }
+        if (list && list.length >= 2) {
+          const t0 = Date.now(), written = {};
+          const stepConfig = { ...baseConfig, systemInstruction: baseConfig.systemInstruction + STEP_RULES };
+          const listText = list.map((f, i) => `${doneN + i + 1}. ${f.path} — ${f.about}`).join("\n");
+          const more = (k) => { const tok = signStep({ u: user.id, f: list.slice(k), d: doneN + k, n: total, e: Date.now() + 3600000 }); full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`); };
+          for (let k = 0; k < list.length; k++) {
+            const f = list[k];
+            if (Date.now() - t0 > 195000) { more(k); break; } // close to the 5-minute limit: the app continues by itself
+            const mark = `\u0000F:${doneN + k + 1}/${total}:${f.path}\n`;
+            full += mark; send(mark);
+            const ask = `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\nNow write ONLY file ${doneN + k + 1} of ${total}: \`${f.path}\` — ${f.about}${k === list.length - 1 ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
+            let out = "";
+            for await (const piece of answer(models, stepContents(ask, written), stepConfig, false, REFUSAL[lang], START.build)) out += piece;
+            const rs = out.lastIndexOf("\u0000RESET\n");
+            if (rs >= 0) out = out.slice(rs + 7);
+            if (/\u0000ERR:/.test(out) || !out.trim()) {
+              if (k > 0 || doneN > 0) { more(k); } else { const er = "\u0000ERR:" + (/ERR:busy/.test(out) ? "busy" : "ai"); full += er; send(er); }
+              break;
+            }
+            countUsage();
+            written[f.path] = blockOf(out, f.path) ?? out;
+            full += out.trim() + "\n\n";
+            send(out.trim() + "\n\n");
+          }
+        } else {
+          for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
+            if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
+            full += piece;
+            send(piece);
+          }
         }
       } catch (e) {
         console.error(e);
