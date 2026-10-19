@@ -1963,3 +1963,16 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .sl-color { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; font-size: 13.5px; }
 .sl-color input { width: 30px; height: 30px; border: 0; padding: 0; background: none; cursor: pointer; }
 .sl-mini { width: auto; min-height: 36px; padding: 0 12px; font-size: 13px; }
+
+/* ===== Preview: code-error / missing-page bar, and "building" note ===== */
+.ws { position: relative; }
+.pv-issue { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 10px 0; padding: 8px 10px; border-radius: 12px;
+  background: rgb(239 68 68 / .12); border: 1px solid rgb(239 68 68 / .35); color: var(--text); font-size: 13px; line-height: 1.6; }
+.pv-issue.miss { background: rgb(245 158 11 / .12); border-color: rgb(245 158 11 / .4); }
+.pv-issue > span { flex: 1; min-width: 180px; }
+.pv-issue code { display: block; margin-top: 2px; font: 12px var(--mono, monospace); color: #fca5a5; overflow-wrap: anywhere; text-align: start; }
+.pv-issue.miss code { color: inherit; }
+.pv-issue > div { display: flex; align-items: center; gap: 4px; }
+.pv-issue .gold-btn.small { width: auto; min-height: 36px; padding: 0 14px; font-size: 13px; }
+.pv-busy { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px);
+  padding: 8px 14px; border-radius: 999px; background: rgb(0 0 0 / .78); color: #fff; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px -8px #000; }

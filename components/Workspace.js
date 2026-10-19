@@ -264,16 +264,33 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
   // the app's saved data in the preview, and which page is open (sent from inside the preview)
   const store = useRef({});
   const [page, setPage] = useState("index.html");
-  const [entry, setEntry] = useState(null); // a page chosen in the Files tab
+  const [entry, setEntry] = useState(null); // the page shown (chosen in the Files tab or opened from inside the app)
+  const [loc, setLoc] = useState({ search: "", hash: "", t: 0 }); // ?query and #section of that page
+  const [issue, setIssue] = useState(null); // { error } or { missing } reported by the app in the preview
   useEffect(() => {
     const on = (e) => {
-      if (e.data?.ahmStore && typeof e.data.ahmStore === "object") store.current = e.data.ahmStore;
-      if (typeof e.data?.ahmPage === "string") setPage(e.data.ahmPage.slice(0, 80));
+      const d = e.data;
+      if (!d || typeof d !== "object") return;
+      if (d.ahmStore && typeof d.ahmStore === "object") store.current = d.ahmStore;
+      if (typeof d.ahmPage === "string") setPage(d.ahmPage.slice(0, 80));
+      if (d.ahmNav && typeof d.ahmNav.page === "string") {
+        setEntry(d.ahmNav.page.slice(0, 120)); setPage(d.ahmNav.page.slice(0, 80));
+        setLoc({ search: String(d.ahmNav.search || "").slice(0, 300), hash: String(d.ahmNav.hash || "").slice(0, 120), t: Date.now() });
+        setIssue(null);
+      }
+      if (typeof d.ahmMissing === "string") setIssue({ missing: d.ahmMissing.slice(0, 120) || "?" });
+      if (typeof d.ahmError === "string") setIssue((x) => x || { error: d.ahmError.slice(0, 300) });
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
   }, []);
-  const html = useMemo(() => buildPreview(files, { store: store.current }), [files]);
+  const html = useMemo(() => buildPreview(files, { frame: true, store: store.current }), [files]);
+  // the page the preview shows; while the AI is still writing, the preview is NOT rebuilt on every word
+  // (that made it flash white and could fill the browser's memory) — it updates once, when the work is done
+  const live = useMemo(() => buildPreview(files, { frame: true, entry: entry && files[entry] != null ? entry : null, store: store.current, loc }), [files, entry, loc]);
+  const [shown, setShown] = useState(live);
+  useEffect(() => { if (!busy) setShown(live); }, [live, busy]);
+  useEffect(() => { setIssue(null); }, [files]);
   const stageRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -355,7 +372,25 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
 
       {tab === "preview" ? (
         html ? (
-          <DevicePreview key={entry || "index"} html={entry && files[entry] != null ? buildPreview(files, { entry, store: store.current }) : html} t={t} page={page} />
+          <>
+            {issue && (
+              <div className={"pv-issue" + (issue.missing ? " miss" : "")} role="alert">
+                <span>⚠️ {issue.missing ? t("pvMissing").replace("{p}", issue.missing) : t("pvError")}{issue.error && <code dir="ltr">{issue.error}</code>}</span>
+                <div>
+                  {onAsk && !busy && (
+                    <button className="gold-btn small" onClick={() => { const q = issue.missing ? t("pvMissingAsk").replace("{p}", issue.missing) : t("pvErrorAsk").replace("{e}", issue.error); setIssue(null); onAsk(q); }}>
+                      {issue.missing ? t("pvMake") : t("pvFix")}
+                    </button>
+                  )}
+                  <button className="icon-btn sm" aria-label={t("close")} onClick={() => setIssue(null)}><Svg d={P.close} size={16} /></button>
+                </div>
+              </div>
+            )}
+            {shown ? <DevicePreview html={shown} t={t} page={page} /> : (
+              <div className="stage"><div className="ws-empty"><span className="mini-spin" /><p>{t("building")}</p></div></div>
+            )}
+            {busy && shown && <div className="pv-busy" role="status"><span className="mini-spin" /> {t("pvBuilding")}</div>}
+          </>
         ) : (
           <div className="stage">
             <div className="ws-empty">
