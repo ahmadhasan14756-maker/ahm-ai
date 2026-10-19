@@ -1976,3 +1976,20 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .pv-issue .gold-btn.small { width: auto; min-height: 36px; padding: 0 14px; font-size: 13px; }
 .pv-busy { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px);
   padding: 8px 14px; border-radius: 999px; background: rgb(0 0 0 / .78); color: #fff; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px -8px #000; }
+
+/* ===== Building file by file: progress in the answer ===== */
+.build-prog { margin: 2px 0 10px; padding: 10px 12px; border-radius: 14px; background: rgb(var(--gold-rgb) / .08); border: 1px solid rgb(var(--gold-rgb) / .25); font-size: 13.5px; }
+.bp-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.bp-top code { font: 12.5px var(--mono, monospace); padding: 1px 7px; border-radius: 6px; background: var(--surface-2); }
+.bp-bar { height: 5px; margin-top: 8px; border-radius: 9px; background: rgb(var(--gold-rgb) / .15); overflow: hidden; }
+.bp-bar i { display: block; height: 100%; border-radius: inherit; background: var(--gold); transition: width .5s var(--ease-out, ease); }
+
+/* ===== Bigger preview on computers ===== */
+@media (min-width: 1100px) {
+  .mode-build .preview-col { width: 60%; max-width: none; }
+  .mode-build .preview-col:has(.pc) { width: 68%; }
+}
+@media (min-width: 900px) {
+  .pc-neck { height: 14px; margin-top: 4px; }
+  .pc-foot { height: 5px; }
+}

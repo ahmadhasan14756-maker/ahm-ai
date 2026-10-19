@@ -2472,6 +2472,7 @@ function Main({ session }) {
           voiceNote: isVoice || undefined,
           buildKind: m === "build" ? kindNow : undefined,
           planOnly: planOnly || undefined,
+          cont: opts.cont || undefined,
           jobId,
         }),
       });
@@ -2501,6 +2502,12 @@ function Main({ session }) {
         const ri = acc.lastIndexOf("\u0000RESET\n");
         if (ri >= 0) acc = acc.slice(ri + 7);
         if (/\u0000[A-Z]{1,5}$/.test(acc) && !ERR.test(acc)) continue; // half of a marker: wait for the rest
+        // Building file by file: "\u0000F:3/8:js/app.js" = which file is being written; "\u0000MORE:…" = continue later
+        for (const fm of acc.matchAll(/\u0000F:(\d+)\/(\d+):([^\n]*)\n/g)) prog = { i: +fm[1], n: +fm[2], path: fm[3].slice(0, 120) };
+        const mo = /\u0000MORE:([A-Za-z0-9_.-]+)\n/.exec(acc);
+        if (mo) moreTok = mo[1];
+        acc = acc.replace(/\u0000F:\d+\/\d+:[^\n]*\n/g, "").replace(/\u0000MORE:[^\n]*\n/g, "");
+        if (/\u0000(F|MO|MOR|MORE)(:[^\n]*)?$/.test(acc)) continue; // half of a marker: wait for the rest
         // Place in the waiting line ("\u0000Q:3\n"): show it, keep it out of the answer.
         const places = acc.match(/\u0000Q:(\d+)\n/g);
         if (places) {
@@ -2511,12 +2518,12 @@ function Main({ session }) {
         if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
         const ch = m === "build" ? applyChanges(base, acc) : null;
         const sp = split(acc);
-        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending, plan: planOnly || undefined }], ch?.changed ? { project: ch.files } : {});
+        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending, plan: planOnly || undefined, progress: prog || undefined }], ch?.changed ? { project: ch.files } : {});
       }
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
 
-    let autoNext = null;
+    let autoNext = null, prog = null, moreTok = null;
     try {
       // When the AI is busy (many people at once), wait in line instead of failing:
       // free AI limits refill every minute, so keep trying quietly for about a minute.
@@ -2545,7 +2552,10 @@ function Main({ session }) {
         if (m === "build" && applyChanges(base, acc).changed && window.innerWidth < 900) setShowPreview(true);
         // The AI checks its own work: files that are linked or needed but were not made are made right away,
         // without the user having to ask (at most twice in a row, so it can never loop).
-        if (m === "build" && !planOnly && !ERR.test(acc) && (opts.auto || 0) < 2) {
+        if (m === "build" && moreTok && (opts.rounds || 0) < 5) {
+          // the server stopped near its time limit (or the AI was busy): carry on with the remaining files by itself
+          autoNext = { text: t("autoContinue"), auto: opts.auto || 0, cont: moreTok, rounds: (opts.rounds || 0) + 1 };
+        } else if (m === "build" && !planOnly && !ERR.test(acc) && (opts.auto || 0) < 2) {
           const after = applyChanges(base, acc);
           const miss = after.changed ? findMissing(after.files, kindNow) : [];
           if (miss.length) autoNext = { text: t("autoMissing").replace("{f}", miss.map((x) => x.path + (x.from ? ` (${t("autoFrom")} ${x.from})` : "")).join("، ")), auto: (opts.auto || 0) + 1 };
@@ -2574,7 +2584,7 @@ function Main({ session }) {
       abortRef.current = null;
       setBusy(false);
       loadMe();
-      if (autoNext && !ctrl.signal.aborted) setTimeout(() => autoRef.current?.(autoNext.text, autoNext.auto), 600);
+      if (autoNext && !ctrl.signal.aborted) setTimeout(() => autoRef.current?.(autoNext.text, autoNext.auto, { cont: autoNext.cont, rounds: autoNext.rounds }), autoNext.cont ? 1200 : 600);
     }
   }
 
@@ -2628,6 +2638,9 @@ function Main({ session }) {
           let txt = String(j.result || "");
           const rs = txt.lastIndexOf("\u0000RESET\n");
           if (rs >= 0) txt = txt.slice(rs + 7);
+          const more = /\u0000MORE:([A-Za-z0-9_.-]+)\n/.exec(txt);
+          txt = txt.replace(/\u0000F:\d+\/\d+:[^\n]*\n/g, "").replace(/\u0000MORE:[^\n]*\n/g, "");
+          if (more && kind === "build") setTimeout(() => autoRef.current?.(t("autoContinue"), 0, { cont: more[1], rounds: 1 }), 1500);
           const bad = /\u0000ERR:(busy|ai)\s*$/.exec(txt);
           txt = txt.replace(/\n*\u0000ERR:(busy|ai)\s*$/, "");
           const heard = msg.pending.voice ? /^\s*⟦([^⟧]*)⟧[ \t]*\n?/.exec(txt) : null;
@@ -2696,7 +2709,7 @@ function Main({ session }) {
   }
 
   sendRef.current = (txt) => { if (!busy) { setPlanEdit(false); send(txt); } };
-  autoRef.current = (txt, auto) => { if (!busy) send(txt, undefined, [], "build", { auto }); };
+  autoRef.current = (txt, auto, extra = {}) => { if (!busy) send(txt, undefined, [], "build", { auto, ...extra }); };
   function setKind(k) {
     if (chats.some((c) => c.id === active.id)) patchIf(active.id, (c) => ({ ...c, buildKind: k || undefined }));
     else setDraft((d) => ({ ...d, buildKind: k || undefined }));
@@ -2906,6 +2919,12 @@ function Main({ session }) {
                     )}
                     {m.docs?.length > 0 && m.docs.map((d, k) => <div key={k} className="file-tag" dir="ltr">📄 {d}</div>)}
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
+                    {m.role === "assistant" && m.progress && busy && i === messages.length - 1 && (
+                      <div className="build-prog" role="status">
+                        <div className="bp-top"><span className="mini-spin" /> {t("buildFile").replace("{i}", m.progress.i).replace("{n}", m.progress.n)} <code dir="ltr">{m.progress.path}</code></div>
+                        <div className="bp-bar" aria-hidden="true"><i style={{ width: Math.round(((m.progress.i - 0.5) / Math.max(1, m.progress.n)) * 100) + "%" }} /></div>
+                      </div>
+                    )}
                     {m.role === "assistant" ? (
                       m.content ? <>
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
