@@ -10,6 +10,10 @@ const CodeEditor = dynamic(() => import("./CodeEditor"), {
 });
 
 const P = {
+  expand: <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />,
+  shrink: <path d="M20 10h-6V4M4 14h6v6M14 10l7-7M10 14l-7 7" />,
+  paneOff: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M15 4v16M10 10l-2 2 2 2" /></>,
+  frame: <><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M3 7v10M21 7v10" /></>,
   phone: <><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M11 18h2" /></>,
   code: <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />,
   zip: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5M12 15V3" /></>,
@@ -99,7 +103,7 @@ function PhoneFrame({ m, landscape, box, html, nonce }) {
   const home = kind === "home";
   const side = 12, top = home && !landscape ? 46 : 12, bottom = top;
   const W = box.w || 360, H = box.h || 680;
-  const scale = Math.min(1, (W - 20 - side * 2) / vw, (H - 20 - top - bottom) / vh);
+  const scale = Math.min(1.3, (W - 12 - side * 2) / vw, (H - 12 - top - bottom) / vh);
   const sw = Math.round(vw * scale), sh = Math.round(vh * scale);
   return (
     <div className={"phone3 k-" + kind + (landscape ? " land" : "")} style={{ width: sw + side * 2, height: sh + top + bottom, padding: `${top}px ${side}px ${bottom}px` }}>
@@ -121,6 +125,12 @@ export function DevicePreview({ html, t, page }) {
   const [device, setDevice] = useState("iphone");
   const [pick, setPick] = useState({ iphone: 12, android: 2 });
   const [landscape, setLandscape] = useState(false);
+  // "real screen": no phone frame, the app fills all the space (default on small phones)
+  const [real, setReal] = useState(false);
+  useEffect(() => {
+    try { const r = localStorage.getItem("ahm-real"); setReal(r ? r === "1" : window.innerWidth < 600); } catch { setReal(window.innerWidth < 600); }
+  }, []);
+  const toggleReal = () => { const v = !real; setReal(v); try { localStorage.setItem("ahm-real", v ? "1" : "0"); } catch {} };
   const [nonce, setNonce] = useState(0);
   const stageRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -142,6 +152,7 @@ export function DevicePreview({ html, t, page }) {
   const m = list ? list[Math.min(pick[device] ?? 0, list.length - 1)] : null;
   return (
     <>
+      <div className="dev-bars">
       <div className="ws-sub">
         <div className="seg small">
           <button className={device === "iphone" ? "on" : ""} onClick={() => setDevice("iphone")}> iPhone</button>
@@ -152,16 +163,20 @@ export function DevicePreview({ html, t, page }) {
       </div>
       {m && (
         <div className="ws-sub dev-pick" dir="ltr">
-          <select value={pick[device] ?? 0} onChange={(e) => setPick({ ...pick, [device]: +e.target.value })} aria-label={t("deviceModel")}>
+          <select value={pick[device] ?? 0} onChange={(e) => { setPick({ ...pick, [device]: +e.target.value }); if (real) toggleReal(); }} aria-label={t("deviceModel")}>
             {list.map((x, i) => <option key={i} value={i}>{x[0]}</option>)}
           </select>
-          <span className="dev-size">{landscape ? `${m[2]}×${m[1]}` : `${m[1]}×${m[2]}`}</span>
-          <button className={"icon-btn sm" + (landscape ? " on" : "")} aria-label={t("rotate")} title={t("rotate")} onClick={() => setLandscape(!landscape)}>⟲</button>
+          <span className="dev-size">{real ? `${Math.round(box.w)}×${Math.round(box.h)}` : landscape ? `${m[2]}×${m[1]}` : `${m[1]}×${m[2]}`}</span>
+          {!real && <button className={"icon-btn sm" + (landscape ? " on" : "")} aria-label={t("rotate")} title={t("rotate")} onClick={() => setLandscape(!landscape)}>⟲</button>}
+          <button className={"icon-btn sm real-btn" + (real ? " on" : "")} aria-label={t(real ? "pvFrame" : "pvReal")} title={t(real ? "pvFrame" : "pvReal")} onClick={toggleReal}><Svg d={P.frame} size={17} /></button>
         </div>
       )}
+      </div>
       <div className="stage" ref={stageRef}>
         {device === "desktop" || !m ? <Desktop html={html} nonce={nonce} box={box} page={page} /> : (
-          <PhoneFrame m={m} landscape={landscape} box={box} html={html} nonce={nonce} />
+          real ? (
+            <div className="pv-real"><iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" /></div>
+          ) : <PhoneFrame m={m} landscape={landscape} box={box} html={html} nonce={nonce} />
         )}
       </div>
     </>
@@ -233,7 +248,7 @@ function Desktop({ html, nonce, box, page }) {
   );
 }
 
-export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing, kind = "website", name = "" }) {
+export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing, kind = "website", name = "", maxed = false, onMax, onMin }) {
   const zipName = (String(name).replace(/[\\/:*?"<>|#%]+/g, " ").replace(/\s+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "AHM-AI-" + kind);
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
@@ -323,7 +338,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
         <div className="ws-actions">
           {html && onPublish && (
             <button className="publish-btn" disabled={busy || publishing} onClick={onPublish} title={t("publishHint")}>
-              <span aria-hidden="true">🌐</span> {publishing ? "…" : t("publish")}
+              <span aria-hidden="true">🌐</span> <span className="pub-txt">{publishing ? "…" : t("publish")}</span>
             </button>
           )}
           <button className="icon-btn sm" aria-label={t("howToRun")} title={t("howToRun")} disabled={busy || !names.length} onClick={() => onAsk(t("howToRunAsk"))}>
@@ -332,6 +347,8 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
           <button className="icon-btn sm gold" aria-label={t("zip")} title={t("zip")} disabled={!names.length} onClick={() => downloadZip(files, zipName)}>
             <Svg d={P.zip} />
           </button>
+          {onMin && !maxed && <button className="icon-btn sm ws-size" aria-label={t("pvHide")} title={t("pvHide")} onClick={onMin}><Svg d={P.paneOff} /></button>}
+          {onMax && <button className={"icon-btn sm ws-size" + (maxed ? " on" : "")} aria-label={t(maxed ? "pvRestore" : "pvMax")} title={t(maxed ? "pvRestore" : "pvMax")} onClick={onMax}><Svg d={maxed ? P.shrink : P.expand} /></button>}
           <button className="icon-btn sm pv-close" aria-label={t("close")} onClick={onClose}><Svg d={P.close} /></button>
         </div>
       </div>

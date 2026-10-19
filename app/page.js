@@ -48,6 +48,7 @@ function LangProvider({ children }) {
 
 /* ---------------- icons ---------------- */
 const Icon = {
+  panel: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" /></>,
   play: <path d="M8 5.5l11 6.5-11 6.5z" />,
   plus: <path d="M12 5v14M5 12h14" />,
   menu: <path d="M4 7h16M4 12h16M4 17h10" />,
@@ -1897,6 +1898,35 @@ function Main({ session }) {
     return () => window.removeEventListener("ahm-house-plan", open);
   }, []);
   const [sideOpen, setSideOpen] = useState(false);
+  // desktop layout: hide the chat list, preview size (normal / max / min) and the preview width set by dragging
+  const [sideHidden, setSideHidden] = useState(false);
+  const [pvMode, setPvMode] = useState("normal");
+  const [pvW, setPvW] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const bodyRef = useRef(null);
+  useEffect(() => {
+    try {
+      setSideHidden(localStorage.getItem("ahm-side-hidden") === "1");
+      const w = +localStorage.getItem("ahm-pv-w"); if (w > 0) setPvW(w);
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem("ahm-side-hidden", sideHidden ? "1" : "0"); } catch {} }, [sideHidden]);
+  useEffect(() => { try { if (pvW) localStorage.setItem("ahm-pv-w", String(Math.round(pvW))); } catch {} }, [pvW]);
+  function startDrag(e) {
+    const body = bodyRef.current; if (!body) return;
+    e.preventDefault();
+    const rtl = getComputedStyle(body).direction === "rtl";
+    setDragging(true);
+    const move = (ev) => {
+      const r = body.getBoundingClientRect();
+      const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      const w = rtl ? x - r.left : r.right - x;
+      setPvW(Math.max(320, Math.min(r.width - 340, w)));
+    };
+    const up = () => { setDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
   const inst = useInstall();
   const keys = useRef({});
   const [view, setView] = useState("chat"); // chat | learn
@@ -2692,7 +2722,7 @@ function Main({ session }) {
   }, []);
 
   return (
-    <div className={"app mode-" + mode}>
+    <div className={"app mode-" + mode + (sideHidden ? " side-hidden" : "") + " pv-" + (mode === "build" && (hasFiles || busy) ? pvMode : "normal") + (dragging ? " dragging" : "")}>
       <Sidebar open={sideOpen} chats={chats} activeId={activeId} me={me} onLearn={openLearn} learnOn={view === "learn"}
         onPick={pick} onNew={startNew} onDelete={remove} onClose={() => setSideOpen(false)}
         onSettings={() => { setSideOpen(false); setSettingsOpen(true); }}
@@ -2707,6 +2737,7 @@ function Main({ session }) {
       <div className="main-col">
         <header>
           <button className="icon-btn menu-btn" aria-label={t("menu")} title={t("menu")} onClick={() => setSideOpen(true)}><Svg d={Icon.menu} /></button>
+          <button className={"icon-btn side-toggle" + (sideHidden ? " on" : "")} aria-label={t(sideHidden ? "sideShow" : "sideHide")} title={t(sideHidden ? "sideShow" : "sideHide")} onClick={() => setSideHidden(!sideHidden)}><Svg d={Icon.panel} /></button>
           <div className="brand">
             <img src="/icon-192.png" alt="" aria-hidden="true" />
             <span className="brand-name">AHM <b>AI</b></span>
@@ -2760,7 +2791,7 @@ function Main({ session }) {
         ) : view === "house" ? (
           <HouseStudio key={housePlan ? housePlan.size : 0} lang={lang} getToken={token} initialPlan={housePlan} onBack={() => setView("studio")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : (
-        <div className="body">
+        <div className="body" ref={bodyRef}>
           <div className="chat-col">
             <main>
               {mode === "build" && active.buildKind && (
@@ -2919,7 +2950,7 @@ function Main({ session }) {
 
             <footer className={pickingKind ? "picking" : ""}>
               {mode === "build" && hasFiles && (
-                <button className="open-preview" onClick={() => setShowPreview(true)}>
+                <button className="open-preview" onClick={() => { setShowPreview(true); setPvMode("normal"); }}>
                   <Svg d={Icon.phone} size={18} /> {t("preview")}
                 </button>
               )}
@@ -2992,10 +3023,15 @@ function Main({ session }) {
             </footer>
           </div>
 
-          {mode === "build" && (
-            <div className={"preview-col" + (showPreview ? " open" : "")}>
+          {mode === "build" && (hasFiles || busy) && (
+            <div className="pv-drag" role="separator" aria-orientation="vertical" aria-label={t("pvResize")} title={t("pvResize")}
+              onPointerDown={startDrag} onDoubleClick={() => { setPvW(0); try { localStorage.removeItem("ahm-pv-w"); } catch {} }} />
+          )}
+          {mode === "build" && (hasFiles || busy) && (
+            <div className={"preview-col" + (showPreview ? " open" : "") + (pvW ? " sized" : "")} style={pvW && pvMode === "normal" ? { width: pvW } : undefined}>
               <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
-                onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); send(q); }} />
+                onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); setPvMode("normal"); send(q); }}
+                maxed={pvMode === "max"} onMax={() => setPvMode(pvMode === "max" ? "normal" : "max")} onMin={() => setPvMode("min")} />
             </div>
           )}
         </div>
