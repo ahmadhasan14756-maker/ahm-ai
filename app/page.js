@@ -1951,6 +1951,8 @@ function Main({ session }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const sendRef = useRef(null);
   const autoRef = useRef(null); // the automatic "make the missing files" step after a build
+  const designRef = useRef({}); // chat id → design pictures to copy (kept in memory only)
+  const autoFixes = useRef(0); // automatic error fixes in a row (reset when the user writes)
   useEffect(() => { // "▶ Preview" on HTML code in an answer
     const show = (e) => { if (typeof e.detail === "string") setSheet({ type: "codePreview", html: buildPreview({ "index.html": e.detail }) }); };
     window.addEventListener("ahm-preview", show);
@@ -2410,10 +2412,15 @@ function Main({ session }) {
     const photoCount = sentImages.filter((im) => !im.voice && !im.docName).length;
     const text = (preset ?? input).trim() || (file ? t("fixFile") : sentImages.some((im) => im.docName) && !photoCount ? t("readDoc") : sentImages.length ? t("describeImage") : "");
     if (!text || busy) return;
+    if (!opts.auto && !opts.cont) autoFixes.current = 0;
     const id = active.id;
     const m = target;
     const sentFile = m === "chat" ? file : null;
     const base = project;
+    // 📸 a picture of a design sent in a website/app chat is used again for the build itself (screenshot → code)
+    const photos = sentImages.filter((im) => !im.voice && !im.docName && /^image\//.test(im.mimeType || ""));
+    if (m === "build" && photos.length) designRef.current[id] = photos.slice(0, 3);
+    const designPics = m === "build" && !photos.length && !Object.keys(base).length && !opts.auto ? designRef.current[id] || [] : [];
     const next = [...(baseMessages || messages), { role: "user", content: text, voice: isVoice || undefined, fileName: sentFile?.name, thumbs: sentImages.filter((im) => im.thumb).map((im) => im.thumb), docs: sentImages.filter((im) => im.docName).map((im) => im.docName) }];
     // Website / app / system, and "plan first": a new project gets a plan to approve before anything is built.
     const kindNow = active.buildKind || guessKind(text);
@@ -2466,7 +2473,7 @@ function Main({ session }) {
           lang,
           messages: next.map(({ role, content }) => ({ role, content })),
           file: sentFile || undefined,
-          images: sentImages.length ? sentImages.map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
+          images: (sentImages.length ? sentImages : designPics).length ? (sentImages.length ? sentImages : designPics).map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
           project: m === "build" ? Object.fromEntries(Object.entries(base).map(([k, v]) => [k, String(v).startsWith("data:") ? "data:" : v])) : undefined,
           tutor: active.tutor || undefined,
           voiceNote: isVoice || undefined,
@@ -3061,6 +3068,7 @@ function Main({ session }) {
             <div className={"preview-col" + (showPreview ? " open" : "") + (pvW ? " sized" : "")} style={pvW && pvMode === "normal" ? { width: pvW } : undefined}>
               <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); setPvMode("normal"); send(q); }}
+                onAutoFix={(err) => { if (busy || autoFixes.current >= 2) return false; autoFixes.current++; autoRef.current?.(t("autoFix").replace("{e}", err), 2); return true; }}
                 maxed={pvMode === "max"} onMax={() => setPvMode(pvMode === "max" ? "normal" : "max")} onMin={() => setPvMode("min")} />
             </div>
           )}

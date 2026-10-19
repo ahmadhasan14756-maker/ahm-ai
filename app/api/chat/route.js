@@ -111,6 +111,7 @@ WHAT TO BUILD
 - JavaScript: use normal <script src="js/…"> files loaded in order (no ES modules / import-export unless the user asks for a framework); share code through window or global functions. This runs everywhere, also in the iPhone preview.
 - Moving between pages: use normal links (<a href="about.html">) or in-page #hash routes. Never use location.href / window.location / window.open for the project's own pages (the live preview supports links and #hash only).
 - RESPONSIVE FOR PHONE AND COMPUTER: the user previews every site on iPhone, Android AND a 1280px computer screen. Build a real desktop layout at ≥1024px — not a stretched phone column: e.g. a fixed sidebar or top navigation, multi-column grids, cards side by side, dashboards with stat cards, charts and tables, wider containers (max-width 1200–1400px). On phones the same page collapses to one column with a hamburger/bottom navigation. Use CSS grid/flex and @media (min-width: 768px / 1024px) queries.
+- SCREENSHOT / DESIGN PICTURE → CODE: if the user sent a picture of a website, app or design (now or earlier in this chat), recreate it as faithfully as you can: the same layout and order of sections, the same colours (estimate exact hex values), fonts (closest Google Font), sizes, spacing, corner radius, shadows, icons and texts. Then make it responsive and fully working. Only change things the user asked to change.
 - SELF-CHECK BEFORE YOU FINISH: go through every file you wrote and make sure every page a link goes to, every CSS/JS/JSON file a page or script loads, and every file the plan promised is in your answer (or already in the project). If one is missing, write it now — never leave a link or a <script src> pointing at a file that doesn't exist.
 - NAVIGATION THAT ALWAYS WORKS: move between pages only with normal links (<a href="patients.html">) to pages you actually create, or show/hide sections of one page (data-page buttons, #hash). Every page a link points to MUST exist in the files. Never redirect with location.href / window.location for normal navigation; every <form> handler calls e.preventDefault(). A login/logout may use a link or show/hide — never an endless redirect.
 - EVERY PHONE: it must look right on every iPhone (from the small iPhone 5 / SE at 320px wide up to the Pro Max at 440px) and every Android phone (360–412px, foldables, tablets): no sideways scrolling, nothing cut off, text and buttons sized with clamp()/rem, images max-width:100%, use env(safe-area-inset-*) padding so the notch / Dynamic Island / home bar never cover content, and use 100dvh instead of 100vh.
@@ -440,7 +441,8 @@ VOICE CONVERSATION MODE (most important rules)
           else {
             const convo = messages.slice(-10).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 6000)).join("\n\n");
             try {
-              const out = await jsonCall(SYSTEM_PROMPT(lang) + FILELIST_PROMPT(buildKind, lang), [{ text: convo }], { maxTokens: 4000, think: "low" });
+              const pics = attachments.filter((a) => /^image\//.test(a.mimeType)).slice(0, 3).map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } }));
+              const out = await jsonCall(SYSTEM_PROMPT(lang) + FILELIST_PROMPT(buildKind, lang), [...pics, { text: convo + (pics.length ? "\n\n(The attached picture is the design to copy.)" : "") }], { maxTokens: 4000, think: "low" });
               list = cleanList(out?.files);
               if (list.length >= 2) {
                 total = list.length;

@@ -242,7 +242,7 @@ function Desktop({ html, nonce, box, page }) {
   );
 }
 
-export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onPublish, publishing, kind = "website", name = "", maxed = false, onMax, onMin }) {
+export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onAutoFix, onPublish, publishing, kind = "website", name = "", maxed = false, onMax, onMin }) {
   const zipName = (String(name).replace(/[\\/:*?"<>|#%]+/g, " ").replace(/\s+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "AHM-AI-" + kind);
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
@@ -273,7 +273,12 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
         setIssue(null);
       }
       if (typeof d.ahmMissing === "string") setIssue({ missing: d.ahmMissing.slice(0, 120) || "?" });
-      if (typeof d.ahmError === "string") setIssue((x) => x || { error: d.ahmError.slice(0, 300) });
+      if (typeof d.ahmError === "string") {
+        const err = d.ahmError.slice(0, 300);
+        // an error while the app is starting = a bug in the code: the AI fixes it by itself (at most twice in a row)
+        if (Date.now() - shownAt.current < 4000 && !fixedFor.current && autoFixRef.current?.(err)) { fixedFor.current = true; setIssue({ error: err, auto: true }); return; }
+        setIssue((x) => x || { error: err });
+      }
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
@@ -283,7 +288,17 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
   // (that made it flash white and could fill the browser's memory) — it updates once, when the work is done
   const live = useMemo(() => buildPreview(files, { frame: true, entry: entry && files[entry] != null ? entry : null, store: store.current, loc }), [files, entry, loc]);
   const [shown, setShown] = useState(live);
-  useEffect(() => { if (!busy) setShown(live); }, [live, busy]);
+  const shownAt = useRef(Date.now()); // when the preview last loaded NEW CODE (changing page inside the app doesn't count)
+  const fixedFor = useRef(false); // already sent this version of the code to be fixed
+  const newCode = useRef(true);
+  const autoFixRef = useRef(onAutoFix);
+  autoFixRef.current = onAutoFix;
+  useEffect(() => { newCode.current = true; }, [files]);
+  useEffect(() => {
+    if (busy) return;
+    setShown(live);
+    if (newCode.current) { newCode.current = false; shownAt.current = Date.now(); fixedFor.current = false; }
+  }, [live, busy]);
   useEffect(() => { setIssue(null); }, [files]);
   const stageRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -369,9 +384,9 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
           <>
             {issue && (
               <div className={"pv-issue" + (issue.missing ? " miss" : "")} role="alert">
-                <span>⚠️ {issue.missing ? t("pvMissing").replace("{p}", issue.missing) : t("pvError")}{issue.error && <code dir="ltr">{issue.error}</code>}</span>
+                <span>{issue.auto ? "🔧 " + t("pvAutoFixing") : "⚠️ " + (issue.missing ? t("pvMissing").replace("{p}", issue.missing) : t("pvError"))}{issue.error && <code dir="ltr">{issue.error}</code>}</span>
                 <div>
-                  {onAsk && !busy && (
+                  {onAsk && !busy && !issue.auto && (
                     <button className="gold-btn small" onClick={() => { const q = issue.missing ? t("pvMissingAsk").replace("{p}", issue.missing) : t("pvErrorAsk").replace("{e}", issue.error); setIssue(null); onAsk(q); }}>
                       {issue.missing ? t("pvMake") : t("pvFix")}
                     </button>
