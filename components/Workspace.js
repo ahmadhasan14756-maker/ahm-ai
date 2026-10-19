@@ -2,7 +2,7 @@
 // The code workspace: file explorer + editor + live phone preview, like a small VS Code.
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { buildPreview, downloadZip, cleanPath } from "../lib/builder";
+import { buildPreview, downloadZip, cleanPath, NEEDED } from "../lib/builder";
 
 const CodeEditor = dynamic(() => import("./CodeEditor"), {
   ssr: false,
@@ -31,12 +31,6 @@ const P = {
   eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
 };
 
-// What each kind of project should have (shown in the Files tab; missing ones can be made with one tap).
-const NEEDED = {
-  website: [["index.html", /^index\.html$/], ["CSS", /\.css$/], ["JavaScript", /\.js$/], ["README.md", /^readme\.md$/i]],
-  app: [["index.html", /^index\.html$/], ["CSS", /\.css$/], ["JavaScript", /\.js$/], ["manifest.json", /(^|\/)manifest\.(json|webmanifest)$/], ["sw.js", /(^|\/)(sw|service-worker)\.js$/], ["README.md", /^readme\.md$/i]],
-  system: [["index.html", /^index\.html$/], ["CSS", /\.css$/], ["js/data.js", /(^|\/)data\.js$/], ["JavaScript", /\.js$/], ["README.md", /^readme\.md$/i]],
-};
 const kindOf = (f, v) => (String(v).startsWith("data:image") ? ["🖼️", "img"] : /\.html?$/i.test(f) ? ["📄", "page"] : /\.(css|scss)$/i.test(f) ? ["🎨", "style"] : /\.(js|mjs|ts|jsx|tsx)$/i.test(f) ? ["⚙️", "script"] : /\.json$/i.test(f) ? ["🧩", "data"] : /\.md$/i.test(f) ? ["📘", "doc"] : ["📃", "other"]);
 function saveOne(name, content) {
   const m = /^data:([^;]+);base64,(.*)$/s.exec(content);

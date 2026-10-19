@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { supabase } from "../lib/supabase";
 import { TELEGRAM_BOT, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/env";
 import { DEFAULT_SETTINGS } from "../lib/plans";
-import { parseFiles, applyChanges, buildPreview, downloadZip } from "../lib/builder";
+import { parseFiles, applyChanges, buildPreview, downloadZip, findMissing } from "../lib/builder";
 import { importZip } from "../lib/zipimport";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace, { DevicePreview } from "../components/Workspace";
@@ -1950,6 +1950,7 @@ function Main({ session }) {
   const [planEdit, setPlanEdit] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const sendRef = useRef(null);
+  const autoRef = useRef(null); // the automatic "make the missing files" step after a build
   useEffect(() => { // "▶ Preview" on HTML code in an answer
     const show = (e) => { if (typeof e.detail === "string") setSheet({ type: "codePreview", html: buildPreview({ "index.html": e.detail }) }); };
     window.addEventListener("ahm-preview", show);
@@ -2515,6 +2516,7 @@ function Main({ session }) {
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
 
+    let autoNext = null;
     try {
       // When the AI is busy (many people at once), wait in line instead of failing:
       // free AI limits refill every minute, so keep trying quietly for about a minute.
@@ -2541,6 +2543,13 @@ function Main({ session }) {
           put([...next, { role: "assistant", content: clean(acc), fixed: applied ? { name: fixedName(sentFile.name), content: out } : null, fixInfo: { applied, failed } }]);
         }
         if (m === "build" && applyChanges(base, acc).changed && window.innerWidth < 900) setShowPreview(true);
+        // The AI checks its own work: files that are linked or needed but were not made are made right away,
+        // without the user having to ask (at most twice in a row, so it can never loop).
+        if (m === "build" && !planOnly && !ERR.test(acc) && (opts.auto || 0) < 2) {
+          const after = applyChanges(base, acc);
+          const miss = after.changed ? findMissing(after.files, kindNow) : [];
+          if (miss.length) autoNext = { text: t("autoMissing").replace("{f}", miss.map((x) => x.path + (x.from ? ` (${t("autoFrom")} ${x.from})` : "")).join("، ")), auto: (opts.auto || 0) + 1 };
+        }
         if (isVoice && !ERR.test(acc)) {
           const sp = split(acc);
           const replyIndex = sp.msgs.length;
@@ -2565,6 +2574,7 @@ function Main({ session }) {
       abortRef.current = null;
       setBusy(false);
       loadMe();
+      if (autoNext && !ctrl.signal.aborted) setTimeout(() => autoRef.current?.(autoNext.text, autoNext.auto), 600);
     }
   }
 
@@ -2686,6 +2696,7 @@ function Main({ session }) {
   }
 
   sendRef.current = (txt) => { if (!busy) { setPlanEdit(false); send(txt); } };
+  autoRef.current = (txt, auto) => { if (!busy) send(txt, undefined, [], "build", { auto }); };
   function setKind(k) {
     if (chats.some((c) => c.id === active.id)) patchIf(active.id, (c) => ({ ...c, buildKind: k || undefined }));
     else setDraft((d) => ({ ...d, buildKind: k || undefined }));
