@@ -283,6 +283,7 @@ const searchOff = new Set(); // models where Google search is not allowed
   - unsupported setting → simpler setting
   - an error before any text was sent → start again quietly
 */
+const noteDebug = (list, obj) => { if (hasRedis()) redis("LPUSH", "dbg:" + list, JSON.stringify({ t: new Date().toISOString(), ...obj })).then(() => redis("LTRIM", "dbg:" + list, 0, 19)).catch(() => {}); };
 const noteRefusal = (why) => { if (hasRedis()) redis("LPUSH", "dbg:refusals", JSON.stringify({ t: new Date().toISOString(), why: String(why).replace(/key=[^&\s]+/gi, "key=…").slice(0, 160) })).then(() => redis("LTRIM", "dbg:refusals", 0, 19)).catch(() => {}); };
 async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb, start = 1) {
   let lastErr = null;
@@ -345,6 +346,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
     }
   }
   if (safetyRetry && !sentAny) { noteRefusal(lastWhy + " | last: " + errText(lastErr)); yield refusal; return; }
+  noteDebug("ai_errors", { models: models.join(","), error: errText(lastErr).replace(/key=[^&\s]+/gi, "key=…").slice(0, 200) });
   yield isRateLimit(lastErr) ? "\u0000ERR:busy" : "\u0000ERR:ai";
 }
 
@@ -513,7 +515,7 @@ VOICE CONVERSATION MODE (most important rules)
                 if (intro) { full += intro + "\n\n"; send(intro + "\n\n"); }
                 countUsage();
               }
-            } catch (e) { console.error("file list", errText(e)); list = null; }
+            } catch (e) { console.error("file list", errText(e)); noteDebug("builds", { step: "file_list_failed", error: errText(e).slice(0, 160) }); list = null; }
           }
         }
         // a broad change to an existing project: the AI picks the files itself, then they are rewritten one by one
@@ -594,6 +596,7 @@ VOICE CONVERSATION MODE (most important rules)
             if (Date.now() - t0 > 230000) { more(leftFrom(core.length + pages.length)); break; }
             if (!(await writeOne(f, f.path === lastPath, true, 2))) { more(leftFrom(core.length + pages.length)); break; }
           }
+          noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
           if (!stopped && !/\u0000(MORE|ERR):/.test(full)) {
             const n = doneN + list.length;
             const end = (editing

@@ -255,7 +255,7 @@ function Desktop({ html, nonce, box, page }) {
   );
 }
 
-export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onAutoFix, onPublish, publishing, kind = "website", name = "", maxed = false, onMax, onMin, cloud = false, onCloud }) {
+export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onAutoFix, onPublish, publishing, kind = "website", name = "", maxed = false, onMax, onMin, cloud = false, onCloud, progress = null }) {
   const zipName = (String(name).replace(/[\\/:*?"<>|#%]+/g, " ").replace(/\s+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "AHM-AI-" + kind);
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
@@ -398,6 +398,11 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
         </div>
       </div>
 
+      {busy && (
+        <div className="pv-busy" role="status"><span className="mini-spin" />
+          {progress ? <> {t("buildFile").replace("{i}", progress.i).replace("{n}", progress.n)} <code dir="ltr">{progress.path}</code></> : <> {t("pvBuilding")}</>}
+        </div>
+      )}
       {tab === "preview" ? (
         html ? (
           <>
@@ -417,7 +422,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
             {shown ? <DevicePreview html={shown} t={t} page={page} /> : (
               <div className="stage"><div className="ws-empty"><span className="mini-spin" /><p>{t("building")}</p></div></div>
             )}
-            {busy && shown && <div className="pv-busy" role="status"><span className="mini-spin" /> {t("pvBuilding")}</div>}
+
           </>
         ) : (
           <div className="stage">
@@ -436,7 +441,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
               <button className="icon-btn sm" aria-label={t("newFile")} title={t("newFile")} disabled={busy} onClick={newFile}><Svg d={P.plus} size={16} /></button>
               <button className="icon-btn sm gold" aria-label={t("downloadAll")} title={t("downloadAll")} disabled={!names.length} onClick={() => downloadZip(files, zipName)}><Svg d={P.zip} size={16} /></button>
             </div>
-            {names.length > 0 && (
+            {names.length > 0 && !busy && (
               <div className="wf-need">
                 <div className="wf-need-title">{t("neededTitle")}</div>
                 <div className="wf-need-list">

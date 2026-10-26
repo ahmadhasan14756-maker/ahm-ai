@@ -2045,3 +2045,11 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .cloud-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .cloud-row .gold-btn, .cloud-row .ghost-btn { width: auto; flex: 1; }
 .cloud-msg { margin-top: 10px; font-weight: 600; }
+
+/* ===== Writing while the AI works ===== */
+.queued { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.queued-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: rgb(var(--gold-rgb) / .1); border: 1px solid rgb(var(--gold-rgb) / .3); font-size: 13.5px; }
+.queued-item b { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queued-item button { border: 0; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.send.queue { background: var(--gold); color: var(--gold-ink, #1a1200); }
+.pv-busy code { font: 12px var(--mono, monospace); opacity: .9; }

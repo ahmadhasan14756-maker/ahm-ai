@@ -2017,6 +2017,9 @@ function Main({ session }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const sendRef = useRef(null);
   const autoRef = useRef(null); // the automatic "make the missing files" step after a build
+  const queueRef = useRef([]); // messages written while the AI was still working
+  const [queued, setQueued] = useState([]);
+  const busyRef = useRef(false);
   const designRef = useRef({}); // chat id → design pictures to copy (kept in memory only)
   const autoFixes = useRef(0); // automatic error fixes in a row (reset when the user writes)
   useEffect(() => { // "▶ Preview" on HTML code in an answer
@@ -2464,6 +2467,12 @@ function Main({ session }) {
   }
 
   async function send(preset, baseMessages, extra = [], forced, opts = {}) {
+    // still building / answering: keep the message and send it by itself as soon as the work is done
+    if (busy && !opts.auto && !opts.cont) {
+      const q = (preset ?? input).trim();
+      if (q) { queueRef.current.push({ chat: active.id, text: q }); setQueued([...queueRef.current]); setInput(""); }
+      return;
+    }
     const typed = (preset ?? input).trim();
     const hasAttach = images.length || file || extra.length;
     let target = forced || (mode === "image" || mode === "studio" ? "chat" : mode); // image/design section was removed
@@ -2813,6 +2822,17 @@ function Main({ session }) {
   }
 
   sendRef.current = (txt) => { if (!busy) { setPlanEdit(false); send(txt); } };
+  busyRef.current = busy;
+  // send the waiting messages when the AI is free again (after any automatic follow-up steps)
+  useEffect(() => {
+    if (busy || !queueRef.current.length) return;
+    const tm = setTimeout(() => {
+      if (busyRef.current || !queueRef.current.length) return;
+      const q = queueRef.current.shift(); setQueued([...queueRef.current]);
+      if (q.chat === active.id) send(q.text);
+    }, 2200);
+    return () => clearTimeout(tm);
+  }, [busy, active.id]);
   autoRef.current = (txt, auto, extra = {}) => { if (!busy) send(txt, undefined, [], "build", { auto, ...extra }); };
   function setKind(k) {
     if (chats.some((c) => c.id === active.id)) patchIf(active.id, (c) => ({ ...c, buildKind: k || undefined }));
@@ -3083,6 +3103,15 @@ function Main({ session }) {
             </main>
 
             <footer className={pickingKind ? "picking" : ""}>
+              {queued.filter((q) => q.chat === active.id).length > 0 && (
+                <div className="queued" role="status">
+                  {queued.filter((q) => q.chat === active.id).map((q, i) => (
+                    <span key={i} className="queued-item"><span className="mini-spin" /> {t("queuedNote")}: <b dir="auto">{q.text.slice(0, 60)}</b>
+                      <button aria-label={t("cancel")} onClick={() => { queueRef.current = queueRef.current.filter((x) => x !== q); setQueued([...queueRef.current]); }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
               {mode === "build" && hasFiles && (
                 <button className="open-preview" onClick={() => { setShowPreview(true); setPvMode("normal"); }}>
                   <Svg d={Icon.phone} size={18} /> {t("preview")}
@@ -3147,7 +3176,10 @@ function Main({ session }) {
                     {chatLike && <button className="send live" aria-label={t("liveVoice")} title={t("liveVoice")} onClick={() => openVoice()}><Svg d={Icon.wave} size={18} /></button>}
                   </span>
                 ) : busy ? (
-                  <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
+                  <span className="send-pair">
+                    {input.trim() && <button className="send queue" aria-label={t("sendLater")} title={t("sendLater")} onClick={() => send()}><Svg d={Icon.up} size={18} w={2.4} /></button>}
+                    <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
+                  </span>
                 ) : (
                   <button className="send" aria-label={t("send")} onClick={() => send()} disabled={!input.trim() && !file && !images.length}><Svg d={Icon.up} size={18} w={2.4} /></button>
                 )}
@@ -3166,6 +3198,7 @@ function Main({ session }) {
               <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); setPvMode("normal"); send(q); }}
                 cloud={!!active.cloudSite} onCloud={() => setSheet({ type: "cloud" })}
+                progress={busy ? messages[messages.length - 1]?.progress || null : null}
                 onAutoFix={(err) => { if (busy || autoFixes.current >= 2) return false; autoFixes.current++; autoRef.current?.(t("autoFix").replace("{e}", err), 2); return true; }}
                 maxed={pvMode === "max"} onMax={() => setPvMode(pvMode === "max" ? "normal" : "max")} onMin={() => setPvMode("min")} />
             </div>
