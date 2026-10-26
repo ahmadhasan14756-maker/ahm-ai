@@ -432,7 +432,23 @@ function Suggestions({ text }) {
     </div>
   );
 }
-const MD = { code: CodeBlock, pre: ({ children }) => <>{children}</>, table: ({ children }) => <div className="table-wrap"><table>{children}</table></div> };
+// English words, numbers and code names inside Kurdish/Arabic text keep their own order (e.g. "RAM 8GB", "iPhone 15 Pro")
+// instead of jumping around the sentence: each Latin run is wrapped in <bdi>.
+const LATIN_RUN = /([A-Za-z0-9][A-Za-z0-9 .,:;/_\-+#@%&'’()]*[A-Za-z0-9)%])/g;
+function isolate(children) {
+  const one = (c, k) => {
+    if (typeof c !== "string" || !/[\u0600-\u06FF]/.test(c) || !/[A-Za-z]/.test(c)) return c;
+    const parts = c.split(LATIN_RUN);
+    return parts.map((t, i) => (i % 2 ? <bdi key={k + "-" + i} dir="ltr">{t}</bdi> : t));
+  };
+  return Array.isArray(children) ? children.map(one) : one(children, 0);
+}
+const iso = (Tag) => ({ node, children, ...rest }) => <Tag {...rest}>{isolate(children)}</Tag>;
+const MD = {
+  code: CodeBlock, pre: ({ children }) => <>{children}</>,
+  table: ({ children }) => <div className="table-wrap"><table>{children}</table></div>,
+  p: iso("p"), li: iso("li"), td: iso("td"), th: iso("th"), strong: iso("strong"), h1: iso("h1"), h2: iso("h2"), h3: iso("h3"), h4: iso("h4"), blockquote: iso("blockquote"),
+};
 
 const isRTL = (s) => /[؀-ۿ]/.test((s || "").slice(0, 200));
 

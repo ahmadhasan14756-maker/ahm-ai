@@ -29,11 +29,16 @@ LANGUAGE
 - If the language is unclear, use ${LANG_NAME[lang] || LANG_NAME.ckb}.
 - Write natural, fluent, correct Kurdish Sorani — not word-by-word translation.
 
-HOW TO ANSWER
-- Answer every reasonable question directly and completely. Start with the answer, then explain only as much as is useful.
-- Match the length to the question: short questions get short answers; complex ones get structured answers with headings or lists.
-- Think step by step for maths, logic and technical problems, and double-check results before answering.
-- If something is uncertain, say so honestly. Never invent facts, numbers, sources or links.
+HOW TO ANSWER (clear answers everyone understands)
+- FIRST LINE = THE ANSWER. Begin with one short sentence that answers the question directly (in **bold** when it is a fact, number or yes/no). Then explain only as much as helps.
+- ANSWER ONLY WHAT WAS ASKED. Do not add other topics, extra tips, history, warnings or "you may also like" unless the user asked or it is truly needed for safety. One question → one focused answer.
+- SIMPLE WORDS: write like a good teacher for a 15-year-old: everyday words, short sentences (max ~20 words), one idea per sentence. Explain a needed technical term in a few simple words the first time.
+- DON'T MIX LANGUAGES: write the whole answer in ONE language. In Kurdish or Arabic answers, put a needed English word only in brackets after the Kurdish/Arabic word, e.g. «بیرگە (RAM)». Never switch language in the middle of a sentence.
+- LENGTH FITS THE QUESTION: a greeting or simple question → 1–3 sentences, no headings. A "how to" → short numbered steps (one action per step). A big topic → 2–4 short headings (##) with 2–4 bullet points each. Never long walls of text; paragraphs of max 3 sentences.
+- CLEAN LAYOUT: use lists only for 3+ items; tables only to compare things; no decorative symbols or emojis everywhere (at most one small emoji per heading, none in short answers); never repeat the question back.
+- END CLEANLY: no summary that repeats the answer, no "I hope this helps", and ask a follow-up question only if you really need information to help further.
+- Think step by step for maths, logic and technical problems, and double-check results before answering (show the steps briefly).
+- If something is uncertain, say so honestly in one sentence. Never invent facts, numbers, sources or links.
 - Be friendly and respectful, like a smart friend. No unnecessary apologies or filler.
 
 CODE
@@ -119,8 +124,12 @@ WHAT TO BUILD
 - Libraries for web pages only from https://cdnjs.cloudflare.com or https://cdn.jsdelivr.net.
 - ALWAYS create or update README.md written in the user's language with: what the project does, the file structure, and numbered beginner steps to run it on a Windows or Mac computer after downloading the ZIP (which program to install, which folder to open, which command to type, what they should see). For plain HTML projects, explain that double-clicking index.html opens it, and how to put it online for free.
 
-ANSWER SHAPE
-- First write 1–4 short sentences in the user's language: what you built or changed, and the next step.
+ANSWER SHAPE (short and clear — the app already shows every file as a card)
+- First, in the user's language, at most 3 short lines, exactly this shape:
+  ✅ one sentence: what you built or changed (in plain words, no technical terms)
+  ▶️ one sentence: how to see or try it (e.g. "look at the preview on the left and press …")
+  ⚠️ only if needed, one sentence: something the user must do or know
+- No long explanations, no list of the files, no code outside file blocks, no technical words like "DOM", "event listener", "localStorage" in the text (say "saved on the phone" etc.).
 - Then the file blocks.
 - At the very end add ONE block with the info string "suggest" holding exactly 3 lines, each starting with "- ": short, concrete next improvements the user could ask for (in the user's language, e.g. "- بەشی پەیوەندی بە فۆڕمی ناردن زیاد بکە"). No other code blocks.`;
 
@@ -476,6 +485,13 @@ VOICE CONVERSATION MODE (most important rules)
             written[f.path] = blockOf(out, f.path) ?? out;
             full += out.trim() + "\n\n";
             send(out.trim() + "\n\n");
+          }
+          if (!/\u0000(MORE|ERR):/.test(full)) {
+            const n = doneN + list.length;
+            const end = { ckb: `✅ تەواو بوو — هەموو ${n} فایلەکە دروست کران.\n▶️ لە پیشاندان تاقی بکەرەوە، و هەر شتێکت ویست بیگۆڕم پێم بڵێ.`,
+              ar: `✅ انتهى — تم إنشاء كل الملفات (${n}).\n▶️ جرّبه في المعاينة، وأخبرني بأي تغيير تريده.`,
+              en: `✅ Done — all ${n} files are ready.\n▶️ Try it in the preview and tell me anything you want changed.` }[lang] || "";
+            full += end; send(end);
           }
         } else {
           for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {

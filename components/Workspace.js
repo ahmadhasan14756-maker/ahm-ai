@@ -10,6 +10,10 @@ const CodeEditor = dynamic(() => import("./CodeEditor"), {
 });
 
 const P = {
+  android: <><rect x="5" y="3" width="14" height="18" rx="4" /><path d="M10 6h4M9 18h6" /></>,
+  monitor: <><rect x="2.5" y="4" width="19" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></>,
+  rotate: <><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" /><path d="M21 3v5h-5" /><rect x="8" y="10" width="8" height="11" rx="1.5" /></>,
+  lock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>,
   expand: <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />,
   shrink: <path d="M20 10h-6V4M4 14h6v6M14 10l7-7M10 14l-7 7" />,
   paneOff: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M15 4v16M10 10l-2 2 2 2" /></>,
@@ -48,6 +52,9 @@ function phoneSize(box) {
   if (w > W - 16) { w = W - 16; h = (w * 19.5) / 9; }
   return { width: Math.max(160, Math.round(w)), height: Math.max(340, Math.round(h)), maxWidth: "none", maxHeight: "none", aspectRatio: "auto" };
 }
+
+// While the app in the preview loads, a soft shimmer shows instead of a white screen.
+const loaded = (e) => e.currentTarget.parentElement?.classList.add("loaded");
 
 // Phone / computer preview of any page (used by the workspace and by "▶ Preview" on code in the chat).
 // Real screen sizes (the size a browser uses, in CSS pixels), from the oldest supported phones to the newest.
@@ -102,11 +109,11 @@ function PhoneFrame({ m, landscape, box, html, nonce }) {
   return (
     <div className={"phone3 k-" + kind + (landscape ? " land" : "")} style={{ width: sw + side * 2, height: sh + top + bottom, padding: `${top}px ${side}px ${bottom}px` }}>
       {home && !landscape && <i className="p3-speaker" aria-hidden="true" />}
-      <div className="p3-screen" style={{ width: sw, height: sh, borderRadius: home ? 4 : Math.round(38 * scale) }}>
+      <div className="p3-screen pv-load" key={nonce + ":" + html.length} style={{ width: sw, height: sh, borderRadius: home ? 4 : Math.round(38 * scale) }}>
         {!landscape && kind === "island" && <i className="p3-island" aria-hidden="true" style={{ width: Math.round(122 * scale), height: Math.round(36 * scale), top: Math.round(11 * scale) }} />}
         {!landscape && kind === "notch" && <i className="p3-notch" aria-hidden="true" style={{ width: Math.round(160 * scale), height: Math.round(30 * scale) }} />}
         {!landscape && kind === "punch" && <i className="p3-punch" aria-hidden="true" style={{ width: Math.max(6, Math.round(12 * scale)), height: Math.max(6, Math.round(12 * scale)), top: Math.round(10 * scale) }} />}
-        <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups"
+        <iframe key={nonce + ":" + html.length} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" onLoad={loaded}
           style={{ width: vw, height: vh, transform: `scale(${scale})`, transformOrigin: "0 0" }} />
       </div>
       {home && !landscape && <i className="p3-home" aria-hidden="true" />}
@@ -147,13 +154,13 @@ export function DevicePreview({ html, t, page }) {
   return (
     <>
       <div className="dev-bars">
-      <div className="ws-sub">
-        <div className="seg small">
-          <button className={device === "iphone" ? "on" : ""} onClick={() => setDevice("iphone")}> iPhone</button>
-          <button className={device === "android" ? "on" : ""} onClick={() => setDevice("android")}>🤖 Android</button>
-          <button className={device === "desktop" ? "on" : ""} onClick={() => setDevice("desktop")}>💻 {t("computer")}</button>
+      <div className="ws-sub dev-main">
+        <div className="seg small dev-seg">
+          <button className={device === "iphone" ? "on" : ""} onClick={() => setDevice("iphone")} title="iPhone"><Svg d={P.phone} size={16} /><span>iPhone</span></button>
+          <button className={device === "android" ? "on" : ""} onClick={() => setDevice("android")} title="Android"><Svg d={P.android} size={16} /><span>Android</span></button>
+          <button className={device === "desktop" ? "on" : ""} onClick={() => setDevice("desktop")} title={t("computer")}><Svg d={P.monitor} size={16} /><span>{t("computer")}</span></button>
         </div>
-        <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={P.refresh} /></button>
+        <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={P.refresh} size={17} /></button>
       </div>
       {m && (
         <div className="ws-sub dev-pick" dir="ltr">
@@ -161,17 +168,19 @@ export function DevicePreview({ html, t, page }) {
             {list.map((x, i) => <option key={i} value={i}>{x[0]}</option>)}
           </select>
           <span className="dev-size">{real ? `${Math.round(box.w)}×${Math.round(box.h)}` : landscape ? `${m[2]}×${m[1]}` : `${m[1]}×${m[2]}`}</span>
-          {!real && <button className={"icon-btn sm" + (landscape ? " on" : "")} aria-label={t("rotate")} title={t("rotate")} onClick={() => setLandscape(!landscape)}>⟲</button>}
+          {!real && <button className={"icon-btn sm" + (landscape ? " on" : "")} aria-label={t("rotate")} title={t("rotate")} onClick={() => setLandscape(!landscape)}><Svg d={P.rotate} size={17} /></button>}
           <button className={"icon-btn sm real-btn" + (real ? " on" : "")} aria-label={t(real ? "pvFrame" : "pvReal")} title={t(real ? "pvFrame" : "pvReal")} onClick={toggleReal}><Svg d={P.frame} size={17} /></button>
         </div>
       )}
       </div>
       <div className="stage" ref={stageRef}>
+        <div className="dev-in" key={device + ":" + (pick[device] ?? 0) + ":" + (landscape ? 1 : 0) + ":" + (real ? 1 : 0)}>
         {device === "desktop" || !m ? <Desktop html={html} nonce={nonce} box={box} page={page} /> : (
           real ? (
-            <div className="pv-real"><iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" /></div>
+            <div className="pv-real pv-load" key={nonce + ":" + html.length}><iframe title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" onLoad={loaded} /></div>
           ) : <PhoneFrame m={m} landscape={landscape} box={box} html={html} nonce={nonce} />
         )}
+        </div>
       </div>
     </>
   );
@@ -226,18 +235,21 @@ function Tree({ node, prefix, open, toggle, active, onOpen, depth = 0 }) {
 
 // Computer preview: the page really renders at 1280×800 (desktop layout) and is scaled down to fit, inside a monitor frame.
 const PC_W = 1280, PC_H = 800, BAR = 34;
+// The computer view: a modern browser window (title bar, address with the page name).
 function Desktop({ html, nonce, box, page }) {
-  const scale = box.w ? Math.min(1, (box.w - 8) / PC_W, (box.h - 40) / (PC_H + BAR)) : 0.4;
+  const scale = box.w ? Math.min(1, (box.w - 8) / PC_W, (box.h - 12) / (PC_H + BAR)) : 0.4;
   return (
-    <div className="pc" style={{ width: PC_W * scale }}>
+    <div className="pc browser" style={{ width: PC_W * scale }}>
       <div className="pc-screen" style={{ height: (PC_H + BAR) * scale }}>
-        <div className="pc-inner" style={{ width: PC_W, height: PC_H + BAR, transform: `scale(${scale})` }}>
-          <div className="pc-bar" aria-hidden="true"><i /><i /><i /><span>{page || "index.html"}</span></div>
-          <iframe key={nonce} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" style={{ width: PC_W, height: PC_H }} />
+        <div className="pc-inner pv-load" key={nonce + ":" + html.length} style={{ width: PC_W, height: PC_H + BAR, transform: `scale(${scale})` }}>
+          <div className="pc-bar" aria-hidden="true">
+            <i /><i /><i />
+            <b className="pc-nav"><Svg d={<path d="M15 18l-6-6 6-6" />} size={18} /><Svg d={<path d="M9 18l6-6-6-6" />} size={18} /><Svg d={P.refresh} size={16} /></b>
+            <span><Svg d={P.lock} size={13} /> app.local/<em>{page || "index.html"}</em></span>
+          </div>
+          <iframe title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" onLoad={loaded} style={{ width: PC_W, height: PC_H }} />
         </div>
       </div>
-      <div className="pc-neck" aria-hidden="true" />
-      <div className="pc-foot" aria-hidden="true" />
     </div>
   );
 }
