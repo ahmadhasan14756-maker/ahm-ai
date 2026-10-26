@@ -37,6 +37,8 @@ HOW TO ANSWER (clear answers everyone understands)
 - LENGTH FITS THE QUESTION: a greeting or simple question → 1–3 sentences, no headings. A "how to" → short numbered steps (one action per step). A big topic → 2–4 short headings (##) with 2–4 bullet points each. Never long walls of text; paragraphs of max 3 sentences.
 - CLEAN LAYOUT: use lists only for 3+ items; tables only to compare things; no decorative symbols or emojis everywhere (at most one small emoji per heading, none in short answers); never repeat the question back.
 - END CLEANLY: no summary that repeats the answer, no "I hope this helps", and ask a follow-up question only if you really need information to help further.
+- DO THE TASK: when the user asks you to do something (write, fix, design, improve, translate, calculate), do it completely and carefully right away — don't ask "which part?" or "what exactly?" when a smart person could make a good choice. Pick the best reasonable interpretation, do it, and at most mention your choice in one short line. Ask a question only when it is truly impossible to continue without the answer.
+- Be precise: follow every detail the user gave (names, colours, numbers, language, order). Before you answer, check your work against the request once.
 - Think step by step for maths, logic and technical problems, and double-check results before answering (show the steps briefly).
 - If something is uncertain, say so honestly in one sentence. Never invent facts, numbers, sources or links.
 - Be friendly and respectful, like a smart friend. No unnecessary apologies or filler.
@@ -104,6 +106,11 @@ UPLOADED PROJECTS (the user brought a ZIP)
 SPEED
 - Write compact, clean code: no long comment blocks, no repeated code, short README. Start writing files straight away.
 
+ACT, DON'T ASK (very important)
+- NEVER ask the user which file, page or part to change, and never ask them to name files. YOU decide which files must be created or changed, and you do all of them in this answer.
+- Vague requests are normal — act on them: "make the design more beautiful / better / modern" → redesign the WHOLE project consistently (the shared CSS and every page or screen, layout, colours, fonts, spacing, cards, buttons, icons, animations) while keeping all content and features working. "Fix it" → find the bugs yourself and fix them. "Add X" → add it everywhere it belongs (menu links, pages, data, styles).
+- If something is missing to finish the request (a page, a script, a style, data), create it without being asked.
+
 COMPLETE, NOT A DEMO (very important)
 - Build EVERYTHING in the agreed plan: every page / screen / section listed must exist as a real file with real content and working code. Every link, menu item and button must work. No "coming soon", no empty pages, no lorem ipsum, no fake buttons.
 - Use a clean folder structure (css/, js/, assets/ …) and keep files consistent with each other (same class names, same data keys, every linked file exists).
@@ -120,7 +127,16 @@ WHAT TO BUILD
 - SELF-CHECK BEFORE YOU FINISH: go through every file you wrote and make sure every page a link goes to, every CSS/JS/JSON file a page or script loads, and every file the plan promised is in your answer (or already in the project). If one is missing, write it now — never leave a link or a <script src> pointing at a file that doesn't exist.
 - NAVIGATION THAT ALWAYS WORKS: move between pages only with normal links (<a href="patients.html">) to pages you actually create, or show/hide sections of one page (data-page buttons, #hash). Every page a link points to MUST exist in the files. Never redirect with location.href / window.location for normal navigation; every <form> handler calls e.preventDefault(). A login/logout may use a link or show/hide — never an endless redirect.
 - EVERY PHONE: it must look right on every iPhone (from the small iPhone 5 / SE at 320px wide up to the Pro Max at 440px) and every Android phone (360–412px, foldables, tablets): no sideways scrolling, nothing cut off, text and buttons sized with clamp()/rem, images max-width:100%, use env(safe-area-inset-*) padding so the notch / Dynamic Island / home bar never cover content, and use 100dvh instead of 100vh.
-- Mobile-first, beautiful, professional design: clear colour palette, good spacing, readable fonts (Google Fonts allowed), smooth touch targets. Use dir="rtl" for Kurdish or Arabic content. Fully working, not a mock-up; use localStorage when useful.
+- PREMIUM DESIGN (it must look like a top 2026 product, not a template):
+  • Design tokens first, in :root of the shared CSS: a harmonious palette (one strong brand colour + 1 accent + neutral greys, chosen for the topic), --radius (12–20px), a spacing scale, soft layered shadows, and both light and dark colours (prefers-color-scheme) unless the user chose one.
+  • Typography: Kurdish/Arabic → "Vazirmatn" or "Noto Kufi Arabic" from Google Fonts; Latin → "Inter" or "Plus Jakarta Sans". Clear hierarchy: big bold headings (clamp()), comfortable body 16–17px, line-height 1.6–1.8.
+  • Modern layout: generous white space, max-width containers, CSS grid, a striking hero (gradient / image / illustration in SVG), cards with soft shadow and hover lift, sticky glassy header (backdrop-filter), a polished footer.
+  • Real icons: inline SVG icons (Lucide/Heroicons style, 1.75–2px strokes) — never emojis as icons in the UI.
+  • Interactions: hover, focus-visible and active states on every button/link, smooth transitions (150–250ms), subtle entrance animations (respect prefers-reduced-motion), toasts for actions, skeleton/loading states, friendly empty states.
+  • Forms and tables: labelled inputs with clear focus rings, inline validation messages, zebra/hover rows, search and filters, badges for status.
+  • Real content in the user's language (no lorem ipsum): realistic names, prices, texts for the topic. Use dir="rtl" for Kurdish or Arabic.
+  • Accessible: colour contrast ≥ 4.5:1, alt texts, buttons are <button>, keyboard usable.
+- CLEAN CODE: small reusable functions, no duplicated code, clear names, no console errors, no unused files. Fully working, not a mock-up.
 - Libraries for web pages only from https://cdnjs.cloudflare.com or https://cdn.jsdelivr.net.
 - ALWAYS create or update README.md written in the user's language with: what the project does, the file structure, and numbered beginner steps to run it on a Windows or Mac computer after downloading the ZIP (which program to install, which folder to open, which command to type, what they should see). For plain HTML projects, explain that double-clicking index.html opens it, and how to put it online for free.
 
@@ -154,6 +170,12 @@ const FILELIST_PROMPT = (kind, lang) => `You are a senior developer planning the
 ${KIND_PROMPT[kind]}
 Return JSON only: {"intro": "1-3 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you are building now, file by file", "files": [{"path": "index.html", "about": "what this file contains, in English, max 25 words"}]}
 Rules: 4 to 18 files. Follow the FILES list of the project type above and the pages/screens/modules of the plan — every page/screen/module gets its own file. Order: files others depend on first (styles, data/storage, auth, router/app), then the pages / screens / modules, README.md last. Paths: forward slashes, no leading slash. Only text files (HTML, CSS, JS, JSON, MD, SVG) — no photos.`;
+// A broad change to an existing project ("make the design more beautiful", "improve everything"): the AI first
+// decides which files to change, then rewrites them one by one — the user never has to name files.
+const BROAD_CHANGE = /(جوان|دیزاین|ستایل|ڕەنگ|هەموو|گشت|سەرلەنوێ|باشتر|نوێی بکەرەوە|مۆدێرن|تەواوی|تصميم|جميل|أجمل|كل |بالكامل|حدّث|طوّر|design|beautiful|prettier|redesign|modern|style|all |every|whole|improve|better|revamp|polish)/i;
+const CHANGE_PROMPT = (lang) => `You are a senior developer. The user wants a change to their existing project (files below). Decide yourself EXACTLY which files must be changed or created to do it completely and well — the user will not name files.
+Return JSON only: {"intro": "1-2 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you will change", "files": [{"path": "css/style.css", "about": "precisely what to change in this file, in English, max 35 words"}]}
+Rules: list every file that needs work (shared CSS first, then shared scripts, then pages/screens), new files too; 1 to 15 files; never js/ahm-db.js; don't list files that need no change.`;
 const STEP_RULES = `
 ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - You are writing the project ONE FILE AT A TIME. You get the full file list and every file already written.
@@ -431,7 +453,7 @@ VOICE CONVERSATION MODE (most important rules)
       let text = m.content.slice(0, 30000);
       const last = i === messages.length - 1;
       if (last) {
-        const all = [...project, ...Object.entries(written)];
+        const all = Object.entries({ ...Object.fromEntries(project), ...written }); // new versions replace the old ones
         const files = all.length ? all.map(([k, v]) => `\`\`\`file:${k}\n${v}\n\`\`\``).join("\n\n") : "(empty project)";
         text = `Current project files:\n\n${files}\n\nRequest: ${text}\n\n${extra}`;
       }
@@ -470,9 +492,9 @@ VOICE CONVERSATION MODE (most important rules)
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
         { onPlace: (n) => send(`\u0000Q:${n}\n`) });
       try {
-        let list = null, total = 0, doneN = 0;
+        let list = null, total = 0, doneN = 0, editing = false;
         if (stepBuild) {
-          if (contTok) { list = cleanList(contTok.f); doneN = Number(contTok.d) || 0; total = Number(contTok.n) || doneN + list.length; }
+          if (contTok) { list = cleanList(contTok.f); doneN = Number(contTok.d) || 0; total = Number(contTok.n) || doneN + list.length; editing = !!contTok.ed; }
           else {
             const convo = messages.slice(-10).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 6000)).join("\n\n");
             try {
@@ -488,13 +510,32 @@ VOICE CONVERSATION MODE (most important rules)
             } catch (e) { console.error("file list", errText(e)); list = null; }
           }
         }
+        // a broad change to an existing project: the AI picks the files itself, then they are rewritten one by one
+        const textFiles = project.filter(([k, v]) => !v.startsWith("[image file") && k !== "js/ahm-db.js");
+        if (!list && build && !planOnly && !file && !contTok && !stepBuild && textFiles.length >= 2 && BROAD_CHANGE.test(lastText) && serverEnv("STEP_BUILD") !== "0") {
+          let budget = 120_000;
+          const filesText = textFiles.map(([k, v]) => { const c = v.slice(0, Math.max(0, Math.min(6000, budget))); budget -= c.length; return `--- ${k} (${v.length} chars)\n${c}`; }).join("\n\n");
+          const convo = messages.slice(-6).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 3000)).join("\n\n");
+          try {
+            const out = await jsonCall(SYSTEM_PROMPT(lang) + CHANGE_PROMPT(lang), [{ text: `CONVERSATION:\n${convo}\n\nPROJECT FILES:\n${filesText}\n\nREQUEST: ${lastText}` }], { maxTokens: 3000, think: "minimal" });
+            const picked = cleanList(out?.files);
+            if (picked.length >= 2) {
+              list = picked; total = picked.length; editing = true;
+              const intro = String(out?.intro || "").replace(/\u0000/g, "").trim().slice(0, 500);
+              if (intro) { full += intro + "\n\n"; send(intro + "\n\n"); }
+              countUsage();
+            }
+          } catch (e) { console.error("change plan", errText(e)); }
+        }
         if (list && list.length >= 2) {
           const t0 = Date.now(), written = {};
           const stepConfig = { ...baseConfig, systemInstruction: baseConfig.systemInstruction + STEP_RULES };
           const listText = list.map((f, i) => `${doneN + i + 1}. ${f.path} — ${f.about}`).join("\n");
           let stopped = false, made = 0, begun = 0;
-          const more = (rest) => { if (stopped || !rest.length) return; stopped = true; const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000 }); full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`); };
-          const askFor = (f, last) => `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\nNow write ONLY the file \`${f.path}\` — ${f.about}${last ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
+          const more = (rest) => { if (stopped || !rest.length) return; stopped = true; const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000, ed: editing ? 1 : 0 }); full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`); };
+          const askFor = (f, last) => (editing
+            ? `FILES TO CHANGE for this request (in order):\n${listText}\n\nNow write the COMPLETE new version of ONLY the file \`${f.path}\` with this change: ${f.about}. Keep everything else in it working and consistent with the other files.`
+            : `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\nNow write ONLY the file \`${f.path}\` — ${f.about}`) + `${last ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
           // Writes one file. live = its text appears in the app while it is being written.
           const writeOne = async (f, last, live, level) => {
             if (stopped) return false;
@@ -549,9 +590,13 @@ VOICE CONVERSATION MODE (most important rules)
           }
           if (!stopped && !/\u0000(MORE|ERR):/.test(full)) {
             const n = doneN + list.length;
-            const end = { ckb: `✅ تەواو بوو — هەموو ${n} فایلەکە دروست کران.\n▶️ لە پیشاندان تاقی بکەرەوە، و هەر شتێکت ویست بیگۆڕم پێم بڵێ.`,
-              ar: `✅ انتهى — تم إنشاء كل الملفات (${n}).\n▶️ جرّبه في المعاينة، وأخبرني بأي تغيير تريده.`,
-              en: `✅ Done — all ${n} files are ready.\n▶️ Try it in the preview and tell me anything you want changed.` }[lang] || "";
+            const end = (editing
+              ? { ckb: `✅ تەواو بوو — ${n} فایل نوێ کرانەوە.\n▶️ لە پیشاندان سەیری بکە، و ئەگەر شتێکی تر بگۆڕم پێم بڵێ.`,
+                  ar: `✅ انتهى — تم تحديث ${n} ملفات.\n▶️ شاهده في المعاينة، وأخبرني إن أردت تغييراً آخر.`,
+                  en: `✅ Done — ${n} files updated.\n▶️ See it in the preview and tell me if you want anything else changed.` }
+              : { ckb: `✅ تەواو بوو — هەموو ${n} فایلەکە دروست کران.\n▶️ لە پیشاندان تاقی بکەرەوە، و هەر شتێکت ویست بیگۆڕم پێم بڵێ.`,
+                  ar: `✅ انتهى — تم إنشاء كل الملفات (${n}).\n▶️ جرّبه في المعاينة، وأخبرني بأي تغيير تريده.`,
+                  en: `✅ Done — all ${n} files are ready.\n▶️ Try it in the preview and tell me anything you want changed.` })[lang] || "";
             full += end; send(end);
           }
         } else {
