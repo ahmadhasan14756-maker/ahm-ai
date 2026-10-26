@@ -22,6 +22,7 @@ const P = {
   phone: <><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M11 18h2" /></>,
   code: <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />,
   zip: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5M12 15V3" /></>,
+  home: <><path d="M3 11l9-8 9 8" /><path d="M5 10v10h5v-6h4v6h5V10" /></>,
   refresh: <><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></>,
   close: <path d="M18 6L6 18M6 6l12 12" />,
   file: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>,
@@ -103,6 +104,8 @@ function PhoneFrame({ m, landscape, box, html, nonce }) {
   const [, w0, h0, kind] = m;
   const vw = landscape ? h0 : w0, vh = landscape ? w0 : h0;
   const home = kind === "home";
+  // like a real phone browser, the page starts BELOW the status bar (time, notch / island), never under it
+  const sb = landscape ? 0 : kind === "island" ? 54 : kind === "notch" ? 47 : kind === "punch" ? 32 : 20;
   const side = 12, top = home && !landscape ? 46 : 12, bottom = top;
   const W = box.w || 360, H = box.h || 680;
   const scale = Math.min(1.3, (W - 12 - side * 2) / vw, (H - 12 - top - bottom) / vh);
@@ -114,8 +117,9 @@ function PhoneFrame({ m, landscape, box, html, nonce }) {
         {!landscape && kind === "island" && <i className="p3-island" aria-hidden="true" style={{ width: Math.round(122 * scale), height: Math.round(36 * scale), top: Math.round(11 * scale) }} />}
         {!landscape && kind === "notch" && <i className="p3-notch" aria-hidden="true" style={{ width: Math.round(160 * scale), height: Math.round(30 * scale) }} />}
         {!landscape && kind === "punch" && <i className="p3-punch" aria-hidden="true" style={{ width: Math.max(6, Math.round(12 * scale)), height: Math.max(6, Math.round(12 * scale)), top: Math.round(10 * scale) }} />}
+        {sb > 0 && <div className="p3-status" aria-hidden="true" style={{ height: Math.round(sb * scale), fontSize: Math.max(8, Math.round(15 * scale)), padding: `0 ${Math.round(28 * scale)}px` }}><b>9:41</b><svg viewBox="0 0 46 12" height="0.8em" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1" /><rect x="5" y="5.5" width="3" height="6.5" rx="1" /><rect x="10" y="3" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="12" rx="1" /><rect x="23.5" y=".5" width="19" height="11" rx="3" fill="none" stroke="currentColor" opacity=".45" /><rect x="25.5" y="2.5" width="15" height="7" rx="1.5" /><rect x="43.5" y="4" width="2" height="4" rx="1" opacity=".45" /></svg></div>}
         <iframe key={nonce + ":" + html.length} title="app" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" onLoad={loaded}
-          style={{ width: vw, height: vh, transform: `scale(${scale})`, transformOrigin: "0 0" }} />
+          style={{ width: vw, height: vh - sb, top: Math.round(sb * scale), transform: `scale(${scale})`, transformOrigin: "0 0" }} />
       </div>
       {home && !landscape && <i className="p3-home" aria-hidden="true" />}
     </div>
@@ -123,7 +127,7 @@ function PhoneFrame({ m, landscape, box, html, nonce }) {
 }
 
 // Phone / computer preview of any page (used by the workspace and by "▶ Preview" on code in the chat).
-export function DevicePreview({ html, t, page }) {
+export function DevicePreview({ html, t, page, onHome }) {
   const [device, setDevice] = useState("iphone");
   const [pick, setPick] = useState({ iphone: 12, android: 2 });
   const [landscape, setLandscape] = useState(false);
@@ -161,6 +165,7 @@ export function DevicePreview({ html, t, page }) {
           <button className={device === "android" ? "on" : ""} onClick={() => setDevice("android")} title="Android"><Svg d={P.android} size={16} /><span>Android</span></button>
           <button className={device === "desktop" ? "on" : ""} onClick={() => setDevice("desktop")} title={t("computer")}><Svg d={P.monitor} size={16} /><span>{t("computer")}</span></button>
         </div>
+        {onHome && <button className="icon-btn sm" aria-label={t("pvHome")} title={t("pvHome")} onClick={() => { onHome(); setNonce(nonce + 1); }}><Svg d={P.home} size={17} /></button>}
         <button className="icon-btn sm" aria-label={t("refresh")} title={t("refresh")} onClick={() => setNonce(nonce + 1)}><Svg d={P.refresh} size={17} /></button>
       </div>
       {m && (
@@ -419,7 +424,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
                 </div>
               </div>
             )}
-            {shown ? <DevicePreview html={shown} t={t} page={page} /> : (
+            {shown ? <DevicePreview html={shown} t={t} page={page} onHome={() => { setEntry(null); setPage("index.html"); setLoc({ search: "", hash: "", t: Date.now() }); }} /> : (
               <div className="stage"><div className="ws-empty"><span className="mini-spin" /><p>{t("building")}</p></div></div>
             )}
 

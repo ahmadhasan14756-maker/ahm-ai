@@ -1896,6 +1896,8 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .phone3.land { border-radius: 36px; }
 .p3-screen { position: relative; overflow: hidden; background: #fff; }
 .p3-screen iframe { position: absolute; top: 0; left: 0; border: 0; display: block; background: #fff; }
+.p3-status { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; color: #111; background: #fff; font-weight: 600; letter-spacing: .02em; direction: ltr; z-index: 1; font-family: -apple-system, system-ui, sans-serif; }
+.p3-island, .p3-notch, .p3-punch { z-index: 2; }
 .p3-island { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; background: #000; border-radius: 999px; pointer-events: none; }
 .p3-notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 2; background: #000; border-radius: 0 0 18px 18px; pointer-events: none; }
 .p3-punch { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; background: #000; border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 2px rgba(0,0,0,.25); }

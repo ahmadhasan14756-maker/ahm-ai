@@ -2037,6 +2037,10 @@ function Main({ session }) {
   const active = chats.find((c) => c.id === activeId) || draft;
   const mode = active.mode === "studio" || active.mode === "image" ? "chat" : active.mode; // old design chats open as normal chats
   const messages = active.messages;
+  const activeIdRef = useRef(null);
+  activeIdRef.current = active.id;
+  // an answer still being finished on the server (the connection broke, e.g. the app went to the background)
+  const jobWait = messages.some((x) => x.role === "assistant" && x.pending?.job);
   const project = active.project || {};
 
   async function token() {
@@ -2062,6 +2066,7 @@ function Main({ session }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.id) {
         if (data.id !== active.siteId) patch(active.id, (c) => ({ ...c, siteId: data.id }));
+        pubRef.current[data.id] = JSON.stringify(project);
         setSheet({ type: next, url: `${window.location.origin}/s/${data.id}`, updated: !!data.updated });
       } else {
         setSheet({ type: "published", error: { no_table: t("inviteSoon"), too_big: t("siteTooBig"), too_many: t("siteTooMany") }[data.error] || t("errGeneric") });
@@ -2069,6 +2074,21 @@ function Main({ session }) {
     } catch { setSheet({ type: "published", error: t("errNetwork") }); }
     setPublishing(false);
   }
+  // A site that is already online follows the project: after the AI (or the user) changes it, the live link is updated quietly.
+  const pubRef = useRef({});
+  useEffect(() => {
+    if (busy || jobWait || !active.siteId || !Object.keys(project).length) return;
+    const key = active.siteId, sig = JSON.stringify(project);
+    if (pubRef.current[key] === undefined) { pubRef.current[key] = sig; return; } // first look at this chat: nothing changed yet
+    if (pubRef.current[key] === sig) return;
+    const tm = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ files: project, id: key, title: active.title }) });
+        if (res.ok) pubRef.current[key] = sig;
+      } catch {}
+    }, 2500);
+    return () => clearTimeout(tm);
+  }, [project, busy, jobWait, active.siteId]);
   async function claimInvite() {
     let ref = "";
     try { ref = localStorage.getItem("ahm-ref") || ""; } catch {}
@@ -2468,7 +2488,7 @@ function Main({ session }) {
 
   async function send(preset, baseMessages, extra = [], forced, opts = {}) {
     // still building / answering: keep the message and send it by itself as soon as the work is done
-    if (busy && !opts.auto && !opts.cont) {
+    if ((busy || jobWait) && !opts.auto && !opts.cont) {
       const q = (preset ?? input).trim();
       if (q) { queueRef.current.push({ chat: active.id, text: q }); setQueued([...queueRef.current]); setInput(""); }
       return;
@@ -2754,6 +2774,12 @@ function Main({ session }) {
           const more = /\u0000MORE:([A-Za-z0-9_.-]+)\n/.exec(txt);
           txt = txt.replace(/\u0000F:\d+\/\d+:[^\n]*\n/g, "").replace(/\u0000MORE:[^\n]*\n/g, "");
           if (more && kind === "build") setTimeout(() => autoRef.current?.(t("autoContinue"), 0, { cont: more[1], rounds: 1 }), 1500);
+          // finished while away: still make the files that are linked but missing (same as a normal build)
+          else if (kind === "build" && !/\u0000ERR:/.test(txt)) setTimeout(() => {
+            const c = chatsRef.current.find((x) => x.id === chatId);
+            const miss = c ? findMissing(c.project || {}, c.buildKind || "website") : [];
+            if (miss.length && c.id === activeIdRef.current) autoRef.current?.(t("autoMissing").replace("{f}", miss.map((x) => x.path + (x.from ? ` (${t("autoFrom")} ${x.from})` : "")).join("، ")), 1);
+          }, 1500);
           const bad = /\u0000ERR:(busy|ai)\s*$/.exec(txt);
           txt = txt.replace(/\n*\u0000ERR:(busy|ai)\s*$/, "");
           const heard = msg.pending.voice ? /^\s*⟦([^⟧]*)⟧[ \t]*\n?/.exec(txt) : null;
@@ -2822,17 +2848,17 @@ function Main({ session }) {
   }
 
   sendRef.current = (txt) => { if (!busy) { setPlanEdit(false); send(txt); } };
-  busyRef.current = busy;
+  busyRef.current = busy || jobWait;
   // send the waiting messages when the AI is free again (after any automatic follow-up steps)
   useEffect(() => {
-    if (busy || !queueRef.current.length) return;
+    if (busy || jobWait || !queueRef.current.length) return;
     const tm = setTimeout(() => {
       if (busyRef.current || !queueRef.current.length) return;
       const q = queueRef.current.shift(); setQueued([...queueRef.current]);
       if (q.chat === active.id) send(q.text);
     }, 2200);
     return () => clearTimeout(tm);
-  }, [busy, active.id]);
+  }, [busy, jobWait, active.id]);
   autoRef.current = (txt, auto, extra = {}) => { if (!busy) send(txt, undefined, [], "build", { auto, ...extra }); };
   function setKind(k) {
     if (chats.some((c) => c.id === active.id)) patchIf(active.id, (c) => ({ ...c, buildKind: k || undefined }));
@@ -3195,7 +3221,7 @@ function Main({ session }) {
           )}
           {mode === "build" && (hasFiles || busy) && (
             <div className={"preview-col" + (showPreview ? " open" : "") + (pvW ? " sized" : "")} style={pvW && pvMode === "normal" ? { width: pvW } : undefined}>
-              <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
+              <Workspace files={project} setFiles={setProjectFiles} busy={busy || jobWait} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); setPvMode("normal"); send(q); }}
                 cloud={!!active.cloudSite} onCloud={() => setSheet({ type: "cloud" })}
                 progress={busy ? messages[messages.length - 1]?.progress || null : null}

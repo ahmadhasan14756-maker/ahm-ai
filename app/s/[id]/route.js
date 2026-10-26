@@ -31,7 +31,7 @@ export async function GET(_req, { params }) {
       "X-Robots-Tag": "noindex",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
-      "Cache-Control": "public, max-age=30",
+      "Cache-Control": "no-cache", // always the newest version after a change
     },
   });
 }
