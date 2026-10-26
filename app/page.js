@@ -2604,12 +2604,14 @@ function Main({ session }) {
         const ri = acc.lastIndexOf("\u0000RESET\n");
         if (ri >= 0) acc = acc.slice(ri + 7);
         if (/\u0000[A-Z]{1,5}$/.test(acc) && !ERR.test(acc)) continue; // half of a marker: wait for the rest
+        // "\u0000UNDO:n" = the server takes back the last n characters (the AI started that file again)
+        for (let um; (um = /\u0000UNDO:(\d+)\n/.exec(acc)); ) acc = acc.slice(0, Math.max(0, um.index - Number(um[1]))) + acc.slice(um.index + um[0].length);
         // Building file by file: "\u0000F:3/8:js/app.js" = which file is being written; "\u0000MORE:…" = continue later
         for (const fm of acc.matchAll(/\u0000F:(\d+)\/(\d+):([^\n]*)\n/g)) prog = { i: +fm[1], n: +fm[2], path: fm[3].slice(0, 120) };
         const mo = /\u0000MORE:([A-Za-z0-9_.-]+)\n/.exec(acc);
         if (mo) moreTok = mo[1];
         acc = acc.replace(/\u0000F:\d+\/\d+:[^\n]*\n/g, "").replace(/\u0000MORE:[^\n]*\n/g, "");
-        if (/\u0000(F|MO|MOR|MORE)(:[^\n]*)?$/.test(acc)) continue; // half of a marker: wait for the rest
+        if (/\u0000(F|MO|MOR|MORE|U|UN|UND|UNDO)(:[^\n]*)?$/.test(acc)) continue; // half of a marker: wait for the rest
         // Place in the waiting line ("\u0000Q:3\n"): show it, keep it out of the answer.
         const places = acc.match(/\u0000Q:(\d+)\n/g);
         if (places) {

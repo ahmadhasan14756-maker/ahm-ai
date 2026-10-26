@@ -175,6 +175,16 @@ const cleanList = (files) => (Array.isArray(files) ? files : [])
   .filter((f) => f.path && !f.path.includes("..") && /\.(html?|css|m?js|json|md|svg|txt|webmanifest|py|php|java|cs|ts|tsx|jsx|dart|xml|yml|yaml|sql)$/i.test(f.path))
   .filter((f, i, a) => a.findIndex((x) => x.path === f.path) === i && f.path !== "js/ahm-db.js")
   .slice(0, 18);
+// The app only understands ```file:PATH blocks: if the AI wrote the file another way (```js …, or no fence), fix it.
+function asFileBlock(out, path) {
+  const text = String(out || "").replace(/\u0000[^\n]*\n?/g, "");
+  if (blockOf(text, path) != null) return text.trim();
+  const sug = /```suggest[\s\S]*?```/.exec(text)?.[0] || "";
+  const rest = sug ? text.replace(sug, "") : text;
+  const fenced = /```[^\n]*\n([\s\S]*?)```/.exec(rest);
+  const body = (fenced ? fenced[1] : rest.replace(/^```[^\n]*\n?|```\s*$/g, "")).replace(/\s+$/, "");
+  return "```file:" + path + "\n" + body + "\n```" + (sug ? "\n" + sug : "");
+}
 const blockOf = (text, path) => {
   const m = new RegExp("```file:" + path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[ \\t]*\\n([\\s\\S]*?)\\n```").exec(text);
   return m ? m[1] : null;
@@ -412,7 +422,7 @@ VOICE CONVERSATION MODE (most important rules)
     };
     // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).
     // The plan step looks things up on Google (free daily amount on the free AI key); it switches off by itself if not allowed.
-    const useSearch = (!build && usage.pro && serverEnv("ENABLE_SEARCH") === "1") || (planOnly && serverEnv("PLAN_SEARCH") !== "0");
+    const useSearch = (!build && usage.pro && serverEnv("ENABLE_SEARCH") === "1") || (planOnly && serverEnv("PLAN_SEARCH") === "1");
 
     // A new project is built one file after another; "cont" = a signed note to continue the same build (not counted again).
     const contTok = build && !planOnly && !file ? readStep(body.cont, user.id) : null;
@@ -444,7 +454,9 @@ VOICE CONVERSATION MODE (most important rules)
     const lastText = String(messages[messages.length - 1].content || "");
     const kind = body.voice ? "voice" : build && !planOnly ? "build" : file ? "file" : construct ? "construct" : "chat";
     // Short everyday questions think the least, so the first words appear fast.
-    const startLevel = kind === "chat" && lastText.length < 300 && !attachments.length ? 2 : START[kind];
+    // everyday questions think the least (fast first words); maths, code and long questions think a bit more
+    const hard = /[=+*/^√∑]|\d+\s*[x×]\s*\d+|```|function|code|کۆد|بیرکاری|حیساب|معادلة|رياضيات|calculate|prove|equation/i.test(lastText) || lastText.length > 1200;
+    const startLevel = planOnly ? 2 : kind === "chat" && !hard ? 2 : START[kind];
     let ctrl = null;
     let open = true;
     let left = false; // the user left the app before the answer was finished → send a notification
@@ -465,7 +477,7 @@ VOICE CONVERSATION MODE (most important rules)
             const convo = messages.slice(-10).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 6000)).join("\n\n");
             try {
               const pics = attachments.filter((a) => /^image\//.test(a.mimeType)).slice(0, 3).map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } }));
-              const out = await jsonCall(SYSTEM_PROMPT(lang) + FILELIST_PROMPT(buildKind, lang), [...pics, { text: convo + (pics.length ? "\n\n(The attached picture is the design to copy.)" : "") }], { maxTokens: 4000, think: "low" });
+              const out = await jsonCall(SYSTEM_PROMPT(lang) + FILELIST_PROMPT(buildKind, lang), [...pics, { text: convo + (pics.length ? "\n\n(The attached picture is the design to copy.)" : "") }], { maxTokens: 4000, think: "minimal" });
               list = cleanList(out?.files);
               if (list.length >= 2) {
                 total = list.length;
@@ -480,27 +492,62 @@ VOICE CONVERSATION MODE (most important rules)
           const t0 = Date.now(), written = {};
           const stepConfig = { ...baseConfig, systemInstruction: baseConfig.systemInstruction + STEP_RULES };
           const listText = list.map((f, i) => `${doneN + i + 1}. ${f.path} — ${f.about}`).join("\n");
-          const more = (k) => { const tok = signStep({ u: user.id, f: list.slice(k), d: doneN + k, n: total, e: Date.now() + 3600000 }); full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`); };
-          for (let k = 0; k < list.length; k++) {
-            const f = list[k];
-            if (Date.now() - t0 > 195000) { more(k); break; } // close to the 5-minute limit: the app continues by itself
-            const mark = `\u0000F:${doneN + k + 1}/${total}:${f.path}\n`;
+          let stopped = false, made = 0, begun = 0;
+          const more = (rest) => { if (stopped || !rest.length) return; stopped = true; const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000 }); full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`); };
+          const askFor = (f, last) => `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\nNow write ONLY the file \`${f.path}\` — ${f.about}${last ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
+          // Writes one file. live = its text appears in the app while it is being written.
+          const writeOne = async (f, last, live, level) => {
+            if (stopped) return false;
+            const mark = `\u0000F:${doneN + ++begun}/${total}:${f.path}\n`;
             full += mark; send(mark);
-            const ask = `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\nNow write ONLY file ${doneN + k + 1} of ${total}: \`${f.path}\` — ${f.about}${k === list.length - 1 ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
-            let out = "";
-            for await (const piece of answer(models, stepContents(ask, written), stepConfig, false, REFUSAL[lang], START.build)) out += piece;
-            const rs = out.lastIndexOf("\u0000RESET\n");
-            if (rs >= 0) out = out.slice(rs + 7);
+            let out = "", shown = 0;
+            for await (const piece of answer(models, stepContents(askFor(f, last), written), stepConfig, false, REFUSAL[lang], level)) {
+              if (piece.includes("\u0000RESET")) { // the filter made the AI start again: take back what was shown of this file
+                if (live && shown) { send(`\u0000UNDO:${shown}\n`); full = full.slice(0, full.length - shown); }
+                out = ""; shown = 0; continue;
+              }
+              out += piece;
+              if (live && !piece.includes("\u0000ERR:")) { full += piece; send(piece); shown += piece.length; }
+            }
             if (/\u0000ERR:/.test(out) || !out.trim()) {
-              if (k > 0 || doneN > 0) { more(k); } else { const er = "\u0000ERR:" + (/ERR:busy/.test(out) ? "busy" : "ai"); full += er; send(er); }
-              break;
+              if (live && shown) { send(`\u0000UNDO:${shown}\n`); full = full.slice(0, full.length - shown); }
+              return false;
             }
             countUsage();
-            written[f.path] = blockOf(out, f.path) ?? out;
-            full += out.trim() + "\n\n";
-            send(out.trim() + "\n\n");
+            const fixed = asFileBlock(out, f.path);
+            written[f.path] = blockOf(fixed, f.path) ?? "";
+            if (live) {
+              if (blockOf(out, f.path) == null) { send(`\u0000UNDO:${shown}\n`); full = full.slice(0, full.length - shown); full += fixed; send(fixed); }
+              full += "\n\n"; send("\n\n");
+            } else { full += fixed + "\n\n"; send(fixed + "\n\n"); }
+            made++;
+            return true;
+          };
+          // the files everything depends on are written one by one (and shown live); then the pages / screens
+          // are written 3 at a time (they only need the shared files) — much faster for big projects; README last.
+          const isPage = (p) => (/\.html?$/i.test(p) && p !== "index.html") || /(^|\/)(pages|screens)\//i.test(p);
+          const tail = list.filter((f) => /^readme\.md$/i.test(f.path));
+          const pages = list.filter((f) => !tail.includes(f) && isPage(f.path));
+          const core = list.filter((f) => !tail.includes(f) && !pages.includes(f));
+          const order = [...core, ...pages, ...tail];
+          const lastPath = order[order.length - 1].path;
+          const leftFrom = (k) => order.slice(k).filter((f) => !(f.path in written));
+          let k = 0;
+          for (; k < core.length && !stopped; k++) {
+            if (Date.now() - t0 > 190000) { more(leftFrom(k)); break; }
+            if (!(await writeOne(core[k], core[k].path === lastPath, true, START.build))) { if (made || doneN) more(leftFrom(k)); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
           }
-          if (!/\u0000(MORE|ERR):/.test(full)) {
+          for (let i = 0; i < pages.length && !stopped; i += 3) {
+            if (Date.now() - t0 > 170000) { more(leftFrom(core.length + i)); break; }
+            const ok = await Promise.all(pages.slice(i, i + 3).map((f) => writeOne(f, f.path === lastPath, false, 2)));
+            if (ok.includes(false)) { more(leftFrom(core.length + i)); break; }
+          }
+          for (const f of tail) {
+            if (stopped) break;
+            if (Date.now() - t0 > 230000) { more(leftFrom(core.length + pages.length)); break; }
+            if (!(await writeOne(f, f.path === lastPath, true, 2))) { more(leftFrom(core.length + pages.length)); break; }
+          }
+          if (!stopped && !/\u0000(MORE|ERR):/.test(full)) {
             const n = doneN + list.length;
             const end = { ckb: `✅ تەواو بوو — هەموو ${n} فایلەکە دروست کران.\n▶️ لە پیشاندان تاقی بکەرەوە، و هەر شتێکت ویست بیگۆڕم پێم بڵێ.`,
               ar: `✅ انتهى — تم إنشاء كل الملفات (${n}).\n▶️ جرّبه في المعاينة، وأخبرني بأي تغيير تريده.`,
