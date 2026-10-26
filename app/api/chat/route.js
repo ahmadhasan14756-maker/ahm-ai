@@ -1,7 +1,7 @@
 import { serverEnv } from "../../../lib/env";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 import { SAFETY_RULES, GEMINI_SAFETY, GEMINI_SAFETY_RELAXED, REFUSAL, isSafetyStop } from "../../../lib/safety";
-import { gemini, keyCount, jsonCall } from "../../../lib/gemini";
+import { gemini, keyCount, jsonCall, isKeyError, markBadKey } from "../../../lib/gemini";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
@@ -291,7 +291,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
   let sentAny = false;
   // Google's filter often stops normal Kurdish answers by mistake. The first time, start again quietly
   // with the next model and a softer filter ("\u0000RESET" tells the app to clear what it showed).
-  let safetyRetry = false, dropSafety = false, lastWhy = "";
+  let safetyRetry = false, dropSafety = false, lastWhy = "", keyFails = 0;
   const refuseOrRetry = function* () {
     if (safetyRetry && dropSafety) { noteRefusal(lastWhy); yield (sentAny ? "\n\n" : "") + refusal; return true; }
     if (safetyRetry) { dropSafety = true; if (sentAny) yield "\u0000RESET\n"; sentAny = false; return false; } // third try: Google's default filter
@@ -305,6 +305,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
     let search = useSearch && !searchOff.has(model);
     let transientTries = 0;
     let keyTries = 0;
+    let ai = null;
     while (level < THINKING.length) {
       const config = { ...baseConfig, ...(safetyRetry ? { safetySettings: GEMINI_SAFETY_RELAXED } : {}) };
       if (dropSafety) delete config.safetySettings; // this model refused our filter settings: use Google's defaults
@@ -312,7 +313,8 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       if (search) config.tools = [{ googleSearch: {} }];
       try {
         const t0 = Date.now();
-        const stream = await gemini().models.generateContentStream({ model, contents, config });
+        ai = gemini();
+        const stream = await ai.models.generateContentStream({ model, contents, config });
         thinkingOk.set(model + ":" + start, level);
         const sources = new Map();
         let stopped = false;
@@ -339,6 +341,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
         if (search && (isBadConfig(e) || isRateLimit(e))) { search = false; searchOff.add(model); continue; }
         if (isRateLimit(e) && keyTries < keyCount() - 1) { keyTries++; continue; } // same model, another key
+        if (isKeyError(e) && keyFails++ < 3) { markBadKey(ai); continue; } // a wrong / deleted key: skip it, use the next key
         if (isRateLimit(e) || isModelMissing(e)) break;
         if (isTransient(e) && transientTries < 2) { transientTries++; await sleep(700 * transientTries); continue; }
         if (isBadConfig(e)) { level++; continue; }

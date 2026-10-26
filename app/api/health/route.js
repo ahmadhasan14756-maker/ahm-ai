@@ -2,7 +2,7 @@
 import { adminDb } from "../../../lib/server";
 import { serverEnv, SUPABASE_URL, SUPABASE_ANON_KEY } from "../../../lib/env";
 import { redis, hasRedis } from "../../../lib/redis";
-import { keyCount } from "../../../lib/gemini";
+import { keyCount, allKeys } from "../../../lib/gemini";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,15 @@ export async function GET() {
     model: serverEnv("GEMINI_MODEL") || "gemini-3.8-flash",
     ai_keys: keyCount(),
   };
+  // each AI key: does Google accept it? (only its first 2 letters and length are shown — never the key)
+  out.ai_key_check = await Promise.all(allKeys().map(async (k, i) => {
+    let ok = "?";
+    try {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", { headers: { "x-goog-api-key": k }, signal: AbortSignal.timeout(6000) });
+      ok = r.ok ? "ok" : r.status === 400 || r.status === 401 || r.status === 403 ? "NOT VALID (" + r.status + ")" : "error " + r.status;
+    } catch { ok = "no answer"; }
+    return { key: i + 1, starts: k.slice(0, 2), length: k.length, google: ok };
+  }));
   out.redis = !hasRedis() ? "missing" : (await redis("PING")) === "PONG" ? "ok" : "ERROR";
   try {
     const { error } = await adminDb().from("jobs").select("id", { head: true, count: "exact" });
