@@ -10,6 +10,7 @@ const CodeEditor = dynamic(() => import("./CodeEditor"), {
 });
 
 const P = {
+  cloud: <path d="M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z" />,
   android: <><rect x="5" y="3" width="14" height="18" rx="4" /><path d="M10 6h4M9 18h6" /></>,
   monitor: <><rect x="2.5" y="4" width="19" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></>,
   rotate: <><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" /><path d="M21 3v5h-5" /><rect x="8" y="10" width="8" height="11" rx="1.5" /></>,
@@ -254,7 +255,7 @@ function Desktop({ html, nonce, box, page }) {
   );
 }
 
-export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onAutoFix, onPublish, publishing, kind = "website", name = "", maxed = false, onMax, onMin }) {
+export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, onAutoFix, onPublish, publishing, kind = "website", name = "", maxed = false, onMax, onMin, cloud = false, onCloud }) {
   const zipName = (String(name).replace(/[\\/:*?"<>|#%]+/g, " ").replace(/\s+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "AHM-AI-" + kind);
   const names = Object.keys(files);
   const [tab, setTab] = useState("preview");
@@ -329,7 +330,12 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
     if (active && files[active] != null) return;
     setActive(names.find((n) => n === "index.html") || names.find((n) => /readme\.md$/i.test(n)) || names[0] || null);
   }, [names.join("|")]);
-  useEffect(() => { if (!html && names.length) setTab("code"); }, [!!html, names.length]);
+  // no page to show yet → the Files tab; as soon as a page exists, back to the preview (only if we switched by ourselves)
+  const autoCode = useRef(false);
+  useEffect(() => {
+    if (!html && names.length) { if (tab !== "code") { autoCode.current = true; setTab("code"); } }
+    else if (html && autoCode.current) { autoCode.current = false; setTab("preview"); }
+  }, [!!html, names.length]);
 
   function openFile(p) {
     setActive(p);
@@ -385,6 +391,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
           <button className="icon-btn sm gold" aria-label={t("zip")} title={t("zip")} disabled={!names.length} onClick={() => downloadZip(files, zipName)}>
             <Svg d={P.zip} />
           </button>
+          {onCloud && <button className={"icon-btn sm cloud-btn" + (cloud ? " on" : "")} aria-label={t("cloudTitle")} title={t("cloudTitle") + (cloud ? " ✅" : "")} onClick={onCloud}><Svg d={P.cloud} size={18} /></button>}
           {onMin && !maxed && <button className="icon-btn sm ws-size" aria-label={t("pvHide")} title={t("pvHide")} onClick={onMin}><Svg d={P.paneOff} /></button>}
           {onMax && <button className={"icon-btn sm ws-size" + (maxed ? " on" : "")} aria-label={t(maxed ? "pvRestore" : "pvMax")} title={t(maxed ? "pvRestore" : "pvMax")} onClick={onMax}><Svg d={maxed ? P.shrink : P.expand} /></button>}
           <button className="icon-btn sm pv-close" aria-label={t("close")} onClick={onClose}><Svg d={P.close} /></button>

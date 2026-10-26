@@ -173,12 +173,25 @@ function readStep(tok, uid) {
 const cleanList = (files) => (Array.isArray(files) ? files : [])
   .map((f) => ({ path: String(f?.path || "").trim().replace(/^\.?\/+/, "").replace(/\\/g, "/").slice(0, 120), about: String(f?.about || "").slice(0, 200) }))
   .filter((f) => f.path && !f.path.includes("..") && /\.(html?|css|m?js|json|md|svg|txt|webmanifest|py|php|java|cs|ts|tsx|jsx|dart|xml|yml|yaml|sql)$/i.test(f.path))
-  .filter((f, i, a) => a.findIndex((x) => x.path === f.path) === i)
+  .filter((f, i, a) => a.findIndex((x) => x.path === f.path) === i && f.path !== "js/ahm-db.js")
   .slice(0, 18);
 const blockOf = (text, path) => {
   const m = new RegExp("```file:" + path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[ \\t]*\\n([\\s\\S]*?)\\n```").exec(text);
   return m ? m[1] : null;
 };
+
+// The project has a cloud database (js/ahm-db.js → window.AHM.db): data is shared by every phone and computer.
+const CLOUD_PROMPT = `
+CLOUD DATABASE (this project has one — use it for ALL the app's data)
+- The file js/ahm-db.js already exists. NEVER write, change or delete it. Load it first on every page: <script src="js/ahm-db.js"></script> before your own scripts.
+- Save every record (patients, products, sales, users, appointments …) with the async API — NOT localStorage (localStorage only for small UI settings like theme):
+  const rows = await AHM.db.list("patients");            // array of objects, each with an "id"
+  const saved = await AHM.db.save("patients", {name, phone}); // returns the object with its new "id"; pass an object WITH id to update it
+  await AHM.db.remove("patients", id);
+  const ok = await AHM.db.login(password);               // the login screen: true if the password is right (the owner sets it in AHM AI; until then any password works)
+  AHM.db.logout();
+- Keep one data layer (js/data.js) that wraps AHM.db for the rest of the app. Every call is async: show a small loading state, catch errors and show a friendly message in the user's language (e.g. "no internet"), and refresh the lists after saving. If an error has code "login_needed", show the login screen.
+- Data is live for everyone: add a "🔄" refresh button on tables. Demo data: only if the collection is empty, save a few example records once.`;
 
 const PLAN_PROMPT = (kind) => `
 PLANNING STEP (do not build yet)
@@ -325,6 +338,7 @@ export async function POST(req) {
             .map(([k, v]) => (v.startsWith("data:") ? [k, `[image file — keep as is, refer to it by its path "${k}"]`] : [k, v]))
         : [];
 
+    const cloudDb = build && (body.cloudDb === true || project.some(([k]) => k === "js/ahm-db.js"));
     let total = 0;
     const attachments = (Array.isArray(body.images) ? body.images : [])
       .filter((a) => a && ATTACH_TYPES.test(a.mimeType) && typeof a.data === "string")
@@ -392,7 +406,7 @@ VOICE CONVERSATION MODE (most important rules)
 - Then your spoken reply: natural, warm, conversational, short (1–4 sentences, longer only if they asked for an explanation). No Markdown, no lists, no symbols, no emojis, no links, no code — only words that sound good when read aloud. Write numbers so they can be spoken.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind) : BUILD_PROMPT + KIND_PROMPT[buildKind]) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
+      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind) + (cloudDb ? "\nThe project will have a cloud database: data is saved online and shared by every device — mention it in the plan in one short line." : "") : BUILD_PROMPT + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "")) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
       maxOutputTokens: (file || build) && !planOnly ? 32768 : 8192,
       safetySettings: GEMINI_SAFETY,
     };
@@ -402,7 +416,7 @@ VOICE CONVERSATION MODE (most important rules)
 
     // A new project is built one file after another; "cont" = a signed note to continue the same build (not counted again).
     const contTok = build && !planOnly && !file ? readStep(body.cont, user.id) : null;
-    const stepBuild = build && !planOnly && !file && serverEnv("STEP_BUILD") !== "0" && (!!contTok || project.length === 0);
+    const stepBuild = build && !planOnly && !file && serverEnv("STEP_BUILD") !== "0" && (!!contTok || project.filter(([k]) => k !== "js/ahm-db.js").length === 0);
     const stepContents = (extra, written) => messages.map((m, i) => {
       let text = m.content.slice(0, 30000);
       const last = i === messages.length - 1;

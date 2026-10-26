@@ -2038,3 +2038,10 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .pc.browser .pc-bar span svg { color: #22a35a; }
 .pc.browser .pc-bar em { font-style: normal; color: #1f2329; }
 .pc-inner.pv-load { position: absolute; }
+
+/* ===== Cloud database ===== */
+.cloud-btn.on { color: #38bdf8; }
+.cloud-on { font-weight: 700; color: var(--text); }
+.cloud-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.cloud-row .gold-btn, .cloud-row .ghost-btn { width: auto; flex: 1; }
+.cloud-msg { margin-top: 10px; font-weight: 600; }

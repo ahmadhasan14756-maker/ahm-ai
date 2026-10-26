@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabase";
 import { TELEGRAM_BOT, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/env";
 import { DEFAULT_SETTINGS } from "../lib/plans";
 import { parseFiles, applyChanges, buildPreview, downloadZip, findMissing } from "../lib/builder";
+import { DB_FILE, dbFile } from "../lib/appdb";
 import { importZip } from "../lib/zipimport";
 import { LANGS, dirOf, makeT } from "../lib/i18n";
 import Workspace, { DevicePreview } from "../components/Workspace";
@@ -821,6 +822,55 @@ function Sheet({ label, onClose, children }) {
         {children}
       </div>
     </div>
+  );
+}
+
+// ☁️ Cloud database of a project: turn it on, see how many records it has, set the app's admin password.
+function CloudSheet({ site, token, onEnable, onClose }) {
+  const { t } = useLang();
+  const [info, setInfo] = useState(null);
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const api = async (body) => {
+    const r = await fetch("/api/appdata", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "db");
+    return j;
+  };
+  useEffect(() => { if (site) api({ a: "info", site }).then(setInfo).catch(() => {}); }, [site]);
+  const savePw = async (value) => {
+    setBusy("pw"); setMsg("");
+    try { const j = await api({ a: "setpw", site, password: value }); setInfo((x) => ({ ...(x || {}), hasPassword: j.hasPassword })); setPw(""); setMsg(t("cloudSaved")); }
+    catch { setMsg(t("errAi")); }
+    setBusy("");
+  };
+  return (
+    <Sheet label={t("cloudTitle")} onClose={onClose}>
+      <h3>☁️ {t("cloudTitle")}</h3>
+      {!site ? (
+        <>
+          <p className="muted">{t("cloudOff")}</p>
+          <button className="gold-btn" disabled={!!busy} onClick={async () => { setBusy("on"); setMsg(""); const err = await onEnable(); if (err) setMsg(t(err === "no_table" ? "cloudErrTable" : err === "too_many" ? "cloudErrMany" : "errAi")); setBusy(""); }}>
+            {busy === "on" ? <span className="mini-spin" /> : "☁️"} {t("cloudEnable")}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="cloud-on">✅ {t("cloudOn")}</p>
+          {info && <p className="muted">{t("cloudRows").replace("{n}", info.rows ?? 0)} · {info.hasPassword ? "🔒 " + t("cloudHasPw") : "🔓 " + t("cloudNoPw")}</p>}
+          <label className="house-label">{t("cloudPw")}
+            <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••" autoComplete="new-password" />
+          </label>
+          <small className="muted">{t("cloudPwHint")}</small>
+          <div className="cloud-row">
+            <button className="gold-btn" disabled={!pw.trim() || !!busy} onClick={() => savePw(pw.trim())}>{busy === "pw" ? <span className="mini-spin" /> : "🔒"} {t("cloudPwSave")}</button>
+            {info?.hasPassword && <button className="ghost-btn" disabled={!!busy} onClick={() => savePw("")}>{t("cloudPwRemove")}</button>}
+          </div>
+        </>
+      )}
+      {msg && <p className="cloud-msg" role="status">{msg}</p>}
+    </Sheet>
   );
 }
 
@@ -2192,6 +2242,24 @@ function Main({ session }) {
   }, [ready]);
 
   // Edits made by hand in the code editor are saved into the current project.
+  // a new cloud database for a project → { site } or { error }
+  async function makeCloud() {
+    try {
+      const r = await fetch("/api/appdata", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ a: "create" }) });
+      const j = await r.json().catch(() => ({}));
+      return r.ok && j.site ? { site: j.site } : { error: j.error || "db" };
+    } catch { return { error: "db" }; }
+  }
+  // turn the cloud database on for the open project, then ask the AI to move the app's data to it
+  async function enableCloud() {
+    const made = await makeCloud();
+    if (!made.site) return made.error;
+    const files = { ...project, [DB_FILE]: dbFile(made.site, window.location.origin + "/api/appdata") };
+    patch(active.id, (c) => ({ ...c, cloudSite: made.site, project: files }));
+    setSheet(null);
+    if (Object.keys(project).length) setTimeout(() => sendRef.current?.(t("cloudSwitch")), 400);
+    return null;
+  }
   function setProjectFiles(files) {
     patch(active.id, (c) => ({ ...c, project: files, title: c.title || Object.keys(files)[0] || "project" }));
     setActiveId(active.id);
@@ -2432,7 +2500,7 @@ function Main({ session }) {
     const id = active.id;
     const m = target;
     const sentFile = m === "chat" ? file : null;
-    const base = project;
+    let base = project;
     // 📸 a picture of a design sent in a website/app chat is used again for the build itself (screenshot → code)
     const photos = sentImages.filter((im) => !im.voice && !im.docName && /^image\//.test(im.mimeType || ""));
     if (m === "build" && photos.length) designRef.current[id] = photos.slice(0, 3);
@@ -2441,6 +2509,16 @@ function Main({ session }) {
     // Website / app / system, and "plan first": a new project gets a plan to approve before anything is built.
     const kindNow = active.buildKind || guessKind(text);
     const planOnly = m === "build" && !Object.keys(base).length && !active.planned && !opts.fromPlan;
+    // ☁️ a new SYSTEM gets a cloud database by itself: its data is shared by every phone and computer
+    let cloudSite = active.cloudSite || null;
+    if (m === "build" && opts.fromPlan && !Object.keys(base).length && kindNow === "system" && !cloudSite) {
+      const made = await makeCloud();
+      if (made.site) {
+        cloudSite = made.site;
+        base = { [DB_FILE]: dbFile(made.site, window.location.origin + "/api/appdata") };
+        patch(id, (c) => ({ ...c, cloudSite: made.site, project: base }));
+      }
+    }
     const put = (msgs, extra = {}) => patch(id, (c) => ({ ...c, ...extra, mode: m, messages: msgs, title: c.title || text.slice(0, 60),
       ...(m === "build" ? { buildKind: c.buildKind || kindNow } : {}), ...(opts.fromPlan ? { planned: true } : {}) }));
     // Every answer has a job id: if the phone leaves the app, the server keeps working and saves it.
@@ -2496,6 +2574,7 @@ function Main({ session }) {
           buildKind: m === "build" ? kindNow : undefined,
           planOnly: planOnly || undefined,
           cont: opts.cont || undefined,
+          cloudDb: m === "build" && (!!cloudSite || (planOnly && kindNow === "system")) ? true : undefined,
           jobId,
         }),
       });
@@ -3084,6 +3163,7 @@ function Main({ session }) {
             <div className={"preview-col" + (showPreview ? " open" : "") + (pvW ? " sized" : "")} style={pvW && pvMode === "normal" ? { width: pvW } : undefined}>
               <Workspace files={project} setFiles={setProjectFiles} busy={busy} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); setPvMode("normal"); send(q); }}
+                cloud={!!active.cloudSite} onCloud={() => setSheet({ type: "cloud" })}
                 onAutoFix={(err) => { if (busy || autoFixes.current >= 2) return false; autoFixes.current++; autoRef.current?.(t("autoFix").replace("{e}", err), 2); return true; }}
                 maxed={pvMode === "max"} onMax={() => setPvMode(pvMode === "max" ? "normal" : "max")} onMin={() => setPvMode("min")} />
             </div>
@@ -3106,6 +3186,7 @@ function Main({ session }) {
           inst={inst} onInstallGuide={() => setSheet({ type: "a2hs" })} onAbout={() => setSheet({ type: "about" })} />
       )}
       {sheet?.type === "screen" && <ScreenGuide info={sheet} onClose={() => setSheet(null)} />}
+      {sheet?.type === "cloud" && <CloudSheet site={active.cloudSite} token={token} onEnable={enableCloud} onClose={() => setSheet(null)} />}
       {sheet?.type === "codePreview" && sheet.html && (
         <Sheet label={t("preview")} onClose={() => setSheet(null)}>
           <div className="pv-sheet"><DevicePreview html={sheet.html} t={t} /></div>
