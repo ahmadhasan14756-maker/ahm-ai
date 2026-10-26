@@ -7,6 +7,7 @@ import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
 import { saveJob, validJobId } from "../../../lib/jobs";
 import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
+import { redis, hasRedis } from "../../../lib/redis";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { sendPush } from "../../../lib/push";
 export const runtime = "nodejs";
@@ -282,14 +283,16 @@ const searchOff = new Set(); // models where Google search is not allowed
   - unsupported setting → simpler setting
   - an error before any text was sent → start again quietly
 */
+const noteRefusal = (why) => { if (hasRedis()) redis("LPUSH", "dbg:refusals", JSON.stringify({ t: new Date().toISOString(), why: String(why).replace(/key=[^&\s]+/gi, "key=…").slice(0, 160) })).then(() => redis("LTRIM", "dbg:refusals", 0, 19)).catch(() => {}); };
 async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb, start = 1) {
   let lastErr = null;
   let sentAny = false;
   // Google's filter often stops normal Kurdish answers by mistake. The first time, start again quietly
   // with the next model and a softer filter ("\u0000RESET" tells the app to clear what it showed).
-  let safetyRetry = false;
+  let safetyRetry = false, dropSafety = false, lastWhy = "";
   const refuseOrRetry = function* () {
-    if (safetyRetry) { yield (sentAny ? "\n\n" : "") + refusal; return true; }
+    if (safetyRetry && dropSafety) { noteRefusal(lastWhy); yield (sentAny ? "\n\n" : "") + refusal; return true; }
+    if (safetyRetry) { dropSafety = true; if (sentAny) yield "\u0000RESET\n"; sentAny = false; return false; } // third try: Google's default filter
     safetyRetry = true;
     if (sentAny) yield "\u0000RESET\n";
     sentAny = false;
@@ -302,6 +305,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
     let keyTries = 0;
     while (level < THINKING.length) {
       const config = { ...baseConfig, ...(safetyRetry ? { safetySettings: GEMINI_SAFETY_RELAXED } : {}) };
+      if (dropSafety) delete config.safetySettings; // this model refused our filter settings: use Google's defaults
       if (THINKING[level]) config.thinkingConfig = THINKING[level];
       if (search) config.tools = [{ googleSearch: {} }];
       try {
@@ -311,7 +315,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         const sources = new Map();
         let stopped = false;
         for await (const chunk of stream) {
-          if (isSafetyStop(chunk)) stopped = true;
+          if (isSafetyStop(chunk)) { stopped = true; lastWhy = model + " stop: " + (chunk?.promptFeedback?.blockReason || chunk?.candidates?.[0]?.finishReason); }
           const text = chunk.text;
           if (text) { if (!sentAny) console.log("first words", model, level, Date.now() - t0, "ms"); sentAny = true; yield text; }
           const g = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
@@ -327,7 +331,9 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       } catch (e) {
         lastErr = e;
         console.error("gemini", model, level, errText(e));
-        if (/SAFETY|PROHIBITED_CONTENT|BLOCKLIST/i.test(errText(e))) { if (yield* refuseOrRetry()) return; break; }
+        // an error about our filter SETTINGS (400, "safety_settings …") is not a refusal: try again without them
+        if (!dropSafety && /400|INVALID_ARGUMENT/i.test(errCode(e)) && /safety|harm_?category|threshold/i.test(errText(e))) { dropSafety = true; continue; }
+        if (/PROHIBITED_CONTENT|BLOCKLIST|blocked.*safety|SAFETY.*block|finishReason.*SAFETY/i.test(errText(e))) { lastWhy = model + " error: " + errText(e); if (yield* refuseOrRetry()) return; break; }
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
         if (search && (isBadConfig(e) || isRateLimit(e))) { search = false; searchOff.add(model); continue; }
         if (isRateLimit(e) && keyTries < keyCount() - 1) { keyTries++; continue; } // same model, another key
@@ -338,7 +344,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       }
     }
   }
-  if (safetyRetry && !sentAny) { yield refusal; return; }
+  if (safetyRetry && !sentAny) { noteRefusal(lastWhy + " | last: " + errText(lastErr)); yield refusal; return; }
   yield isRateLimit(lastErr) ? "\u0000ERR:busy" : "\u0000ERR:ai";
 }
 

@@ -31,5 +31,7 @@ export async function GET() {
     out.database = "ERROR: " + e.message;
   }
 
+  // why recent answers were refused (reason codes from Google only — no user messages)
+  if (hasRedis()) { try { out.recent_refusals = ((await redis("LRANGE", "dbg:refusals", 0, 9)) || []).map((x) => { try { return JSON.parse(x); } catch { return x; } }); } catch {} }
   return Response.json(out, { headers: { "Cache-Control": "no-store" } });
 }
