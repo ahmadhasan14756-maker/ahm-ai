@@ -337,6 +337,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       } catch (e) {
         lastErr = e;
         console.error("gemini", model, level, errText(e));
+        noteDebug("ai_errors", { where: "try", model, level, error: errText(e).replace(/key=[^&\s]+/gi, "key=…").slice(0, 160) });
         // an error about our filter SETTINGS (400, "safety_settings …") is not a refusal: try again without them
         if (!dropSafety && /400|INVALID_ARGUMENT/i.test(errCode(e)) && /safety|harm_?category|threshold/i.test(errText(e))) { dropSafety = true; continue; }
         if (/PROHIBITED_CONTENT|BLOCKLIST|blocked.*safety|SAFETY.*block|finishReason.*SAFETY/i.test(errText(e))) { lastWhy = model + " error: " + errText(e); if (yield* refuseOrRetry()) return; break; }
@@ -597,30 +598,26 @@ VOICE CONVERSATION MODE (most important rules)
           // the files everything depends on are written one by one (and shown live); then the pages / screens
           // are written 3 at a time (they only need the shared files) — much faster for big projects; README last.
           const isPage = (p) => (/\.html?$/i.test(p) && p !== "index.html") || /(^|\/)(pages|screens)\//i.test(p);
-          // README and the pages don't depend on each other: they are written together, 4 at a time
-          const tail = [];
+          // Speed: only the first two files (the shared design and the main page / app shell) are written one by one,
+          // live on screen; every other file only needs those, so they are written 4 at a time. No long "thinking" for
+          // any file (it made the first words wait up to a minute per file).
           const pages = list.filter((f) => isPage(f.path) || /^readme\.md$/i.test(f.path));
           const core = list.filter((f) => !pages.includes(f));
-          // styles, data and text files need little thinking (faster); the main page and the logic think a bit more
-          // only the main page (it sets the structure for everything) thinks a little; the rest writes straight away — much faster
-          const levelOf = (p) => (p === "index.html" || /(^|\/)(app|main)\.js$/i.test(p) ? START.build : 2);
-          const order = [...core, ...pages, ...tail];
+          const firstN = doneN ? 0 : Math.min(2, core.length);
+          const order = [...core, ...pages];
           const lastPath = order[order.length - 1].path;
-          const leftFrom = (k) => order.slice(k).filter((f) => !(f.path in written));
-          let k = 0;
-          for (; k < core.length && !stopped; k++) {
-            if (Date.now() - t0 > BUDGET) { await more(leftFrom(k)); break; }
-            if (!(await writeOne(core[k], core[k].path === lastPath, true, levelOf(core[k].path)))) { if (made || doneN) await more(leftFrom(k)); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
+          const leftAll = () => order.filter((f) => !(f.path in written));
+          for (let k = 0; k < firstN && !stopped; k++) {
+            if (Date.now() - t0 > BUDGET) { await more(leftAll()); break; }
+            if (!(await writeOne(core[k], core[k].path === lastPath, true, 2))) { if (made || doneN) await more(leftAll()); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
           }
-          for (let i = 0; i < pages.length && !stopped; i += 4) {
-            if (Date.now() - t0 > BUDGET * 0.9) { await more(leftFrom(core.length + i)); break; }
-            const ok = await Promise.all(pages.slice(i, i + 4).map((f) => writeOne(f, f.path === lastPath, false, 2)));
-            if (ok.includes(false)) { await more(leftFrom(core.length + i)); break; }
-          }
-          for (const f of tail) {
-            if (stopped) break;
-            if (Date.now() - t0 > BUDGET * 1.2) { await more(leftFrom(core.length + pages.length)); break; }
-            if (!(await writeOne(f, f.path === lastPath, true, 2))) { await more(leftFrom(core.length + pages.length)); break; }
+          const rest = [...core.slice(firstN), ...pages];
+          for (let i = 0; i < rest.length && !stopped; i += 4) {
+            if (Date.now() - t0 > BUDGET * 0.85) { await more(leftAll()); break; }
+            const batch = rest.slice(i, i + 4);
+            // a single file alone (e.g. the last one) is shown live
+            const ok = await Promise.all(batch.map((f) => writeOne(f, f.path === lastPath, batch.length === 1, 2)));
+            if (ok.includes(false)) { await more(leftAll()); break; }
           }
           noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
           if (!stopped && !/\u0000(MORE|ERR):/.test(full)) {
