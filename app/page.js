@@ -13,6 +13,7 @@ import Workspace, { DevicePreview } from "../components/Workspace";
 import Learn from "../components/Learn";
 import HouseStudio from "../components/HouseStudio";
 import SlidesStudio from "../components/SlidesStudio";
+import OfficeCard from "../components/OfficeCard";
 import DesignStudio from "../components/DesignStudio";
 import VoiceMode from "../components/VoiceMode";
 import Landing from "../components/Landing";
@@ -367,7 +368,7 @@ function Auth({ initialMode = "login", onBack, onRecovery }) {
 
 /* ---------------- Markdown code blocks ---------------- */
 function CodeBlock({ className, children }) {
-  const { t } = useLang();
+  const { t, lang: uiLang } = useLang();
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
   const text = String(children).replace(/\n$/, "");
@@ -384,6 +385,7 @@ function CodeBlock({ className, children }) {
   }
 
   if (lang === "suggest") return <Suggestions text={text} />;
+  if (lang === "ahm-file") return <OfficeCard text={text} t={t} uiLang={uiLang} />;
 
   if (lang.startsWith("file:")) {
     return (
@@ -3086,7 +3088,7 @@ function Main({ session }) {
                       <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} onVoiceLimit={() => showLimit("voice")} />
                     )}
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !m.studio && !(busy && i === messages.length - 1) && (
-                      <AnswerActions text={m.content} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
+                      <AnswerActions text={m.content.replace(/```ahm-file\s*\n[\s\S]*?(\n```|$)/g, "")} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
                     )}
                     {mode === "build" && m.plan && !hasFiles && !busy && i === messages.length - 1 && !m.failed && (
                       <div className="plan-actions">

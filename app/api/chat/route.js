@@ -2,6 +2,7 @@ import { serverEnv } from "../../../lib/env";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 import { SAFETY_RULES, GEMINI_SAFETY, GEMINI_SAFETY_RELAXED, REFUSAL, isSafetyStop } from "../../../lib/safety";
 import { gemini, keyCount, jsonCall, isKeyError, markBadKey } from "../../../lib/gemini";
+import { OFFICE_WORDS, officeTurn, lastFile, stripFiles } from "../../../lib/officeServer";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
@@ -400,7 +401,7 @@ export async function POST(req) {
 
     // ---- build the conversation ----
     const contents = messages.map((m, i) => {
-      let text = m.content.slice(0, 30000);
+      let text = stripFiles(m.content).slice(0, 30000); // made files (```ahm-file JSON) are only noise for a normal answer
       const last = i === messages.length - 1;
       if (last && file) {
         text = `File name: ${String(file.name || "file").slice(0, 200)}\n\`\`\`\n${file.content}\n\`\`\`\n\n${text}`;
@@ -491,6 +492,7 @@ VOICE CONVERSATION MODE (most important rules)
     // everyday questions think the least (fast first words); maths, code and long questions think a bit more
     const hard = /[=+*/^√∑]|\d+\s*[x×]\s*\d+|```|function|code|کۆد|بیرکاری|حیساب|معادلة|رياضيات|calculate|prove|equation/i.test(lastText) || lastText.length > 1200;
     const startLevel = planOnly ? 2 : kind === "chat" && !hard ? 2 : START[kind];
+    const officeGate = kind === "chat" && !tutor && !body.voiceNote && serverEnv("OFFICE") !== "0" && (OFFICE_WORDS.test(lastText) || lastFile(messages).recent);
     let ctrl = null;
     let open = true;
     let left = false; // the user left the app before the answer was finished → send a notification
@@ -613,7 +615,25 @@ VOICE CONVERSATION MODE (most important rules)
             full += end; send(end);
           }
         } else {
-          for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
+          // A real Excel / PowerPoint / Word / PDF file asked for (or a change to the file made just before):
+          // the AI writes its content as JSON and the phone turns it into the file (lib/office.js).
+          let office = null;
+          if (officeGate) {
+            // "making your file…" only when a file was clearly asked for (a follow-up may just be a question)
+            const note = OFFICE_WORDS.test(lastText) ? { ckb: "📄 فایلەکەت ئامادە دەکەم…", ar: "📄 أجهّز ملفك…", en: "📄 Making your file…" }[lang] || "" : "";
+            if (note) { full += note; send(note); }
+            try { office = await officeTurn({ messages, lang, attachments }); }
+            catch (e) { if (e?.message === "unsafe") office = { refused: true }; else console.error("office", String(e?.message || e).slice(0, 200)); }
+            if (note) { full += "\u0000RESET\n"; send("\u0000RESET\n"); }
+          }
+          if (office?.refused) { full += REFUSAL[lang]; send(REFUSAL[lang]); }
+          else if (office) {
+            countUsage();
+            const t = office.file.type, made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
+            const txt = (office.reply || made) + "\n\n```ahm-file\n" + JSON.stringify(office.file) + "\n```\n";
+            noteDebug("builds", { mode: "office", kind: t, result: "ok" });
+            full += txt; send(txt);
+          } else for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
             if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
             full += piece;
             send(piece);

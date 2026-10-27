@@ -15,7 +15,7 @@ const SYSTEM = `Classify the user's message (Kurdish Sorani, Arabic or English, 
 - "build": they want you to CREATE or CHANGE a whole website, web app, mobile app, game, program or multi-file code project for them.
 - "image": they want you to CREATE or EDIT a picture: draw, generate, design a logo, poster, wallpaper, illustration, photo, or edit / merge photos.
 - "construct": house/building design ideas, floor plans, room layouts, construction materials or building cost estimates, construction terms.
-- "chat": everything else — questions, explanations, advice, translation, writing text, predictions, explaining or fixing a small piece of code, short code snippets.
+- "chat": everything else — making an Excel, PowerPoint, Word or PDF file, questions, explanations, advice, translation, writing text, predictions, explaining or fixing a small piece of code, short code snippets.
 When unsure, answer "chat".`;
 
 export async function POST(req) {
