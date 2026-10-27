@@ -504,6 +504,8 @@ VOICE CONVERSATION MODE (most important rules)
     const chainN = Math.max(0, Math.min(10, Number(body.chainN) || 0));
     const chained = body.chain === true && !!contTok && !!jobId;
     let chainNext = null, writtenAll = {};
+    // the app told us it went to the background (iPhone often keeps the connection half-open, so "left" alone is not enough)
+    const awayNow = async () => { if (left) return true; if (!jobId || !hasRedis()) return false; try { return (await redis("GET", "away:" + jobId)) === "1"; } catch { return false; } };
     const work = (async () => {
       let full = "";
       if (chained) { const prev = await readJob(user.id, jobId); full = String(prev?.result || "").replace(/\u0000MORE:[^\n]*\n/g, ""); }
@@ -550,15 +552,15 @@ VOICE CONVERSATION MODE (most important rules)
           } catch (e) { console.error("change plan", errText(e)); }
         }
         if (list && list.length >= 2) {
-          const t0 = Date.now(), written = {}, BUDGET = Number(serverEnv("STEP_BUDGET_MS")) || 190000; // time for one server run
+          const t0 = Date.now(), written = {}, BUDGET = Number(serverEnv("STEP_BUDGET_MS")) || 210000; // time for one server run
           const stepConfig = { ...baseConfig, systemInstruction: baseConfig.systemInstruction + STEP_RULES };
           const listText = list.map((f, i) => `${doneN + i + 1}. ${f.path} — ${f.about}`).join("\n");
           let stopped = false, made = 0, begun = 0;
-          const more = (rest) => {
+          const more = async (rest) => {
             if (stopped || !rest.length) return; stopped = true;
             const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000, ed: editing ? 1 : 0 });
             writtenAll = written;
-            if ((left || chained) && jobId && chainN < 8) { chainNext = tok; return; } // nobody is watching: the server goes on by itself
+            if ((chained || await awayNow()) && jobId && chainN < 8) { chainNext = tok; send("\u0000CHAIN\n"); return; } // nobody is watching: the server goes on by itself
             full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`);
           };
           const askFor = (f, last) => (editing
@@ -600,24 +602,25 @@ VOICE CONVERSATION MODE (most important rules)
           const pages = list.filter((f) => isPage(f.path) || /^readme\.md$/i.test(f.path));
           const core = list.filter((f) => !pages.includes(f));
           // styles, data and text files need little thinking (faster); the main page and the logic think a bit more
-          const levelOf = (p) => (/\.(css|json|md|txt|svg)$/i.test(p) || /(^|\/)data\.js$/i.test(p) ? 2 : START.build);
+          // only the main page (it sets the structure for everything) thinks a little; the rest writes straight away — much faster
+          const levelOf = (p) => (p === "index.html" || /(^|\/)(app|main)\.js$/i.test(p) ? START.build : 2);
           const order = [...core, ...pages, ...tail];
           const lastPath = order[order.length - 1].path;
           const leftFrom = (k) => order.slice(k).filter((f) => !(f.path in written));
           let k = 0;
           for (; k < core.length && !stopped; k++) {
-            if (Date.now() - t0 > BUDGET) { more(leftFrom(k)); break; }
-            if (!(await writeOne(core[k], core[k].path === lastPath, true, levelOf(core[k].path)))) { if (made || doneN) more(leftFrom(k)); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
+            if (Date.now() - t0 > BUDGET) { await more(leftFrom(k)); break; }
+            if (!(await writeOne(core[k], core[k].path === lastPath, true, levelOf(core[k].path)))) { if (made || doneN) await more(leftFrom(k)); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
           }
           for (let i = 0; i < pages.length && !stopped; i += 4) {
-            if (Date.now() - t0 > BUDGET * 0.9) { more(leftFrom(core.length + i)); break; }
+            if (Date.now() - t0 > BUDGET * 0.9) { await more(leftFrom(core.length + i)); break; }
             const ok = await Promise.all(pages.slice(i, i + 4).map((f) => writeOne(f, f.path === lastPath, false, 2)));
-            if (ok.includes(false)) { more(leftFrom(core.length + i)); break; }
+            if (ok.includes(false)) { await more(leftFrom(core.length + i)); break; }
           }
           for (const f of tail) {
             if (stopped) break;
-            if (Date.now() - t0 > BUDGET * 1.2) { more(leftFrom(core.length + pages.length)); break; }
-            if (!(await writeOne(f, f.path === lastPath, true, 2))) { more(leftFrom(core.length + pages.length)); break; }
+            if (Date.now() - t0 > BUDGET * 1.2) { await more(leftFrom(core.length + pages.length)); break; }
+            if (!(await writeOne(f, f.path === lastPath, true, 2))) { await more(leftFrom(core.length + pages.length)); break; }
           }
           noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
           if (!stopped && !/\u0000(MORE|ERR):/.test(full)) {
@@ -688,7 +691,7 @@ VOICE CONVERSATION MODE (most important rules)
         full += `\u0000MORE:${chainNext}\n`;
       }
       if (jobId) await saveJob(user.id, jobId, "done", full);
-      if (left) {
+      if (await awayNow()) {
         const done = { ckb: ["✅ AHM AI — تەواو بوو", build ? "پرۆژەکەت ئامادەیە. بۆ بینین دایبگرە." : "وەڵامەکەت ئامادەیە. بۆ بینین دایبگرە."],
           ar: ["✅ AHM AI — انتهى", build ? "مشروعك جاهز. اضغط لعرضه." : "ردّك جاهز. اضغط لعرضه."],
           en: ["✅ AHM AI — done", build ? "Your project is ready. Tap to see it." : "Your answer is ready. Tap to see it."] }[lang];

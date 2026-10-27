@@ -2044,6 +2044,21 @@ function Main({ session }) {
   const active = chats.find((c) => c.id === activeId) || draft;
   const mode = active.mode === "studio" || active.mode === "image" ? "chat" : active.mode; // old design chats open as normal chats
   const messages = active.messages;
+  // Tell the server when the app goes to the background / comes back: a long build then goes on by itself
+  // on the server, and a notification is sent when it is finished.
+  useEffect(() => {
+    const tell = () => {
+      const away = document.visibilityState === "hidden";
+      const ids = new Set(liveJobs.current);
+      for (const c of chatsRef.current) for (const x of c.messages.slice(-2)) if (x.pending?.job) ids.add(x.pending.job);
+      if (!ids.size) return;
+      const data = JSON.stringify({ ids: [...ids].slice(0, 5), away });
+      try { if (!(navigator.sendBeacon && navigator.sendBeacon("/api/job", new Blob([data], { type: "application/json" })))) fetch("/api/job", { method: "POST", body: data, headers: { "Content-Type": "application/json" }, keepalive: true }).catch(() => {}); } catch {}
+    };
+    document.addEventListener("visibilitychange", tell);
+    window.addEventListener("pagehide", tell);
+    return () => { document.removeEventListener("visibilitychange", tell); window.removeEventListener("pagehide", tell); };
+  }, []);
   const activeIdRef = useRef(null);
   activeIdRef.current = active.id;
   // an answer still being finished on the server (the connection broke, e.g. the app went to the background)
@@ -2707,6 +2722,7 @@ function Main({ session }) {
         for (const fm of acc.matchAll(/\u0000F:(\d+)\/(\d+):([^\n]*)\n/g)) prog = { i: +fm[1], n: +fm[2], path: fm[3].slice(0, 120) };
         const mo = /\u0000MORE:([A-Za-z0-9_.-]+)\n/.exec(acc);
         if (mo) moreTok = mo[1];
+        if (/\u0000CHAIN\n/.test(acc)) { chainWait = true; acc = acc.replace(/\u0000CHAIN\n/g, ""); } // the server goes on by itself: wait for the saved result
         acc = acc.replace(/\u0000F:\d+\/\d+:[^\n]*\n/g, "").replace(/\u0000MORE:[^\n]*\n/g, "");
         if (/\u0000(F|MO|MOR|MORE|U|UN|UND|UNDO)(:[^\n]*)?$/.test(acc)) continue; // half of a marker: wait for the rest
         // Place in the waiting line ("\u0000Q:3\n"): show it, keep it out of the answer.
@@ -2723,7 +2739,7 @@ function Main({ session }) {
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
 
-    let autoNext = null, prog = null, moreTok = null, reviewMe = false;
+    let autoNext = null, prog = null, moreTok = null, reviewMe = false, chainWait = false;
     try {
       // When the AI is busy (many people at once), wait in line instead of failing:
       // free AI limits refill every minute, so keep trying quietly for about a minute.
@@ -2737,7 +2753,8 @@ function Main({ session }) {
         if (ctrl.signal.aborted) break;
         result = await attempt();
       }
-      if (result === "retry") {
+      if (chainWait && result === "ok") { keepPending = true; setTimeout(() => resumeJob(id, jobId), 2000); }
+      else if (result === "retry") {
         const busyErr = /ERR:busy/.test(acc);
         put([...next, { role: "assistant", content: busyErr ? t("errBusy") : t("errAi"), failed: true }]);
       } else if (result === "ok") {
