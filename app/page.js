@@ -14,6 +14,8 @@ import Learn from "../components/Learn";
 import HouseStudio from "../components/HouseStudio";
 import SlidesStudio from "../components/SlidesStudio";
 import OfficeCard from "../components/OfficeCard";
+import { checkProject } from "../lib/selfcheck";
+import { PlanView, PredictCard } from "../components/ChatCards";
 import DesignStudio from "../components/DesignStudio";
 import VoiceMode from "../components/VoiceMode";
 import Landing from "../components/Landing";
@@ -386,6 +388,7 @@ function CodeBlock({ className, children }) {
 
   if (lang === "suggest") return <Suggestions text={text} />;
   if (lang === "ahm-file") return <OfficeCard text={text} t={t} uiLang={uiLang} />;
+  if (lang === "predict") return <PredictCard text={text} t={t} uiLang={uiLang} />;
 
   if (lang.startsWith("file:")) {
     return (
@@ -2265,6 +2268,32 @@ function Main({ session }) {
   }
 
   // Like patch, but only for a chat that still exists (answers arriving later must not create empty chats).
+  // ---- the AI tests its own work (like a person would), then fixes what is broken — at most twice ----
+  const reviewing = useRef(false);
+  async function runReview(chatId, opts = {}) {
+    reviewing.current = true;
+    try {
+      const c = chatsRef.current.find((x) => x.id === chatId);
+      const files = c?.project || {};
+      if (!Object.keys(files).some((f) => /\.html?$/i.test(f))) return;
+      const mark = (check) => patchIf(chatId, (cc) => {
+        const msgs = [...cc.messages];
+        for (let k = msgs.length - 1; k >= 0; k--) if (msgs[k].role === "assistant") { msgs[k] = { ...msgs[k], check }; break; }
+        return { ...cc, messages: msgs };
+      });
+      mark({ state: "run", i: 0, n: 0 });
+      const res = await checkProject(files, { onPage: (i, n, p) => mark({ state: "run", i, n, p }) });
+      // problems the code can't fix (no internet in the test, outside services) are left out
+      const probs = res.problems.filter((p) => p.kind === "blank" || !/Failed to fetch|NetworkError|Load failed|net::|ERR_|CORS|fetch.*fail|googleapis|cdn|429|quota|login_needed|unauthori[sz]ed|\b40[13]\b|slow_down/i.test(p.text));
+      if (!probs.length) { mark({ state: "ok", pages: res.pages, clicked: res.clicked }); return; }
+      const canFix = (opts.checks || 0) < 2;
+      mark({ state: canFix ? "fix" : "left", pages: res.pages, clicked: res.clicked, n: probs.length });
+      if (!canFix || chatId !== activeIdRef.current) return;
+      const list = probs.slice(0, 8).map((p) => `- ${p.page}: ${p.kind === "blank" ? t("chkBlank") : p.text}`).join("\n");
+      setTimeout(() => autoRef.current?.(t("chkFixAsk").replace("{list}", list), 2, { checks: (opts.checks || 0) + 1 }), 400);
+    } catch (e) { console.error("self-check", e); }
+    finally { reviewing.current = false; }
+  }
   function patchIf(id, fn) {
     setChats((list) => {
       const i = list.findIndex((c) => c.id === id);
@@ -2683,7 +2712,7 @@ function Main({ session }) {
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
 
-    let autoNext = null, prog = null, moreTok = null;
+    let autoNext = null, prog = null, moreTok = null, reviewMe = false;
     try {
       // When the AI is busy (many people at once), wait in line instead of failing:
       // free AI limits refill every minute, so keep trying quietly for about a minute.
@@ -2720,6 +2749,8 @@ function Main({ session }) {
           const miss = after.changed ? findMissing(after.files, kindNow) : [];
           if (miss.length) autoNext = { text: t("autoMissing").replace("{f}", miss.map((x) => x.path + (x.from ? ` (${t("autoFrom")} ${x.from})` : "")).join("، ")), auto: (opts.auto || 0) + 1 };
         }
+        // nothing missing: the AI tests every page and button of what it made, and fixes what is broken
+        if (m === "build" && !planOnly && !autoNext && !moreTok && !ERR.test(acc) && applyChanges(base, acc).changed) reviewMe = true;
         if (isVoice && !ERR.test(acc)) {
           const sp = split(acc);
           const replyIndex = sp.msgs.length;
@@ -2744,7 +2775,8 @@ function Main({ session }) {
       abortRef.current = null;
       setBusy(false);
       loadMe();
-      if (autoNext && !ctrl.signal.aborted) setTimeout(() => autoRef.current?.(autoNext.text, autoNext.auto, { cont: autoNext.cont, rounds: autoNext.rounds }), autoNext.cont ? 1200 : 600);
+      if (autoNext && !ctrl.signal.aborted) setTimeout(() => autoRef.current?.(autoNext.text, autoNext.auto, { cont: autoNext.cont, rounds: autoNext.rounds, checks: opts.checks }), autoNext.cont ? 1200 : 600);
+      else if (reviewMe && !ctrl.signal.aborted) { reviewing.current = true; setTimeout(() => runReview(id, opts), 700); }
     }
   }
 
@@ -2806,6 +2838,7 @@ function Main({ session }) {
             const c = chatsRef.current.find((x) => x.id === chatId);
             const miss = c ? findMissing(c.project || {}, c.buildKind || "website") : [];
             if (miss.length && c.id === activeIdRef.current) autoRef.current?.(t("autoMissing").replace("{f}", miss.map((x) => x.path + (x.from ? ` (${t("autoFrom")} ${x.from})` : "")).join("، ")), 1);
+            else if (c && !miss.length) runReview(chatId);
           }, 1500);
           const bad = /\u0000ERR:(busy|ai)\s*$/.exec(txt);
           txt = txt.replace(/\n*\u0000ERR:(busy|ai)\s*$/, "");
@@ -3104,7 +3137,15 @@ function Main({ session }) {
                     )}
                     {m.role === "assistant" ? (
                       m.content ? <>
-                        <MsgMD text={m.content} />
+                        {m.plan ? <PlanView text={m.content} MD={MD} label={t("planTitle")} /> : <MsgMD text={m.content} />}
+                        {m.check && (
+                          <div className={"chk chk-" + m.check.state} role="status">
+                            {m.check.state === "run" && <span className="mini-spin" />}
+                            <span>{m.check.state === "run" ? t("chkRun").replace("{i}", m.check.i || 1).replace("{n}", m.check.n || "…")
+                              : m.check.state === "ok" ? t("chkOk").replace("{p}", m.check.pages).replace("{c}", m.check.clicked)
+                              : m.check.state === "fix" ? t("chkFix").replace("{n}", m.check.n) : t("chkLeft").replace("{n}", m.check.n)}</span>
+                          </div>
+                        )}
                         {m.pending && !(busy && i === messages.length - 1) && <div className="away-note" role="status"><span className="mini-spin" /> {t("awayWorking")}</div>}
                       </>
                         : <span className="typing" role="status"><i /><i /><i /><small>{typeof m.waiting === "number" ? t("queuePlace").replace("{n}", m.waiting) : m.waiting ? t("queueWait") : m.studioWait ? t("studioWorking") : m.pending && !busy ? t("awayWorking") : t("thinking")}</small></span>
@@ -3113,7 +3154,7 @@ function Main({ session }) {
                       <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} onVoiceLimit={() => showLimit("voice")} />
                     )}
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !m.studio && !(busy && i === messages.length - 1) && (
-                      <AnswerActions text={m.content.replace(/```ahm-file\s*\n[\s\S]*?(\n```|$)/g, "")} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
+                      <AnswerActions text={m.content.replace(/```(ahm-file|predict)\s*\n[\s\S]*?(\n```|$)/g, "")} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
                     )}
                     {mode === "build" && m.plan && !hasFiles && !busy && i === messages.length - 1 && !m.failed && (
                       <div className="plan-actions">
@@ -3252,7 +3293,7 @@ function Main({ session }) {
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); setPvMode("normal"); send(q); }}
                 cloud={!!active.cloudSite} onCloud={() => setSheet({ type: "cloud" })}
                 progress={busy ? messages[messages.length - 1]?.progress || null : null}
-                onAutoFix={(err) => { if (busy || autoFixes.current >= 2) return false; autoFixes.current++; autoRef.current?.(t("autoFix").replace("{e}", err), 2); return true; }}
+                onAutoFix={(err) => { if (busy || reviewing.current || autoFixes.current >= 2) return false; autoFixes.current++; autoRef.current?.(t("autoFix").replace("{e}", err), 2); return true; }}
                 maxed={pvMode === "max"} onMax={() => setPvMode(pvMode === "max" ? "normal" : "max")} onMin={() => setPvMode("min")} />
             </div>
           )}

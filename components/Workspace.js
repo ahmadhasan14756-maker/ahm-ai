@@ -32,6 +32,10 @@ const P = {
   trash: <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />,
   play: <path d="M7 4l13 8-13 8z" />,
   chevron: <path d="M9 6l6 6-6 6" />,
+  caret: <path d="M6 9l6 6 6-6" />,
+  back: <path d="M15 18l-6-6 6-6" />,
+  fwd: <path d="M9 18l6-6-6-6" />,
+  terminal: <><path d="M4 17l6-5-6-5" /><path d="M12 19h8" /></>,
   files: <><path d="M8 3h7l5 5v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M15 3v5h5" /><path d="M3 7v12a2 2 0 0 0 2 2h1" /></>,
   down: <><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 20h14" /></>,
   eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
@@ -279,20 +283,31 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
   const [entry, setEntry] = useState(null); // the page shown (chosen in the Files tab or opened from inside the app)
   const [loc, setLoc] = useState({ search: "", hash: "", t: 0 }); // ?query and #section of that page
   const [issue, setIssue] = useState(null); // { error } or { missing } reported by the app in the preview
+  // Replit-like: what the app writes to its console, and the pages visited (back / forward)
+  const [logs, setLogs] = useState([]);
+  const [showLog, setShowLog] = useState(false);
+  const hist = useRef({ list: ["index.html"], i: 0 });
+  const [, setHistTick] = useState(0);
+  const addLog = (l, m, p) => setLogs((x) => [...x.slice(-199), { l, m: String(m).slice(0, 500), p, t: Date.now() }]);
+  const pushHist = (pg) => { const h = hist.current; if (h.list[h.i] === pg) return; h.list = [...h.list.slice(0, h.i + 1), pg].slice(-30); h.i = h.list.length - 1; setHistTick((n) => n + 1); };
+  const openPage = (pg, { push = true } = {}) => { setEntry(pg === "index.html" ? null : pg); setPage(pg); setLoc({ search: "", hash: "", t: Date.now() }); setIssue(null); if (push) pushHist(pg); };
+  const stepHist = (k) => { const h = hist.current, i = h.i + k; if (i < 0 || i >= h.list.length) return; h.i = i; setHistTick((n) => n + 1); openPage(h.list[i], { push: false }); };
   useEffect(() => {
     const on = (e) => {
       const d = e.data;
-      if (!d || typeof d !== "object") return;
+      if (!d || typeof d !== "object" || d.chk) return; // d.chk = the AI's hidden self-test, not this preview
+      if (d.ahmLog && typeof d.ahmLog.m === "string") { addLog(d.ahmLog.l, d.ahmLog.m, d.ahmLog.p); return; }
       if (d.ahmStore && typeof d.ahmStore === "object") store.current = d.ahmStore;
       if (typeof d.ahmPage === "string") setPage(d.ahmPage.slice(0, 80));
       if (d.ahmNav && typeof d.ahmNav.page === "string") {
-        setEntry(d.ahmNav.page.slice(0, 120)); setPage(d.ahmNav.page.slice(0, 80));
+        setEntry(d.ahmNav.page.slice(0, 120)); setPage(d.ahmNav.page.slice(0, 80)); pushHist(d.ahmNav.page.slice(0, 120));
         setLoc({ search: String(d.ahmNav.search || "").slice(0, 300), hash: String(d.ahmNav.hash || "").slice(0, 120), t: Date.now() });
         setIssue(null);
       }
       if (typeof d.ahmMissing === "string") setIssue({ missing: d.ahmMissing.slice(0, 120) || "?" });
       if (typeof d.ahmError === "string") {
         const err = d.ahmError.slice(0, 300);
+        addLog("error", err, "");
         // an error while the app is starting = a bug in the code: the AI fixes it by itself (at most twice in a row)
         if (Date.now() - shownAt.current < 4000 && !fixedFor.current && autoFixRef.current?.(err)) { fixedFor.current = true; setIssue({ error: err, auto: true }); return; }
         setIssue((x) => x || { error: err });
@@ -318,6 +333,9 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
     if (newCode.current) { newCode.current = false; shownAt.current = Date.now(); fixedFor.current = false; }
   }, [live, busy]);
   useEffect(() => { setIssue(null); }, [files]);
+  useEffect(() => { if (!busy) setLogs([]); }, [shown]); // new code in the preview: a clean console
+  const pageList = names.filter((n) => /\.html?$/i.test(n) && !String(files[n]).startsWith("data:")).sort((a, b) => (a === "index.html" ? -1 : b === "index.html" ? 1 : a.localeCompare(b)));
+  const errCount = logs.filter((x) => x.l === "error").length;
   const stageRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -424,8 +442,37 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
                 </div>
               </div>
             )}
-            {shown ? <DevicePreview html={shown} t={t} page={page} onHome={() => { setEntry(null); setPage("index.html"); setLoc({ search: "", hash: "", t: Date.now() }); }} /> : (
+            <div className="pv-addr" dir="ltr">
+              <button className="icon-btn sm" aria-label={t("pvBack")} title={t("pvBack")} disabled={hist.current.i <= 0} onClick={() => stepHist(-1)}><Svg d={P.back} size={16} /></button>
+              <button className="icon-btn sm" aria-label={t("pvFwd")} title={t("pvFwd")} disabled={hist.current.i >= hist.current.list.length - 1} onClick={() => stepHist(1)}><Svg d={P.fwd} size={16} /></button>
+              <button className="icon-btn sm" aria-label={t("pvHome")} title={t("pvHome")} onClick={() => openPage("index.html")}><Svg d={P.home} size={16} /></button>
+              <label className="pv-url">
+                <Svg d={P.lock} size={12} /><span>app.local/</span>
+                <select value={pageList.includes(page) ? page : ""} onChange={(e) => e.target.value && openPage(e.target.value)} aria-label={t("pvPages")}>
+                  {!pageList.includes(page) && <option value="">{page}</option>}
+                  {pageList.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <Svg d={P.caret} size={12} />
+              </label>
+              <button className={"pv-con-btn" + (showLog ? " on" : "") + (errCount ? " bad" : "")} onClick={() => setShowLog(!showLog)} aria-pressed={showLog} title={t("pvConsole")}>
+                <Svg d={P.terminal} size={15} /><span>{t("pvConsole")}</span>{logs.length > 0 && <em>{errCount || logs.length}</em>}
+              </button>
+            </div>
+            {shown ? <DevicePreview html={shown} t={t} page={page} /> : (
               <div className="stage"><div className="ws-empty"><span className="mini-spin" /><p>{t("building")}</p></div></div>
+            )}
+            {showLog && (
+              <div className="pv-console" dir="ltr" role="log" aria-label={t("pvConsole")}>
+                <div className="pc-head"><b>{t("pvConsole")}</b><span>{logs.length}</span>
+                  {errCount > 0 && onAsk && !busy && <button className="gold-btn small" onClick={() => onAsk(t("pvErrorAsk").replace("{e}", logs.filter((x) => x.l === "error").slice(-3).map((x) => x.m).join(" | ")))}>{t("pvFix")}</button>}
+                  <button className="icon-btn sm" aria-label={t("pvClear")} title={t("pvClear")} onClick={() => setLogs([])}><Svg d={P.trash} size={14} /></button>
+                  <button className="icon-btn sm" aria-label={t("close")} onClick={() => setShowLog(false)}><Svg d={P.close} size={14} /></button>
+                </div>
+                <div className="pc-body">
+                  {logs.length ? logs.map((x, i) => <div key={i} className={"pc-line l-" + x.l}><i>{x.l === "error" ? "✕" : x.l === "warn" ? "!" : "›"}</i><span>{x.m}</span>{x.p && <small>{x.p}</small>}</div>)
+                    : <p className="pc-empty">{t("pvConsoleEmpty")}</p>}
+                </div>
+              </div>
             )}
 
           </>
