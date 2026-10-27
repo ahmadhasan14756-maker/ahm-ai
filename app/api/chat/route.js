@@ -6,7 +6,7 @@ import { OFFICE_WORDS, officeTurn, lastFile, stripFiles } from "../../../lib/off
 
 import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
-import { saveJob, validJobId } from "../../../lib/jobs";
+import { saveJob, readJob, validJobId } from "../../../lib/jobs";
 import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
 import { redis, hasRedis } from "../../../lib/redis";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
@@ -499,10 +499,16 @@ VOICE CONVERSATION MODE (most important rules)
     let left = false; // the user left the app before the answer was finished → send a notification
     const tStart = Date.now(); let tFirst = 0; // how fast the first words come (shown in /api/health)
     const send = (txt) => { if (!tFirst && txt && !txt.startsWith("\u0000")) tFirst = Date.now(); if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; left = true; } };
+    // A big build that goes on while the user is away continues by itself on the server ("chain"),
+    // with no need to open the app; everything is saved in the same job and the phone gets ONE notification at the end.
+    const chainN = Math.max(0, Math.min(10, Number(body.chainN) || 0));
+    const chained = body.chain === true && !!contTok && !!jobId;
+    let chainNext = null, writtenAll = {};
     const work = (async () => {
       let full = "";
+      if (chained) { const prev = await readJob(user.id, jobId); full = String(prev?.result || "").replace(/\u0000MORE:[^\n]*\n/g, ""); }
       // Saved in the background (don't make the user wait for the database).
-      const started = jobId ? saveJob(user.id, jobId, "running") : null;
+      const started = jobId && !chained ? saveJob(user.id, jobId, "running") : null;
       // Wait in the fair line (Pro first). The app shows "you are number N".
       const ticket = jobId || randomUUID();
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
@@ -544,11 +550,17 @@ VOICE CONVERSATION MODE (most important rules)
           } catch (e) { console.error("change plan", errText(e)); }
         }
         if (list && list.length >= 2) {
-          const t0 = Date.now(), written = {};
+          const t0 = Date.now(), written = {}, BUDGET = Number(serverEnv("STEP_BUDGET_MS")) || 190000; // time for one server run
           const stepConfig = { ...baseConfig, systemInstruction: baseConfig.systemInstruction + STEP_RULES };
           const listText = list.map((f, i) => `${doneN + i + 1}. ${f.path} — ${f.about}`).join("\n");
           let stopped = false, made = 0, begun = 0;
-          const more = (rest) => { if (stopped || !rest.length) return; stopped = true; const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000, ed: editing ? 1 : 0 }); full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`); };
+          const more = (rest) => {
+            if (stopped || !rest.length) return; stopped = true;
+            const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000, ed: editing ? 1 : 0 });
+            writtenAll = written;
+            if ((left || chained) && jobId && chainN < 8) { chainNext = tok; return; } // nobody is watching: the server goes on by itself
+            full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`);
+          };
           const askFor = (f, last) => (editing
             ? `FILES TO CHANGE for this request (in order):\n${listText}\n\nNow write the COMPLETE new version of ONLY the file \`${f.path}\` with this change: ${f.about}. Keep everything else in it working and consistent with the other files.`
             : `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\nNow write ONLY the file \`${f.path}\` — ${f.about}`) + `${last ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
@@ -594,17 +606,17 @@ VOICE CONVERSATION MODE (most important rules)
           const leftFrom = (k) => order.slice(k).filter((f) => !(f.path in written));
           let k = 0;
           for (; k < core.length && !stopped; k++) {
-            if (Date.now() - t0 > 190000) { more(leftFrom(k)); break; }
+            if (Date.now() - t0 > BUDGET) { more(leftFrom(k)); break; }
             if (!(await writeOne(core[k], core[k].path === lastPath, true, levelOf(core[k].path)))) { if (made || doneN) more(leftFrom(k)); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
           }
           for (let i = 0; i < pages.length && !stopped; i += 4) {
-            if (Date.now() - t0 > 170000) { more(leftFrom(core.length + i)); break; }
+            if (Date.now() - t0 > BUDGET * 0.9) { more(leftFrom(core.length + i)); break; }
             const ok = await Promise.all(pages.slice(i, i + 4).map((f) => writeOne(f, f.path === lastPath, false, 2)));
             if (ok.includes(false)) { more(leftFrom(core.length + i)); break; }
           }
           for (const f of tail) {
             if (stopped) break;
-            if (Date.now() - t0 > 230000) { more(leftFrom(core.length + pages.length)); break; }
+            if (Date.now() - t0 > BUDGET * 1.2) { more(leftFrom(core.length + pages.length)); break; }
             if (!(await writeOne(f, f.path === lastPath, true, 2))) { more(leftFrom(core.length + pages.length)); break; }
           }
           noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
@@ -661,6 +673,20 @@ VOICE CONVERSATION MODE (most important rules)
         open = false;
       }
       if (started) await started;
+      if (chainNext) {
+        // save what is made so far, then start the next part (a new server run) and stop here — no notification yet
+        await saveJob(user.id, jobId, "running", full);
+        try {
+          const proj = { ...(body.project && typeof body.project === "object" ? body.project : {}), ...writtenAll };
+          const res = await fetch(new URL("/api/chat", req.url), { method: "POST", headers: { "Content-Type": "application/json", Authorization: req.headers.get("authorization") || "" },
+            body: JSON.stringify({ ...body, project: proj, cont: chainNext, chain: true, chainN: chainN + 1, jobId }) });
+          try { await res.body?.cancel(); } catch {}
+          noteDebug("builds", { mode: "chain", part: chainN + 1, status: res.status });
+          if (res.ok) return;
+        } catch (e) { console.error("chain", errText(e)); }
+        // the next part could not start: leave a "continue" note for the app instead
+        full += `\u0000MORE:${chainNext}\n`;
+      }
       if (jobId) await saveJob(user.id, jobId, "done", full);
       if (left) {
         const done = { ckb: ["✅ AHM AI — تەواو بوو", build ? "پرۆژەکەت ئامادەیە. بۆ بینین دایبگرە." : "وەڵامەکەت ئامادەیە. بۆ بینین دایبگرە."],

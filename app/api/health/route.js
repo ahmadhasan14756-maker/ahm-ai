@@ -3,6 +3,7 @@ import { adminDb } from "../../../lib/server";
 import { serverEnv, SUPABASE_URL, SUPABASE_ANON_KEY } from "../../../lib/env";
 import { redis, hasRedis } from "../../../lib/redis";
 import { keyCount, allKeys } from "../../../lib/gemini";
+import { pushKeys } from "../../../lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export async function GET() {
     } catch { ok = "no answer"; }
     return { key: i + 1, starts: k.slice(0, 2), length: k.length, google: ok };
   }));
+  out.push = pushKeys() ? "ok" : "missing";
   out.redis = !hasRedis() ? "missing" : (await redis("PING")) === "PONG" ? "ok" : "ERROR";
   try {
     const { error } = await adminDb().from("jobs").select("id", { head: true, count: "exact" });

@@ -2643,6 +2643,18 @@ function Main({ session }) {
     // One request to the server. Returns "ok", "retry" (nothing arrived yet) or "stop".
     const attempt = async () => {
       acc = "";
+      // The screen is updated a few times a second, not on every piece of text: re-reading a long answer full of
+      // code on every word made phones slow and the writing looked stuck.
+      let lastDraw = 0, drawTimer = null;
+      const draw = () => {
+        drawTimer = null; lastDraw = Date.now();
+        const ch = m === "build" ? applyChanges(base, acc) : null;
+        const sp = split(acc);
+        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending, plan: planOnly || undefined, progress: prog || undefined }], ch?.changed ? { project: ch.files } : {});
+      };
+      const every = m === "build" ? 260 : 90;
+      const schedule = () => { if (Date.now() - lastDraw >= every) draw(); else if (!drawTimer) drawTimer = setTimeout(draw, every - (Date.now() - lastDraw)); };
+      try {
       const res = await fetch("/api/chat", {
         method: "POST",
         signal: ctrl.signal,
@@ -2705,10 +2717,9 @@ function Main({ session }) {
         }
         if (/^\u0000(Q(:\d*)?)?$/.test(acc)) continue; // half of a place marker: wait for the rest
         if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
-        const ch = m === "build" ? applyChanges(base, acc) : null;
-        const sp = split(acc);
-        put([...sp.msgs, { role: "assistant", content: clean(sp.body), pending, plan: planOnly || undefined, progress: prog || undefined }], ch?.changed ? { project: ch.files } : {});
+        schedule();
       }
+      } finally { if (drawTimer) clearTimeout(drawTimer); if (lastDraw && acc && !(ERR.test(acc) && !acc.replace(ERR, "").trim())) draw(); } // the last words
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
 
@@ -2800,7 +2811,7 @@ function Main({ session }) {
     resuming.current.add(jobId);
     const fail = (txt) => patchIf(chatId, (c) => ({ ...c, messages: c.messages.map((x) => (x.pending?.job === jobId ? { role: "assistant", content: (x.content ? x.content + "\n\n" : "") + txt, failed: true } : x)) }));
     try {
-      for (let i = 0; i < 90; i++) {
+      for (let i = 0; i < 400; i++) { // big builds can go on for many minutes on the server
         if (document.visibilityState === "hidden") { await new Promise((r) => setTimeout(r, 3000)); i--; continue; }
         let j = {};
         try {
