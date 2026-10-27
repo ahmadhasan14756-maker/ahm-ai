@@ -496,7 +496,8 @@ VOICE CONVERSATION MODE (most important rules)
     let ctrl = null;
     let open = true;
     let left = false; // the user left the app before the answer was finished → send a notification
-    const send = (txt) => { if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; left = true; } };
+    const tStart = Date.now(); let tFirst = 0; // how fast the first words come (shown in /api/health)
+    const send = (txt) => { if (!tFirst && txt && !txt.startsWith("\u0000")) tFirst = Date.now(); if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; left = true; } };
     const work = (async () => {
       let full = "";
       // Saved in the background (don't make the user wait for the database).
@@ -581,20 +582,23 @@ VOICE CONVERSATION MODE (most important rules)
           // the files everything depends on are written one by one (and shown live); then the pages / screens
           // are written 3 at a time (they only need the shared files) — much faster for big projects; README last.
           const isPage = (p) => (/\.html?$/i.test(p) && p !== "index.html") || /(^|\/)(pages|screens)\//i.test(p);
-          const tail = list.filter((f) => /^readme\.md$/i.test(f.path));
-          const pages = list.filter((f) => !tail.includes(f) && isPage(f.path));
-          const core = list.filter((f) => !tail.includes(f) && !pages.includes(f));
+          // README and the pages don't depend on each other: they are written together, 4 at a time
+          const tail = [];
+          const pages = list.filter((f) => isPage(f.path) || /^readme\.md$/i.test(f.path));
+          const core = list.filter((f) => !pages.includes(f));
+          // styles, data and text files need little thinking (faster); the main page and the logic think a bit more
+          const levelOf = (p) => (/\.(css|json|md|txt|svg)$/i.test(p) || /(^|\/)data\.js$/i.test(p) ? 2 : START.build);
           const order = [...core, ...pages, ...tail];
           const lastPath = order[order.length - 1].path;
           const leftFrom = (k) => order.slice(k).filter((f) => !(f.path in written));
           let k = 0;
           for (; k < core.length && !stopped; k++) {
             if (Date.now() - t0 > 190000) { more(leftFrom(k)); break; }
-            if (!(await writeOne(core[k], core[k].path === lastPath, true, START.build))) { if (made || doneN) more(leftFrom(k)); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
+            if (!(await writeOne(core[k], core[k].path === lastPath, true, levelOf(core[k].path)))) { if (made || doneN) more(leftFrom(k)); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
           }
-          for (let i = 0; i < pages.length && !stopped; i += 3) {
+          for (let i = 0; i < pages.length && !stopped; i += 4) {
             if (Date.now() - t0 > 170000) { more(leftFrom(core.length + i)); break; }
-            const ok = await Promise.all(pages.slice(i, i + 3).map((f) => writeOne(f, f.path === lastPath, false, 2)));
+            const ok = await Promise.all(pages.slice(i, i + 4).map((f) => writeOne(f, f.path === lastPath, false, 2)));
             if (ok.includes(false)) { more(leftFrom(core.length + i)); break; }
           }
           for (const f of tail) {
@@ -621,9 +625,16 @@ VOICE CONVERSATION MODE (most important rules)
           if (officeGate) {
             // "making your file…" only when a file was clearly asked for (a follow-up may just be a question)
             const note = OFFICE_WORDS.test(lastText) ? { ckb: "📄 فایلەکەت ئامادە دەکەم…", ar: "📄 أجهّز ملفك…", en: "📄 Making your file…" }[lang] || "" : "";
+            const o0 = Date.now(), secsWord = { ckb: "چرکە", ar: "ثانية", en: "s" }[lang] || "s";
+            const digitsOf = (x) => (lang === "en" ? String(x) : String(x).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[d]));
             if (note) { full += note; send(note); }
+            // a live "… 12 seconds" so the user sees it is working (only shown, not saved)
+            const tick = note ? setInterval(() => send("\u0000RESET\n" + note + " " + digitsOf(Math.round((Date.now() - o0) / 1000)) + " " + secsWord), 3000) : null;
+            let why = "";
             try { office = await officeTurn({ messages, lang, attachments }); }
-            catch (e) { if (e?.message === "unsafe") office = { refused: true }; else console.error("office", String(e?.message || e).slice(0, 200)); }
+            catch (e) { why = String(e?.message || e).slice(0, 120); if (why === "unsafe") office = { refused: true }; else console.error("office", why); }
+            if (tick) clearInterval(tick);
+            noteDebug("builds", { mode: "office", kind: office?.file?.type || (office?.refused ? "refused" : "none"), result: office ? "ok" : why ? "error: " + why : "chat", secs: Math.round((Date.now() - o0) / 1000) });
             if (note) { full += "\u0000RESET\n"; send("\u0000RESET\n"); }
           }
           if (office?.refused) { full += REFUSAL[lang]; send(REFUSAL[lang]); }
@@ -631,7 +642,6 @@ VOICE CONVERSATION MODE (most important rules)
             countUsage();
             const t = office.file.type, made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
             const txt = (office.reply || made) + "\n\n```ahm-file\n" + JSON.stringify(office.file) + "\n```\n";
-            noteDebug("builds", { mode: "office", kind: t, result: "ok" });
             full += txt; send(txt);
           } else for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
             if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
@@ -644,6 +654,7 @@ VOICE CONVERSATION MODE (most important rules)
         full += "\u0000ERR:ai";
         send("\u0000ERR:ai");
       } finally {
+        noteDebug("timing", { kind: officeGate && /```ahm-file/.test(full) ? "file" : kind, pro: !!proUser, first_s: tFirst ? +((tFirst - tStart) / 1000).toFixed(1) : null, total_s: +((Date.now() - tStart) / 1000).toFixed(1), chars: full.length });
         doneTurn(ticket);
         if (open && ctrl) { try { ctrl.close(); } catch {} }
         open = false;

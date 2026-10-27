@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "../lib/supabase";
@@ -454,6 +454,8 @@ const MD = {
 };
 
 const isRTL = (s) => /[؀-ۿ]/.test((s || "").slice(0, 200));
+// A message is drawn again only when ITS text changes (not every time another message streams in) — keeps long chats fast.
+const MsgMD = memo(function MsgMD({ text }) { return <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{text}</ReactMarkdown>; });
 
 /* ---------------- File fixing (Pro) ---------------- */
 function applyEdits(original, answer) {
@@ -2162,13 +2164,28 @@ function Main({ session }) {
     loadMe();
   }, [uid]);
 
-  useEffect(() => {
-    if (!ready) return;
+  // Saved on the phone a moment after the last change (not on every streamed word: writing all chats
+  // many times a second made the app slow), and straight away when the app goes to the background.
+  const chatsRef0 = useRef(chats);
+  chatsRef0.current = chats;
+  const saveLocal = () => {
     try {
-      const slim = chats.slice(0, 60).map((c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => slimStudio(i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) }));
+      const slim = chatsRef0.current.slice(0, 60).map((c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => slimStudio(i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) }));
       localStorage.setItem(storeKey, JSON.stringify(slim));
     } catch {}
+  };
+  useEffect(() => {
+    if (!ready) return;
+    const tm = setTimeout(saveLocal, 1200);
+    return () => clearTimeout(tm);
   }, [chats, ready]);
+  useEffect(() => {
+    if (!ready) return;
+    const flush = () => { if (document.visibilityState === "hidden") saveLocal(); };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", saveLocal);
+    return () => { document.removeEventListener("visibilitychange", flush); window.removeEventListener("pagehide", saveLocal); };
+  }, [ready, storeKey]);
 
   // ---- chats saved on the account (same history on every device) ----
   const synced = useRef({});      // chat id → "updated" value the server already has
@@ -2228,7 +2245,12 @@ function Main({ session }) {
     return () => clearTimeout(timer);
   }, [chats, ready, syncTick]);
 
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  // follow the answer while it is written (instant while streaming — many smooth scrolls a second made phones stutter)
+  const scrollRaf = useRef(0);
+  useEffect(() => {
+    cancelAnimationFrame(scrollRaf.current);
+    scrollRaf.current = requestAnimationFrame(() => bottom.current?.scrollIntoView({ behavior: busy ? "auto" : "smooth", block: "end" }));
+  }, [messages]);
 
   // update one chat; the draft becomes a saved chat on its first change
   function patch(id, fn) {
@@ -2506,12 +2528,15 @@ function Main({ session }) {
       target = "chat";
       if (typed && !file && !extra.length) { // a photo + "build a site like this" still goes to build
         target = quickGuess(typed);
+        // the extra AI check only when it could be a request to MAKE something (a site, app, game…);
+        // a normal question goes straight to the chat — no waiting
+        if (!target && !(typed.length < 400 && /(دروست|بکە|بکەم|بنووسە|ببنە|build|create|make|develop|program|code|کۆد|برنامج|اصنع|أنشئ|ابن|اعمل|صمم|طور|سیستەم|system|نظام|پرۆگرام|پڕۆگرام)/i.test(typed))) target = "chat";
         if (!target) {
           setDeciding(true);
           try {
             const r = await fetch("/api/intent", {
               method: "POST",
-              signal: AbortSignal.timeout?.(2500), // never make the user wait long just to choose a section
+              signal: AbortSignal.timeout?.(1500), // never make the user wait long just to choose a section
               headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
               body: JSON.stringify({ text: typed }),
             });
@@ -3079,7 +3104,7 @@ function Main({ session }) {
                     )}
                     {m.role === "assistant" ? (
                       m.content ? <>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>{m.content}</ReactMarkdown>
+                        <MsgMD text={m.content} />
                         {m.pending && !(busy && i === messages.length - 1) && <div className="away-note" role="status"><span className="mini-spin" /> {t("awayWorking")}</div>}
                       </>
                         : <span className="typing" role="status"><i /><i /><i /><small>{typeof m.waiting === "number" ? t("queuePlace").replace("{n}", m.waiting) : m.waiting ? t("queueWait") : m.studioWait ? t("studioWorking") : m.pending && !busy ? t("awayWorking") : t("thinking")}</small></span>

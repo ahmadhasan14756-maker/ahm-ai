@@ -42,7 +42,7 @@ export async function GET() {
 
   // why recent answers were refused (reason codes from Google only — no user messages)
   if (hasRedis()) {
-    for (const k of ["builds", "ai_errors"]) { try { out["recent_" + k] = ((await redis("LRANGE", "dbg:" + k, 0, 9)) || []).map((x) => { try { return JSON.parse(x); } catch { return x; } }); } catch {} }
+    for (const k of ["timing", "builds", "ai_errors"]) { try { out["recent_" + k] = ((await redis("LRANGE", "dbg:" + k, 0, 9)) || []).map((x) => { try { return JSON.parse(x); } catch { return x; } }); } catch {} }
   }
   if (hasRedis()) { try { out.recent_refusals = ((await redis("LRANGE", "dbg:refusals", 0, 9)) || []).map((x) => { try { return JSON.parse(x); } catch { return x; } }); } catch {} }
   return Response.json(out, { headers: { "Cache-Control": "no-store" } });
