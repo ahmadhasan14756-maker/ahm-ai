@@ -2716,10 +2716,21 @@ function Main({ session }) {
       }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
+      // The server sends a small signal every 12 s. If nothing at all arrives for a while (the phone slept, the
+      // network changed, iPhone kept a dead connection open), stop waiting here and fetch the saved work instead.
+      let lastByte = Date.now();
+      const dog = setInterval(() => {
+        if (document.visibilityState === "visible" && Date.now() - lastByte > 40000) { stalled = true; clearInterval(dog); try { reader.cancel(); } catch {} }
+      }, 3000);
+      const onBack = () => { if (document.visibilityState === "visible" && Date.now() - lastByte > 20000) { stalled = true; try { reader.cancel(); } catch {} } };
+      document.addEventListener("visibilitychange", onBack);
+      try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        lastByte = Date.now();
         acc += dec.decode(value, { stream: true });
+        acc = acc.replace(/\u0000H\n/g, ""); // "still working" signal
         // The server started the answer again (a filter stopped the first try): drop what was shown.
         const ri = acc.lastIndexOf("\u0000RESET\n");
         if (ri >= 0) acc = acc.slice(ri + 7);
@@ -2743,11 +2754,13 @@ function Main({ session }) {
         if (ERR.test(acc) && !acc.replace(ERR, "").trim()) continue; // error with no text: handled below
         schedule();
       }
+      } finally { clearInterval(dog); document.removeEventListener("visibilitychange", onBack); }
+      if (stalled) throw new Error("stalled");
       } finally { if (drawTimer) clearTimeout(drawTimer); if (lastDraw && acc && !(ERR.test(acc) && !acc.replace(ERR, "").trim())) draw(); } // the last words
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
 
-    let autoNext = null, prog = null, moreTok = null, reviewMe = false, chainWait = false;
+    let autoNext = null, prog = null, moreTok = null, reviewMe = false, chainWait = false, stalled = false;
     try {
       // When the AI is busy (many people at once), wait in line instead of failing:
       // free AI limits refill every minute, so keep trying quietly for about a minute.
@@ -2894,6 +2907,23 @@ function Main({ session }) {
           return;
         }
         if (j.status === "unknown" && i >= 4) { fail(t("errConn")); return; } // nothing saved (e.g. update 3 not installed)
+        // still working on the server: show what is already made (files appear one by one, like when you watch it)
+        if (j.status === "running" && j.result) {
+          let part = String(j.result);
+          const rs2 = part.lastIndexOf("\u0000RESET\n");
+          if (rs2 >= 0) part = part.slice(rs2 + 7);
+          let pg = null;
+          for (const fm of part.matchAll(/\u0000F:(\d+)\/(\d+):([^\n]*)\n/g)) pg = { i: +fm[1], n: +fm[2], path: fm[3].slice(0, 120) };
+          part = part.replace(/\u0000(F:\d+\/\d+:[^\n]*|MORE:[^\n]*|CHAIN|H)\n/g, "");
+          patchIf(chatId, (c) => {
+            const k = c.messages.findIndex((x) => x.pending?.job === jobId);
+            if (k < 0 || c.messages[k].content === part) return c;
+            const msgs = [...c.messages];
+            msgs[k] = { ...msgs[k], content: part, progress: pg || msgs[k].progress };
+            const ch = msgs[k].pending.kind === "build" ? applyChanges(c.project || {}, part) : null;
+            return { ...c, messages: msgs, ...(ch?.changed ? { project: ch.files } : {}) };
+          });
+        }
         await new Promise((r) => setTimeout(r, i < 12 ? 2500 : 5000));
       }
       fail(t("errConn"));
@@ -3165,7 +3195,7 @@ function Main({ session }) {
                     )}
                     {m.docs?.length > 0 && m.docs.map((d, k) => <div key={k} className="file-tag" dir="ltr">📄 {d}</div>)}
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
-                    {m.role === "assistant" && m.progress && busy && i === messages.length - 1 && (
+                    {m.role === "assistant" && m.progress && (busy || m.pending) && i === messages.length - 1 && (
                       <div className="build-prog" role="status">
                         <div className="bp-top"><span className="mini-spin" /> {t("buildFile").replace("{i}", num(m.progress.i)).replace("{n}", num(m.progress.n))} <code dir="ltr">{m.progress.path}</code></div>
                         <div className="bp-bar" aria-hidden="true"><i style={{ width: Math.round(((m.progress.i - 0.5) / Math.max(1, m.progress.n)) * 100) + "%" }} /></div>
@@ -3328,7 +3358,7 @@ function Main({ session }) {
               <Workspace files={project} setFiles={setProjectFiles} busy={busy || jobWait} t={t} onPublish={publishSite} publishing={publishing} kind={active.buildKind || "website"} name={active.title}
                 onClose={() => setShowPreview(false)} onAsk={(q) => { setShowPreview(false); setPvMode("normal"); send(q); }}
                 cloud={!!active.cloudSite} onCloud={() => setSheet({ type: "cloud" })}
-                progress={busy ? messages[messages.length - 1]?.progress || null : null}
+                progress={busy || jobWait ? messages[messages.length - 1]?.progress || null : null}
                 onAutoFix={(err) => { if (busy || reviewing.current || autoFixes.current >= 2) return false; autoFixes.current++; autoRef.current?.(t("autoFix").replace("{e}", err), 2); return true; }}
                 maxed={pvMode === "max"} onMax={() => setPvMode(pvMode === "max" ? "normal" : "max")} onMin={() => setPvMode("min")} />
             </div>

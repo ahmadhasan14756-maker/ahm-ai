@@ -26,7 +26,11 @@ const SYSTEM_PROMPT = (lang) => `You are "AHM AI", a brilliant, warm and honest 
 LANGUAGE
 - Reply in the language of the user's latest message: Kurdish Sorani (always Arabic script), Arabic, or English.
 - Many users write Kurdish quickly in Latin letters, phonetically, with typos and no spaces or punctuation (e.g. "slaw chony" = سڵاو چۆنی، "esa chbkm" = ئێستا چی بکەم، "tynagashtm" = تێنەگەیشتم). Work out what they MEAN from the words and the conversation, and answer that. Never comment on their spelling.
-- Always reply in clean, correct Kurdish Sorani in Arabic script (ڕ ڵ ێ ۆ ە used correctly), with clear short sentences and no spelling mistakes — even when the user wrote in Latin letters or made mistakes.
+- When the reply is in Kurdish, always write clean, correct Kurdish Sorani in Arabic script — even when the user wrote in Latin letters or made mistakes.
+- CLEAR, BEAUTIFUL LANGUAGE that everyone understands:
+  • Kurdish: the standard written Central Kurdish (Sorani) of Sulaymaniyah and Erbil; correct letters (ک not ك, ی not ي, ە for the vowel and ه for the consonant, ڕ ڵ ێ ۆ); Kurdish punctuation (، ؛ ؟); a common Kurdish word instead of an Arabic, Persian or English one whenever one exists (e.g. «بەکارهێنەر» not «مستخدم», «ئامێر» not «جهاز»); short sentences with a natural Kurdish word order — never word-by-word translation.
+  • Arabic: clear, simple Modern Standard Arabic (not a dialect unless the user writes in one), correct hamza and ة/ه, short sentences.
+  • English: plain, friendly everyday English.
 - If a message can mean two different things, choose the most likely meaning and start with one short line saying what you understood (e.g. «تێگەیشتم کە دەتەوێت …»).
 - If the language is unclear, use ${LANG_NAME[lang] || LANG_NAME.ckb}.
 - Write natural, fluent, correct Kurdish Sorani — not word-by-word translation.
@@ -505,7 +509,7 @@ VOICE CONVERSATION MODE (most important rules)
     // with no need to open the app; everything is saved in the same job and the phone gets ONE notification at the end.
     const chainN = Math.max(0, Math.min(10, Number(body.chainN) || 0));
     const chained = body.chain === true && !!contTok && !!jobId;
-    let chainNext = null, writtenAll = {};
+    let chainNext = null, writtenAll = {}, saveSoFar = () => {};
     // the app told us it went to the background (iPhone often keeps the connection half-open, so "left" alone is not enough)
     const awayNow = async () => { if (left) return true; if (!jobId || !hasRedis()) return false; try { return (await redis("GET", "away:" + jobId)) === "1"; } catch { return false; } };
     const work = (async () => {
@@ -513,6 +517,11 @@ VOICE CONVERSATION MODE (most important rules)
       if (chained) { const prev = await readJob(user.id, jobId); full = String(prev?.result || "").replace(/\u0000MORE:[^\n]*\n/g, ""); }
       // Saved in the background (don't make the user wait for the database).
       const started = jobId && !chained ? saveJob(user.id, jobId, "running") : null;
+      // a small "still working" signal every 12 s, so the app can tell a quiet moment from a broken connection
+      const beat = setInterval(() => send("\u0000H\n"), 12000);
+      // what is made so far is saved now and then: the app shows it when the user comes back, even before the end
+      let savedAt = 0;
+      saveSoFar = () => { if (!jobId || Date.now() - savedAt < 4000) return; savedAt = Date.now(); saveJob(user.id, jobId, "running", full).catch?.(() => {}); };
       // Wait in the fair line (Pro first). The app shows "you are number N".
       const ticket = jobId || randomUUID();
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
@@ -594,6 +603,7 @@ VOICE CONVERSATION MODE (most important rules)
               full += "\n\n"; send("\n\n");
             } else { full += fixed + "\n\n"; send(fixed + "\n\n"); }
             made++;
+            saveSoFar();
             return true;
           };
           // the files everything depends on are written one by one (and shown live); then the pages / screens
@@ -668,6 +678,7 @@ VOICE CONVERSATION MODE (most important rules)
         full += "\u0000ERR:ai";
         send("\u0000ERR:ai");
       } finally {
+        clearInterval(beat);
         noteDebug("timing", { kind: officeGate && /```ahm-file/.test(full) ? "file" : kind, pro: !!proUser, first_s: tFirst ? +((tFirst - tStart) / 1000).toFixed(1) : null, total_s: +((Date.now() - tStart) / 1000).toFixed(1), chars: full.length });
         doneTurn(ticket);
         if (open && ctrl) { try { ctrl.close(); } catch {} }
