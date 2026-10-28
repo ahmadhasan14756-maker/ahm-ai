@@ -62,6 +62,7 @@ VOICE
 
 PREDICTIONS
 - You cannot see the future. For predictions (sports, prices, exchange rates, markets, elections) give a careful, reasoned analysis: the main factors, the most likely outcome, rough probabilities, and clearly say it can be wrong. Never present a guess as certain. Do not give personal financial or betting advice (general money-saving and budgeting tips are fine).
+- You have no live fixtures, scores, injuries or news unless search results are given to you. If the user didn't name the match (opponent, date), say so in one short line and ask, or predict for the opponent they most likely mean only if it is clearly known; never invent a fixture, injury or recent result.
 - For a prediction with clear possible outcomes (a match, will a price go up or down, an election…), give a SHORT analysis (the 3–5 key factors) and then ONE block with the info string "predict" holding JSON: {"title":"…","outcomes":[{"label":"…","pct":45},…],"score":"2-1 (only for matches, else leave out)","confidence":"low|medium|high","factors":["short factor",…]} — outcomes add up to 100, labels in the user's language. The app shows it as a card with bars; don't repeat the percentages in the text.
 
 NOT AVAILABLE IN AHM AI
@@ -284,7 +285,7 @@ async function proofreadKurdish(text) {
         model: "gemini-3.8-flash",
         contents: [{ role: "user", parts: [{ text }] }],
         config: {
-          systemInstruction: "You are a professional editor of Central Kurdish (Sorani). Correct ONLY spelling, grammar, wrong word forms and unnatural wording in the Kurdish text you get, using the standard written Sorani of Sulaymaniyah and Erbil (correct ڕ ڵ ێ ۆ ە ک ی, Kurdish digits). Keep the meaning, the order, the length, every Markdown sign (**, #, -, 1.), line breaks, emojis, numbers, names and any English words exactly as they are. Do not add or remove anything. Return only the corrected text.",
+          systemInstruction: "You are a professional editor of Central Kurdish (Sorani). Correct ONLY spelling, grammar, wrong word forms and unnatural wording in the Kurdish text you get, using the standard written Sorani of Sulaymaniyah and Erbil (correct ڕ ڵ ێ ۆ ە ک ی, Kurdish digits). Also repair broken words that mix Latin letters into a Kurdish word (e.g. «سانتیstateۆ» → «سانتیاگۆ»). Keep the meaning, the order, the length, every Markdown sign (**, #, -, 1.), line breaks, emojis, numbers, names, English words in brackets, and every ⟦0⟧-style marker exactly as they are. Do not add or remove anything. Return only the corrected text.",
           thinkingConfig: { thinkingLevel: "minimal" }, maxOutputTokens: 4096, safetySettings: GEMINI_SAFETY,
         },
       }),
@@ -705,8 +706,13 @@ VOICE CONVERSATION MODE (most important rules)
           }
           // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
           // the answer is already on screen, and a few seconds later the corrected text replaces it.
-          if (lang === "ckb" && kind === "chat" && full.length > 60 && full.length < 6000 && !/\u0000|```|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
-            const fixed = await proofreadKurdish(full);
+          if (lang === "ckb" && kind === "chat" && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
+            // code / cards (``` blocks) are kept aside untouched; only the Kurdish text around them is checked
+            const blocks = [];
+            const textOnly = full.replace(/```[\s\S]*?```/g, (b) => `⟦${blocks.push(b) - 1}⟧`);
+            const edited = textOnly.length > 60 ? await proofreadKurdish(textOnly) : null;
+            const ok = edited && blocks.every((_, i) => edited.split(`⟦${i}⟧`).length === 2);
+            const fixed = ok ? edited.replace(/⟦(\d+)⟧/g, (_, i) => blocks[+i]) : null;
             if (fixed && fixed !== full) { full = fixed; send("\u0000RESET\n" + fixed); }
           }
         }
