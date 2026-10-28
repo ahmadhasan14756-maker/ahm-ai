@@ -1,5 +1,4 @@
 // Read an answer aloud: text → speech (Gemini TTS, free tier) → WAV audio.
-import { serverEnv } from "../../../lib/env";
 import { getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
 import { voiceLimitMin, voiceUsedSec, addVoiceSec } from "../../../lib/voice";
 import { gemini, keyCount } from "../../../lib/gemini";

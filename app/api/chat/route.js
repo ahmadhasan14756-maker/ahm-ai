@@ -7,6 +7,7 @@ import { OFFICE_WORDS, officeTurn, lastFile, stripFiles } from "../../../lib/off
 import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
 import { saveJob, readJob, validJobId } from "../../../lib/jobs";
+import { notifyOwner, escHtml } from "../../../lib/telegram";
 import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
 import { redis, hasRedis } from "../../../lib/redis";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
@@ -168,6 +169,8 @@ PROJECT TYPE: APP — it must look and feel like a real phone app: app bar on to
 FILES: index.html (the app shell), css/app.css, js/app.js (router: screens switch with #hash), js/screens/<name>.js — one file per screen, js/storage.js (all saving), manifest.json, sw.js, icons/icon.svg, README.md.`,
   system: `
 PROJECT TYPE: SYSTEM — a management system / dashboard (e.g. shop, school, clinic, stock, accounting): a login screen (demo user shown on screen), a sidebar menu, a dashboard with stat cards and a chart, data tables with search, add / edit / delete forms, simple user roles (admin / staff) and printable reports. Save all data in localStorage (one clear data layer in js/data.js so it can be moved to a real database later). Explain in README.md how to connect a real database later.
+PHONES: on screens under 900px the sidebar is hidden and opens from a ☰ button in a top bar (sliding over the page with a dark backdrop, closing after a choice); the page content always uses the full width. Tables scroll sideways inside their card or turn into stacked cards; forms are one column.
+NEVER EMPTY: right after login the dashboard shows real content — stat cards, a chart and recent items from realistic sample data (seeded once into js/data.js storage on first run); every list shows a friendly empty state with an "add" button when it has no data. Each module renders inside the same main area; a module that fails shows a short error message there instead of a blank page.
 FILES: index.html (login + app shell, pages switch with #hash routes), css/style.css, js/data.js (all data + saving), js/auth.js (login, roles), js/app.js (router, sidebar), js/pages/<module>.js — one file per module in the plan (e.g. products.js, sales.js, reports.js, users.js), README.md.`,
 };
 
@@ -710,7 +713,7 @@ VOICE CONVERSATION MODE (most important rules)
           if (office?.refused) { full += REFUSAL[lang]; send(REFUSAL[lang]); }
           else if (office) {
             countUsage();
-            const t = office.file.type, made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
+            const made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
             const txt = (office.reply || made) + "\n\n```ahm-file\n" + JSON.stringify(office.file) + "\n```\n";
             full += txt; send(txt);
           } else for await (const raw of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
@@ -776,6 +779,8 @@ VOICE CONVERSATION MODE (most important rules)
     });
   } catch (e) {
     console.error("chat route", e);
+    // an unexpected server error: tell the owner (the same error at most once every 6 hours)
+    try { const m = errText(e).slice(0, 200); if (hasRedis() && (await redis("SET", "serr:" + m.slice(0, 80), "1", "NX", "EX", 21600)) === "OK") await notifyOwner("🔥 <b>هەڵەی سێرڤەر</b> (chat)\n<code>" + escHtml(m) + "</code>"); } catch {}
     return Response.json({ error: "server", detail: errText(e) }, { status: 500 });
   }
 }

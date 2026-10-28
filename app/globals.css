@@ -2167,3 +2167,5 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .prd-conf i { width: 8px; height: 14px; border-radius: 3px; background: var(--surface-3); }
 .prd-conf.c1 i:nth-of-type(-n+1), .prd-conf.c2 i:nth-of-type(-n+2), .prd-conf.c3 i { background: #7c6cf6; }
 @media (max-width: 700px) { .pv-console { height: 26%; max-height: 190px; margin: 0 6px 6px; } .pv-addr { margin: 6px 6px 0; } }
+.answer-actions .rate-thanks { font-size: 12px; color: var(--muted); align-self: center; }
+.answer-actions button.on { color: var(--gold-text); }

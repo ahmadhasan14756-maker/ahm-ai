@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { supabase } from "../lib/supabase";
 import { TELEGRAM_BOT, SUPABASE_URL, SUPABASE_ANON_KEY } from "../lib/env";
 import { DEFAULT_SETTINGS } from "../lib/plans";
-import { parseFiles, applyChanges, buildPreview, downloadZip, findMissing } from "../lib/builder";
+import { applyChanges, buildPreview, downloadZip, findMissing } from "../lib/builder";
 import { DB_FILE, dbFile } from "../lib/appdb";
 import { importZip } from "../lib/zipimport";
 import { LANGS, dirOf, makeT, detectLang } from "../lib/i18n";
@@ -52,6 +52,8 @@ function LangProvider({ children }) {
 
 /* ---------------- icons ---------------- */
 const Icon = {
+  thumbUp: <path d="M7 10v11H3V10zM7 10l4-8c1.7 0 3 1.3 3 3v4h5.5a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 18.1 21H7" />,
+  thumbDown: <path d="M17 14V3h4v11zM17 14l-4 8c-1.7 0-3-1.3-3-3v-4H4.5a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 5.9 3H17" />,
   panel: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" /></>,
   play: <path d="M8 5.5l11 6.5-11 6.5z" />,
   plus: <path d="M12 5v14M5 12h14" />,
@@ -768,10 +770,16 @@ function VoiceReply({ text, getToken, auto, onAutoDone, onVoiceLimit }) {
   );
 }
 
-function AnswerActions({ text, getToken, exportName }) {
+function AnswerActions({ text, getToken, exportName, q, mode }) {
   const { t, lang } = useLang();
   const [state, setState] = useState("idle"); // idle | loading | playing
   const [copied, setCopied] = useState(false);
+  const [rated, setRated] = useState(""); // "up" | "down" — 👍 / 👎 help make the answers better
+  async function rate(r) {
+    if (rated) return;
+    setRated(r);
+    try { await fetch("/api/rate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ rating: r, q: String(q || "").slice(0, 400), a: String(text || "").slice(0, 700), mode }) }); } catch {}
+  }
   const audioRef = useRef(null);
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
@@ -811,6 +819,9 @@ function AnswerActions({ text, getToken, exportName }) {
       <button aria-label={state === "playing" ? t("stopListen") : t("listen")} title={t("listen")} className={state !== "idle" ? "on" : ""} onClick={speak}>
         {state === "loading" ? <span className="mini-spin" aria-hidden="true" /> : <Svg d={state === "playing" ? Icon.stop : Icon.speaker} size={16} />}
       </button>
+      {(!rated || rated === "up") && <button aria-label={t("rateUp")} title={t("rateUp")} className={rated === "up" ? "on" : ""} disabled={!!rated} onClick={() => rate("up")}><Svg d={Icon.thumbUp} size={16} /></button>}
+      {(!rated || rated === "down") && <button aria-label={t("rateDown")} title={t("rateDown")} className={rated === "down" ? "on" : ""} disabled={!!rated} onClick={() => rate("down")}><Svg d={Icon.thumbDown} size={16} /></button>}
+      {rated && <span className="rate-thanks" role="status">{t("rateThanks")}</span>}
       {exportName && (
         <button aria-label={t("exportSummary")} title={t("exportSummary")} className="export-btn" onClick={() => downloadText(exportName, text)}>
           <Svg d={Icon.zip} size={16} /> <span>{t("exportSummary")}</span>
@@ -2060,6 +2071,21 @@ function Main({ session }) {
     window.addEventListener("pagehide", tell);
     return () => { document.removeEventListener("visibilitychange", tell); window.removeEventListener("pagehide", tell); };
   }, []);
+  // Errors in this app (not in the user's own projects) are reported to the owner, so they can be fixed quickly.
+  useEffect(() => {
+    let sent = 0;
+    const report = (msg, where) => {
+      msg = String(msg || "").slice(0, 300);
+      if (!msg || sent >= 5 || /ResizeObserver|Script error|extension|chrome-extension|webkit-masked-url|NotAllowedError|AbortError|Load failed|Failed to fetch|NetworkError/i.test(msg + where)) return;
+      sent++;
+      try { fetch("/api/clienterr", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg, where: String(where || "").slice(0, 200), ua: navigator.userAgent.slice(0, 120), ver: process.env.NEXT_PUBLIC_BUILD_ID || "" }) }).catch(() => {}); } catch {}
+    };
+    const onErr = (e) => { if (e.filename && !e.filename.startsWith(location.origin)) return; report(e.message, (e.filename || "").replace(location.origin, "") + ":" + (e.lineno || "")); };
+    const onRej = (e) => { const r = e.reason; report(r?.message || r, (r?.stack || "").split("\n").slice(0, 2).join(" ").replace(location.origin, "")); };
+    window.addEventListener("error", onErr);
+    window.addEventListener("unhandledrejection", onRej);
+    return () => { window.removeEventListener("error", onErr); window.removeEventListener("unhandledrejection", onRej); };
+  }, []);
   const activeIdRef = useRef(null);
   activeIdRef.current = active.id;
   // an answer still being finished on the server (the connection broke, e.g. the app went to the background)
@@ -3247,7 +3273,7 @@ function Main({ session }) {
                       <VoiceReply text={m.content} getToken={token} auto={autoVoice === `${active.id}:${i}`} onAutoDone={() => setAutoVoice("")} onVoiceLimit={() => showLimit("voice")} />
                     )}
                     {m.role === "assistant" && m.content && !m.failed && !m.designs && !m.gen && !m.studio && !(busy && i === messages.length - 1) && (
-                      <AnswerActions text={m.content.replace(/```(ahm-file|predict)\s*\n[\s\S]*?(\n```|$)/g, "")} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
+                      <AnswerActions text={m.content.replace(/```(ahm-file|predict)\s*\n[\s\S]*?(\n```|$)/g, "")} q={text0(messages, i)} mode={mode} getToken={token} exportName={mode === "construct" ? `ahm-construction-${new Date().toISOString().slice(0, 10)}.md` : undefined} />
                     )}
                     {mode === "build" && m.plan && !hasFiles && !busy && i === messages.length - 1 && !m.failed && (
                       <div className="plan-actions">

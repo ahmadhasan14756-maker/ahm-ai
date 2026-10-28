@@ -1,5 +1,4 @@
 // Works out what the user wants from their first message: a normal answer, a website/app/code project, or an image.
-import { serverEnv } from "../../../lib/env";
 import { getUser } from "../../../lib/server";
 import { quickGuess } from "../../../lib/intent";
 import { gemini } from "../../../lib/gemini";

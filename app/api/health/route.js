@@ -29,6 +29,7 @@ export async function GET() {
     return { key: i + 1, starts: k.slice(0, 2), length: k.length, google: ok };
   }));
   out.push = pushKeys() ? "ok" : "missing";
+  if (hasRedis()) { try { out.ratings = { up: Number(await redis("GET", "rate:up")) || 0, down: Number(await redis("GET", "rate:down")) || 0 }; } catch {} }
   out.redis = !hasRedis() ? "missing" : (await redis("PING")) === "PONG" ? "ok" : "ERROR";
   try {
     const { error } = await adminDb().from("jobs").select("id", { head: true, count: "exact" });
@@ -44,7 +45,7 @@ export async function GET() {
 
   // why recent answers were refused (reason codes from Google only — no user messages)
   if (hasRedis()) {
-    for (const k of ["timing", "builds", "ai_errors"]) { try { out["recent_" + k] = ((await redis("LRANGE", "dbg:" + k, 0, 9)) || []).map((x) => { try { return JSON.parse(x); } catch { return x; } }); } catch {} }
+    for (const k of ["timing", "builds", "ai_errors", "client_errors"]) { try { out["recent_" + k] = ((await redis("LRANGE", "dbg:" + k, 0, 9)) || []).map((x) => { try { return JSON.parse(x); } catch { return x; } }); } catch {} }
   }
   if (hasRedis()) { try { out.recent_refusals = ((await redis("LRANGE", "dbg:refusals", 0, 9)) || []).map((x) => { try { return JSON.parse(x); } catch { return x; } }); } catch {} }
   return Response.json(out, { headers: { "Cache-Control": "no-store" } });
