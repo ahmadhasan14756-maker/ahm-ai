@@ -542,7 +542,7 @@ VOICE CONVERSATION MODE (most important rules)
     let ctrl = null;
     let open = true;
     let left = false; // the user left the app before the answer was finished → send a notification
-    const tStart = Date.now(); let tFirst = 0; // how fast the first words come (shown in /api/health)
+    const tStart = Date.now(), reqStart = tStart; let tFirst = 0; // how fast the first words come (shown in /api/health)
     const send = (txt) => { if (!tFirst && txt && !txt.startsWith("\u0000")) tFirst = Date.now(); if (!open || !ctrl) return; try { ctrl.enqueue(encoder.encode(txt)); } catch { open = false; left = true; } };
     // A big build that goes on while the user is away continues by itself on the server ("chain"),
     // with no need to open the app; everything is saved in the same job and the phone gets ONE notification at the end.
@@ -624,6 +624,9 @@ VOICE CONVERSATION MODE (most important rules)
             full += mark; send(mark);
             let out = "", shown = 0;
             for await (const piece of answer(models, stepContents(askFor(f, last), written), stepConfig, false, REFUSAL[lang], level)) {
+              // never run into the server's hard time limit (the work would be lost and the app would wait forever):
+              // a file that is not finished in time is written again in the next part
+              if (Date.now() - reqStart > (Number(serverEnv("STEP_HARD_MS")) || 268000)) { out = "\u0000ERR:time"; break; }
               if (piece.includes("\u0000RESET")) { // the filter made the AI start again: take back what was shown of this file
                 if (live && shown) { send(`\u0000UNDO:${shown}\n`); full = full.slice(0, full.length - shown); }
                 out = ""; shown = 0; continue;

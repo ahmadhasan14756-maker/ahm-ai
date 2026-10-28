@@ -2907,6 +2907,33 @@ function Main({ session }) {
           return;
         }
         if (j.status === "unknown" && i >= 4) { fail(t("errConn")); return; } // nothing saved (e.g. update 3 not installed)
+        // the server stopped without finishing (no news for 5 minutes): keep what was made and let the app make
+        // the rest by itself (missing files), instead of waiting forever
+        if (j.status === "running" && j.updated_at && Date.now() - Date.parse(j.updated_at) > 300000) {
+          let part = String(j.result || "");
+          const rs3 = part.lastIndexOf("\u0000RESET\n");
+          if (rs3 >= 0) part = part.slice(rs3 + 7);
+          part = part.replace(/\u0000(F:\d+\/\d+:[^\n]*|MORE:[^\n]*|CHAIN|H)\n/g, "").replace(/\u0000[^\n]*/g, "");
+          const chat = chatsRef.current.find((c) => c.id === chatId);
+          const msg = chat?.messages.find((x) => x.pending?.job === jobId);
+          if (!msg) return;
+          patchIf(chatId, (c) => {
+            const k = c.messages.findIndex((x) => x.pending?.job === jobId);
+            if (k < 0) return c;
+            const msgs = [...c.messages];
+            const { pending: _p, progress: _g, ...rest } = msgs[k];
+            msgs[k] = { ...rest, content: part || t("errConn") };
+            const ch = msg.pending.kind === "build" && part ? applyChanges(c.project || {}, part) : null;
+            return { ...c, messages: msgs, ...(ch?.changed ? { project: ch.files } : {}) };
+          });
+          if (msg.pending.kind === "build") setTimeout(() => {
+            const c = chatsRef.current.find((x) => x.id === chatId);
+            const miss = c ? findMissing(c.project || {}, c.buildKind || "website") : [];
+            if (miss.length && c.id === activeIdRef.current) autoRef.current?.(t("autoMissing").replace("{f}", miss.map((x) => x.path).join("، ")), 1);
+            else if (c) runReview(chatId);
+          }, 1500);
+          return;
+        }
         // still working on the server: show what is already made (files appear one by one, like when you watch it)
         if (j.status === "running" && j.result) {
           let part = String(j.result);
