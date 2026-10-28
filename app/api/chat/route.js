@@ -28,7 +28,7 @@ LANGUAGE
 - Many users write Kurdish quickly in Latin letters, phonetically, with typos and no spaces or punctuation (e.g. "slaw chony" = سڵاو چۆنی، "esa chbkm" = ئێستا چی بکەم، "tynagashtm" = تێنەگەیشتم). Work out what they MEAN from the words and the conversation, and answer that. Never comment on their spelling.
 - When the reply is in Kurdish, always write clean, correct Kurdish Sorani in Arabic script — even when the user wrote in Latin letters or made mistakes.
 - CLEAR, BEAUTIFUL LANGUAGE that everyone understands:
-  • Kurdish: the standard written Central Kurdish (Sorani) of Sulaymaniyah and Erbil; correct letters (ک not ك, ی not ي, ە for the vowel and ه for the consonant, ڕ ڵ ێ ۆ); Kurdish punctuation (، ؛ ؟); a common Kurdish word instead of an Arabic, Persian or English one whenever one exists (e.g. «بەکارهێنەر» not «مستخدم», «ئامێر» not «جهاز»); short sentences with a natural Kurdish word order — never word-by-word translation.
+  • Kurdish: the standard written Central Kurdish (Sorani) of Sulaymaniyah and Erbil; correct letters (ک not ك, ی not ي, ە for the vowel and ه for the consonant, ڕ ڵ ێ ۆ); Kurdish punctuation (، ؛ ؟); a common Kurdish word instead of an Arabic, Persian or English one whenever one exists (e.g. «بەکارهێنەر» not «مستخدم», «ئامێر» not «جهاز»); short sentences with a natural Kurdish word order — never word-by-word translation; no Arabic vowel marks (َ ِ ُ); Kurdish digits ٠١٢٣٤٥٦٧٨٩ (never Persian ۰۱۲۳); re-read every word once for spelling before you finish.
   • Arabic: clear, simple Modern Standard Arabic (not a dialect unless the user writes in one), correct hamza and ة/ه, short sentences.
   • English: plain, friendly everyday English.
 - If a message can mean two different things, choose the most likely meaning and start with one short line saying what you understood (e.g. «تێگەیشتم کە دەتەوێت …»).
@@ -267,6 +267,15 @@ const MAX_ATTACH_CHARS = 4_200_000; // Vercel accepts ~4.5 MB per request
 const FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
 const ATTACH_TYPES = /^(audio\/(webm|mp4|mpeg|ogg|wav|aac|x-m4a|m4a)|image\/(jpeg|png|webp)|application\/pdf)$/; // voice messages, photos and PDFs
 
+// Small spelling slips the AI sometimes makes in Kurdish: Persian digits (۲۵ → ٢٥), Arabic vowel marks on Kurdish words
+// (مێشکَت → مێشکت) and a doubled «ە» (بنووسەەوە → بنووسەوە). Only in pieces that are Kurdish (Kurdish-only letters).
+const KU_ONLY = /[ڕڵێۆەڤگچپژ]/;
+function tidyKurdish(t) {
+  if (!KU_ONLY.test(t)) return t;
+  return t.replace(/[۰-۹]/g, (d) => "٠١٢٣٤٥٦٧٨٩"["۰۱۲۳۴۵۶۷۸۹".indexOf(d)])
+    .replace(/([\u0620-\u06FF])[\u064B-\u0652]+/g, "$1")
+    .replace(/ەە(?=وە|\s|$|[.،؟!])/g, "ە");
+}
 const errText = (e) => String(e?.message || e || "").slice(0, 400);
 const errCode = (e) => String(e?.status || e?.code || "") + " " + errText(e);
 const isRateLimit = (e) => /429|RESOURCE_EXHAUSTED|quota/i.test(errCode(e));
@@ -667,8 +676,9 @@ VOICE CONVERSATION MODE (most important rules)
             const t = office.file.type, made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
             const txt = (office.reply || made) + "\n\n```ahm-file\n" + JSON.stringify(office.file) + "\n```\n";
             full += txt; send(txt);
-          } else for await (const piece of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
-            if (!piece.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
+          } else for await (const raw of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
+            if (!raw.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
+            const piece = lang === "ckb" ? tidyKurdish(raw) : raw;
             full += piece;
             send(piece);
           }
