@@ -92,7 +92,7 @@ export default function OfficeCard({ text, t, uiLang = "ckb" }) {
       <div className="ofc-head">
         <span className="ofc-badge" style={{ background: K.color }} aria-hidden="true">{K.badge}</span>
         <div className="ofc-name">
-          <b><bdi>{f.name}</bdi></b>
+          <b><bdi>{String(f.name).replace(/_+/g, " ")}</bdi></b>
           <small><bdi>{K.label}</bdi>{sub && <> · <bdi>{sub}</bdi></>}</small>
         </div>
       </div>
