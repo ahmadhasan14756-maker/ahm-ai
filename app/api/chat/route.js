@@ -177,19 +177,27 @@ FILES: index.html (login + app shell, pages switch with #hash routes), css/style
 // If the 5-minute server limit gets close, a signed "continue" note is sent and the app continues by itself.
 const FILELIST_PROMPT = (kind, lang) => `You are a senior developer planning the files of a ${kind === "app" ? "phone app" : kind === "system" ? "management system" : "website"} that the user agreed on in this conversation (the plan is in the conversation).
 ${KIND_PROMPT[kind]}
-Return JSON only: {"intro": "1-3 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you are building now, file by file", "files": [{"path": "index.html", "about": "what this file contains, in English, max 25 words"}]}
+Return JSON only: {"intro": "1-3 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you are building now, file by file", "files": [{"path": "index.html", "about": "what this file contains, in English, max 25 words"}], "contract": "…"}
+"contract" = the SHARED NAMES every file must use exactly (the files are written separately, so this is what keeps them working together), in English, max ~1200 characters:
+- each global object and its functions with arguments and what they return, e.g. "window.Auth = { login(user, pass) → bool, logout(), isLoggedIn() → bool, currentUser() → {name, role} }", "window.Store = { all(col) → array, save(col, item), remove(col, id) }"
+- localStorage keys and the shape of saved records, e.g. "products: [{id, name, price, stock, category}]"
+- element ids / CSS classes several files rely on (e.g. "#app", ".card", ".btn-primary", ".sidebar")
+- the <script> order on every page, shared files first and the page's own script last (e.g. "js/data.js → js/auth.js → js/ui.js → page script")
 Rules: 4 to 18 files. Follow the FILES list of the project type above and the pages/screens/modules of the plan — every page/screen/module gets its own file. Order: files others depend on first (styles, data/storage, auth, router/app), then the pages / screens / modules, README.md last. Paths: forward slashes, no leading slash. Only text files (HTML, CSS, JS, JSON, MD, SVG) — no photos.`;
 // A broad change to an existing project ("make the design more beautiful", "improve everything"): the AI first
 // decides which files to change, then rewrites them one by one — the user never has to name files.
 const BROAD_CHANGE = /(جوان|دیزاین|ستایل|ڕەنگ|هەموو|گشت|سەرلەنوێ|باشتر|نوێی بکەرەوە|مۆدێرن|تەواوی|تصميم|جميل|أجمل|كل |بالكامل|حدّث|طوّر|design|beautiful|prettier|redesign|modern|style|all |every|whole|improve|better|revamp|polish)/i;
 const CHANGE_PROMPT = (lang) => `You are a senior developer. The user wants a change to their existing project (files below). Decide yourself EXACTLY which files must be changed or created to do it completely and well — the user will not name files.
-Return JSON only: {"intro": "1-2 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you will change", "files": [{"path": "css/style.css", "about": "precisely what to change in this file, in English, max 35 words"}]}
+Return JSON only: {"intro": "1-2 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you will change", "files": [{"path": "css/style.css", "about": "precisely what to change in this file, in English, max 35 words", "note": "the same change in 4-10 simple words in ${LANG_NAME[lang] || LANG_NAME.ckb}, for the user"}]}
 Rules: list every file that needs work (shared CSS first, then shared scripts, then pages/screens), new files too; 1 to 15 files; never js/ahm-db.js; don't list files that need no change.`;
 const STEP_RULES = `
 ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - You are writing the project ONE FILE AT A TIME. You get the full file list and every file already written.
 - Write ONLY the file you are asked for, as exactly one \`\`\`file:PATH block with its COMPLETE content. No sentences before or after it.
-- Keep it 100% consistent with the files already written and with the file list: the same class names, ids, function names, global variables, data keys and links. Link only to files in the list.`;
+- Keep it 100% consistent with the files already written, the file list and the SHARED CONTRACT: the same class names, ids, function names, global variables, data keys and links. Link only to files in the list.
+- Shared code lives on window objects exactly as named in the contract (window.Auth, window.Store…); define each one once, in its own file, and never rename it.
+- In every HTML page load the scripts in the contract's order: shared files first, the page's own script LAST.
+- Never call a function or read an id/key that is not in the contract or in the files already written. Start page code after DOMContentLoaded and check that a shared object exists before using it, so a page never goes blank.`;
 const STEP_SECRET = () => serverEnv("PUSH_SECRET") || serverEnv("SUPABASE_SERVICE_ROLE_KEY") || "ahm-dev";
 const signStep = (data) => { const b = Buffer.from(JSON.stringify(data)).toString("base64url"); return b + "." + createHmac("sha256", "ahm-step:" + STEP_SECRET()).update(b).digest("base64url"); };
 function readStep(tok, uid) {
@@ -202,7 +210,7 @@ function readStep(tok, uid) {
   } catch { return null; }
 }
 const cleanList = (files) => (Array.isArray(files) ? files : [])
-  .map((f) => ({ path: String(f?.path || "").trim().replace(/^\.?\/+/, "").replace(/\\/g, "/").slice(0, 120), about: String(f?.about || "").slice(0, 200) }))
+  .map((f) => ({ path: String(f?.path || "").trim().replace(/^\.?\/+/, "").replace(/\\/g, "/").slice(0, 120), about: String(f?.about || "").slice(0, 200), ...(f?.note ? { note: String(f.note).replace(/\u0000/g, "").slice(0, 120) } : {}) }))
   .filter((f) => f.path && !f.path.includes("..") && /\.(html?|css|m?js|json|md|svg|txt|webmanifest|py|php|java|cs|ts|tsx|jsx|dart|xml|yml|yaml|sql)$/i.test(f.path))
   .filter((f, i, a) => a.findIndex((x) => x.path === f.path) === i && f.path !== "js/ahm-db.js")
   .slice(0, 18);
@@ -558,15 +566,16 @@ VOICE CONVERSATION MODE (most important rules)
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
         { onPlace: (n) => send(`\u0000Q:${n}\n`) });
       try {
-        let list = null, total = 0, doneN = 0, editing = false;
+        let list = null, total = 0, doneN = 0, editing = false, contract = "";
         if (stepBuild) {
-          if (contTok) { list = cleanList(contTok.f); doneN = Number(contTok.d) || 0; total = Number(contTok.n) || doneN + list.length; editing = !!contTok.ed; }
+          if (contTok) { list = cleanList(contTok.f); doneN = Number(contTok.d) || 0; total = Number(contTok.n) || doneN + list.length; editing = !!contTok.ed; contract = String(contTok.c || "").slice(0, 2000); }
           else {
             const convo = messages.slice(-10).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 6000)).join("\n\n");
             try {
               const pics = attachments.filter((a) => /^image\//.test(a.mimeType)).slice(0, 3).map((a) => ({ inlineData: { mimeType: a.mimeType, data: a.data } }));
-              const out = await jsonCall(SYSTEM_PROMPT(lang) + FILELIST_PROMPT(buildKind, lang), [...pics, { text: convo + (pics.length ? "\n\n(The attached picture is the design to copy.)" : "") }], { maxTokens: 4000, think: "minimal" });
+              const out = await jsonCall(SYSTEM_PROMPT(lang) + FILELIST_PROMPT(buildKind, lang), [...pics, { text: convo + (pics.length ? "\n\n(The attached picture is the design to copy.)" : "") }], { maxTokens: 7000, think: "minimal" });
               list = cleanList(out?.files);
+              contract = String(out?.contract || "").replace(/\u0000/g, "").slice(0, 2000);
               if (list.length >= 2) {
                 total = list.length;
                 const intro = String(out?.intro || "").replace(/\u0000/g, "").trim().slice(0, 600);
@@ -600,14 +609,14 @@ VOICE CONVERSATION MODE (most important rules)
           let stopped = false, made = 0, begun = 0;
           const more = async (rest) => {
             if (stopped || !rest.length) return; stopped = true;
-            const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000, ed: editing ? 1 : 0 });
+            const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000, ed: editing ? 1 : 0, c: contract });
             writtenAll = written;
             if ((chained || await awayNow()) && jobId && chainN < 8) { chainNext = tok; send("\u0000CHAIN\n"); return; } // nobody is watching: the server goes on by itself
             full += `\u0000MORE:${tok}\n`; send(`\u0000MORE:${tok}\n`);
           };
           const askFor = (f, last) => (editing
             ? `FILES TO CHANGE for this request (in order):\n${listText}\n\nNow write the COMPLETE new version of ONLY the file \`${f.path}\` with this change: ${f.about}. Keep everything else in it working and consistent with the other files.`
-            : `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\nNow write ONLY the file \`${f.path}\` — ${f.about}`) + `${last ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
+            : `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\n${contract ? `SHARED CONTRACT — use EXACTLY these names (other files are written at the same time and rely on them):\n${contract}\n\n` : ""}Now write ONLY the file \`${f.path}\` — ${f.about}`) + `${last ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
           // Writes one file. live = its text appears in the app while it is being written.
           const writeOne = async (f, last, live, level) => {
             if (stopped) return false;
@@ -664,13 +673,16 @@ VOICE CONVERSATION MODE (most important rules)
           noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
           if (!stopped && !/\u0000(MORE|ERR):/.test(full)) {
             const n = doneN + list.length;
-            const end = (editing
-              ? { ckb: `✅ تەواو بوو — ${n} فایل نوێ کرانەوە.\n▶️ لە پیشاندان سەیری بکە، و ئەگەر شتێکی تر بگۆڕم پێم بڵێ.`,
-                  ar: `✅ انتهى — تم تحديث ${n} ملفات.\n▶️ شاهده في المعاينة، وأخبرني إن أردت تغييراً آخر.`,
-                  en: `✅ Done — ${n} files updated.\n▶️ See it in the preview and tell me if you want anything else changed.` }
-              : { ckb: `✅ تەواو بوو — هەموو ${n} فایلەکە دروست کران.\n▶️ لە پیشاندان تاقی بکەرەوە، و هەر شتێکت ویست بیگۆڕم پێم بڵێ.`,
-                  ar: `✅ انتهى — تم إنشاء كل الملفات (${n}).\n▶️ جرّبه في المعاينة، وأخبرني بأي تغيير تريده.`,
-                  en: `✅ Done — all ${n} files are ready.\n▶️ Try it in the preview and tell me anything you want changed.` })[lang] || "";
+            // an edit says honestly what was changed, file by file, in the user's language
+            const changes = editing ? list.filter((f) => f.path in written).map((f) => `• \`${f.path}\` — ${f.note || f.about}`).join("\n") : "";
+            const kd = (x) => (lang === "en" ? String(x) : String(x).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[d]));
+            const end = (changes ? changes + "\n\n" : "") + (editing
+              ? { ckb: `✅ تەواو بوو — ${kd(n)} فایل نوێ کرانەوە.\n▶️ لە پیشاندان سەیری بکە، و ئەگەر شتێکی تر بگۆڕم پێم بڵێ.`,
+                  ar: `✅ انتهى — تم تحديث ${kd(n)} ملفات.\n▶️ شاهده في المعاينة، وأخبرني إن أردت تغييراً آخر.`,
+                  en: `✅ Done — ${kd(n)} files updated.\n▶️ See it in the preview and tell me if you want anything else changed.` }
+              : { ckb: `✅ تەواو بوو — هەموو ${kd(n)} فایلەکە دروست کران.\n▶️ لە پیشاندان تاقی بکەرەوە، و هەر شتێکت ویست بیگۆڕم پێم بڵێ.`,
+                  ar: `✅ انتهى — تم إنشاء كل الملفات (${kd(n)}).\n▶️ جرّبه في المعاينة، وأخبرني بأي تغيير تريده.`,
+                  en: `✅ Done — all ${kd(n)} files are ready.\n▶️ Try it in the preview and tell me anything you want changed.` })[lang] || "";
             full += end; send(end);
           }
         } else {

@@ -429,7 +429,7 @@ export default function Workspace({ files, setFiles, busy, t, onClose, onAsk, on
       {tab === "preview" ? (
         html ? (
           <>
-            {issue && (
+            {issue && !busy && (
               <div className={"pv-issue" + (issue.missing ? " miss" : "")} role="alert">
                 <span>{issue.auto ? "🔧 " + t("pvAutoFixing") : "⚠️ " + (issue.missing ? t("pvMissing").replace("{p}", issue.missing) : t("pvError"))}{issue.error && <code dir="ltr">{issue.error}</code>}</span>
                 <div>
