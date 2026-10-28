@@ -192,7 +192,7 @@ export default function VoiceMode({ lang, getToken, history, tutor, greeting, on
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, lang }),
       });
       if (res.status === 429 && (await res.clone().json().catch(() => ({}))).error === "voice_limit") {
         setMsg(tl("voiceLimit")); setPhase("error");

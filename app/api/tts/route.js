@@ -3,6 +3,7 @@ import { serverEnv } from "../../../lib/env";
 import { getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
 import { voiceLimitMin, voiceUsedSec, addVoiceSec } from "../../../lib/voice";
 import { gemini, keyCount } from "../../../lib/gemini";
+import { detectLang } from "../../../lib/i18n";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
 export const runtime = "nodejs";
@@ -10,6 +11,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const preferredRegion = "fra1";
 
+// How the voice should sound (a direction for the voice, not read out): clear, natural, a calm pace.
+const STYLE = {
+  ckb: "Say in a warm, clear Central Kurdish (Sorani) voice, Sulaymaniyah accent, at a calm pace, every word clearly pronounced:",
+  ar: "Say in a warm, clear Modern Standard Arabic voice, at a calm pace, every word clearly pronounced:",
+  en: "Say in a warm, clear, natural English voice, at a calm pace:",
+};
 const MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"];
 
 // Remove things that should not be spoken: code, links, markdown symbols.
@@ -23,6 +30,7 @@ function speakable(text) {
     .replace(/[*_~>|#]+/g, "")
     .replace(/^\s*[-•]\s+/gm, "")
     .replace(/\u0000ERR:\w+/g, "")
+    .replace(/\p{Extended_Pictographic}\uFE0F?/gu, "") // emojis are not read out
     .replace(/\n{2,}/g, "\n")
     .trim()
     .slice(0, 1500);
@@ -60,7 +68,7 @@ export async function POST(req) {
     try {
       const r = await gemini().models.generateContent({
         model,
-        contents: [{ parts: [{ text }] }],
+        contents: [{ parts: [{ text: (STYLE[detectLang(text) || body?.lang] || STYLE.en) + " " + text }] }],
         config: {
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },

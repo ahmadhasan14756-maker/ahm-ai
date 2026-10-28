@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS } from "../lib/plans";
 import { parseFiles, applyChanges, buildPreview, downloadZip, findMissing } from "../lib/builder";
 import { DB_FILE, dbFile } from "../lib/appdb";
 import { importZip } from "../lib/zipimport";
-import { LANGS, dirOf, makeT } from "../lib/i18n";
+import { LANGS, dirOf, makeT, detectLang } from "../lib/i18n";
 import Workspace, { DevicePreview } from "../components/Workspace";
 import Learn from "../components/Learn";
 import HouseStudio from "../components/HouseStudio";
@@ -717,7 +717,7 @@ function unlockAudio() {
 }
 // The AI's answer as a voice message (after the user spoke): play/pause + progress, plays by itself the first time.
 function VoiceReply({ text, getToken, auto, onAutoDone, onVoiceLimit }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [state, setState] = useState("idle"); // idle | loading | playing | error | limit
   const [pos, setPos] = useState(0);
   const audioRef = useRef(null);
@@ -734,7 +734,7 @@ function VoiceReply({ text, getToken, auto, onAutoDone, onVoiceLimit }) {
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, lang }),
         });
         if (res.status === 429 && (await res.clone().json().catch(() => ({}))).error === "voice_limit") { setState("limit"); if (!auto) onVoiceLimit?.(); return; }
         if (!res.ok) throw new Error();
@@ -769,7 +769,7 @@ function VoiceReply({ text, getToken, auto, onAutoDone, onVoiceLimit }) {
 }
 
 function AnswerActions({ text, getToken, exportName }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [state, setState] = useState("idle"); // idle | loading | playing
   const [copied, setCopied] = useState(false);
   const audioRef = useRef(null);
@@ -786,7 +786,7 @@ function AnswerActions({ text, getToken, exportName }) {
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, lang }),
         });
         if (!res.ok) throw new Error();
         const url = URL.createObjectURL(await res.blob());
@@ -1946,7 +1946,8 @@ function PlanPanel({ step, planMsg, busy, onOwn, onBuild, onChange }) {
 const blank = (mode) => ({ id: newId(), mode, title: "", messages: [], project: {}, updated: Date.now() });
 
 function Main({ session }) {
-  const { t, lang } = useLang();
+  const { t, lang, setLang } = useLang();
+  const num = (x) => (lang === "en" ? String(x) : String(x).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[d])); // Kurdish / Arabic digits
   const uid = session.user.id;
   const storeKey = `ahm-chats-${uid}`;
   const [chats, setChats] = useState([]);
@@ -2545,6 +2546,9 @@ function Main({ session }) {
   }
   function voiceTurn(heardText, answer) {
     if (!voice) return;
+    // the app follows the language the user speaks
+    const dl = !voice.tutor && detectLang(heardText);
+    if (dl && dl !== lang) setLang(dl);
     patch(voice.chatId, (c) => ({
       ...c,
       mode: c.mode === "auto" ? "chat" : c.mode,
@@ -2563,6 +2567,10 @@ function Main({ session }) {
     }
     const typed = (preset ?? input).trim();
     const hasAttach = images.length || file || extra.length;
+    // the whole app follows the language the user writes in (Kurdish, Arabic or English)
+    const dl = preset === undefined && !opts.auto && !opts.cont && !active.tutor ? detectLang(typed) : null;
+    if (dl && dl !== lang) setLang(dl);
+    const reqLang = dl || lang;
     let target = forced || (mode === "image" || mode === "studio" ? "chat" : mode); // image/design section was removed
 
     // New chat with no tool chosen: work out what the user wants.
@@ -2676,7 +2684,7 @@ function Main({ session }) {
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
         body: JSON.stringify({
           mode: m,
-          lang,
+          lang: reqLang,
           messages: next.map(({ role, content }) => ({ role, content })),
           file: sentFile || undefined,
           images: (sentImages.length ? sentImages : designPics).length ? (sentImages.length ? sentImages : designPics).map(({ mimeType, data }) => ({ mimeType, data })) : undefined,
@@ -3159,7 +3167,7 @@ function Main({ session }) {
                     {m.fileName && <div className="file-tag" dir="ltr">📎 {m.fileName}</div>}
                     {m.role === "assistant" && m.progress && busy && i === messages.length - 1 && (
                       <div className="build-prog" role="status">
-                        <div className="bp-top"><span className="mini-spin" /> {t("buildFile").replace("{i}", m.progress.i).replace("{n}", m.progress.n)} <code dir="ltr">{m.progress.path}</code></div>
+                        <div className="bp-top"><span className="mini-spin" /> {t("buildFile").replace("{i}", num(m.progress.i)).replace("{n}", num(m.progress.n))} <code dir="ltr">{m.progress.path}</code></div>
                         <div className="bp-bar" aria-hidden="true"><i style={{ width: Math.round(((m.progress.i - 0.5) / Math.max(1, m.progress.n)) * 100) + "%" }} /></div>
                       </div>
                     )}
@@ -3169,9 +3177,9 @@ function Main({ session }) {
                         {m.check && (
                           <div className={"chk chk-" + m.check.state} role="status">
                             {m.check.state === "run" && <span className="mini-spin" />}
-                            <span>{m.check.state === "run" ? t("chkRun").replace("{i}", m.check.i || 1).replace("{n}", m.check.n || "…")
-                              : m.check.state === "ok" ? t("chkOk").replace("{p}", m.check.pages).replace("{c}", m.check.clicked)
-                              : m.check.state === "fix" ? t("chkFix").replace("{n}", m.check.n) : t("chkLeft").replace("{n}", m.check.n)}</span>
+                            <span>{m.check.state === "run" ? t("chkRun").replace("{i}", num(m.check.i || 1)).replace("{n}", m.check.n ? num(m.check.n) : "…")
+                              : m.check.state === "ok" ? t("chkOk").replace("{p}", num(m.check.pages)).replace("{c}", num(m.check.clicked))
+                              : m.check.state === "fix" ? t("chkFix").replace("{n}", num(m.check.n)) : t("chkLeft").replace("{n}", num(m.check.n))}</span>
                           </div>
                         )}
                         {m.pending && !(busy && i === messages.length - 1) && <div className="away-note" role="status"><span className="mini-spin" /> {t("awayWorking")}</div>}
