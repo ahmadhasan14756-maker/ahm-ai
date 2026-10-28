@@ -276,6 +276,27 @@ function tidyKurdish(t) {
     .replace(/([\u0620-\u06FF])[\u064B-\u0652]+/g, "$1")
     .replace(/ەە(?=وە|\s|$|[.،؟!])/g, "ە");
 }
+// A careful Kurdish editor: fixes spelling and grammar only, keeps the meaning, the layout and every Markdown sign.
+async function proofreadKurdish(text) {
+  try {
+    const r = await Promise.race([
+      gemini().models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: [{ role: "user", parts: [{ text }] }],
+        config: {
+          systemInstruction: "You are a professional editor of Central Kurdish (Sorani). Correct ONLY spelling, grammar, wrong word forms and unnatural wording in the Kurdish text you get, using the standard written Sorani of Sulaymaniyah and Erbil (correct ڕ ڵ ێ ۆ ە ک ی, Kurdish digits). Keep the meaning, the order, the length, every Markdown sign (**, #, -, 1.), line breaks, emojis, numbers, names and any English words exactly as they are. Do not add or remove anything. Return only the corrected text.",
+          thinkingConfig: { thinkingLevel: "minimal" }, maxOutputTokens: 4096, safetySettings: GEMINI_SAFETY,
+        },
+      }),
+      new Promise((_, no) => setTimeout(() => no(new Error("slow")), 9000)),
+    ]);
+    const out = tidyKurdish(String(r.text || "").trim());
+    // a safe change only: about the same length and the same layout
+    const lines = (x) => x.split("\n").filter((l) => l.trim()).length;
+    if (!out || Math.abs(out.length - text.length) > text.length * 0.15 || Math.abs(lines(out) - lines(text)) > 1) return null;
+    return out;
+  } catch { return null; }
+}
 const errText = (e) => String(e?.message || e || "").slice(0, 400);
 const errCode = (e) => String(e?.status || e?.code || "") + " " + errText(e);
 const isRateLimit = (e) => /429|RESOURCE_EXHAUSTED|quota/i.test(errCode(e));
@@ -681,6 +702,12 @@ VOICE CONVERSATION MODE (most important rules)
             const piece = lang === "ckb" ? tidyKurdish(raw) : raw;
             full += piece;
             send(piece);
+          }
+          // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
+          // the answer is already on screen, and a few seconds later the corrected text replaces it.
+          if (lang === "ckb" && kind === "chat" && full.length > 60 && full.length < 6000 && !/\u0000|```|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
+            const fixed = await proofreadKurdish(full);
+            if (fixed && fixed !== full) { full = fixed; send("\u0000RESET\n" + fixed); }
           }
         }
       } catch (e) {
