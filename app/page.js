@@ -16,6 +16,7 @@ import SlidesStudio from "../components/SlidesStudio";
 import OfficeCard from "../components/OfficeCard";
 import { checkProject } from "../lib/selfcheck";
 import { templatesFor } from "../lib/templates";
+import { BLUEPRINTS } from "../lib/blueprints";
 import { PlanView, PredictCard } from "../components/ChatCards";
 import DesignStudio from "../components/DesignStudio";
 import VoiceMode from "../components/VoiceMode";
@@ -2087,6 +2088,7 @@ function Main({ session }) {
     window.addEventListener("unhandledrejection", onRej);
     return () => { window.removeEventListener("error", onErr); window.removeEventListener("unhandledrejection", onRej); };
   }, []);
+  const [tplMore, setTplMore] = useState(false); // all fields in the template list
   const activeIdRef = useRef(null);
   activeIdRef.current = active.id;
   // an answer still being finished on the server (the connection broke, e.g. the app went to the background)
@@ -3240,7 +3242,14 @@ function Main({ session }) {
                                 <span aria-hidden="true">{tp.ic}</span><b>{tp.name[lang] || tp.name.ckb}</b>
                               </button>
                             ))}
+                            {/* every other field: a short request — the plan step fills it in like a full template */}
+                            {tplMore && BLUEPRINTS.filter((b) => !templatesFor(active.buildKind).some((tp) => tp.name.en === b.name.en)).map((b) => (
+                              <button key={b.id} type="button" disabled={busy} onClick={() => send(t("tplAsk_" + (active.buildKind || "website")).replace("{f}", b.name[lang] || b.name.ckb))}>
+                                <span aria-hidden="true">{b.ic}</span><b>{b.name[lang] || b.name.ckb}</b>
+                              </button>
+                            ))}
                           </div>
+                          <button type="button" className="tpl-more" onClick={() => setTplMore(!tplMore)}>{tplMore ? t("tplLess") : t("tplMore").replace("{n}", num(BLUEPRINTS.filter((b) => !templatesFor(active.buildKind).some((tp) => tp.name.en === b.name.en)).length))}</button>
                         </div>
                       )}
                       {mode === "build" && (

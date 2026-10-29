@@ -8,6 +8,7 @@ import { allow, tooMany } from "../../../lib/ratelimit";
 import { waitUntil } from "@vercel/functions";
 import { saveJob, readJob, validJobId } from "../../../lib/jobs";
 import { notifyOwner, escHtml } from "../../../lib/telegram";
+import { matchBlueprints, blueprintText } from "../../../lib/blueprints";
 import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
 import { redis, hasRedis } from "../../../lib/redis";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
@@ -245,7 +246,7 @@ CLOUD DATABASE (this project has one — use it for ALL the app's data)
 - Keep one data layer (js/data.js) that wraps AHM.db for the rest of the app. Every call is async: show a small loading state, catch errors and show a friendly message in the user's language (e.g. "no internet"), and refresh the lists after saving. If an error has code "login_needed", show the login screen.
 - Data is live for everyone: add a "🔄" refresh button on tables. Demo data: only if the collection is empty, save a few example records once.`;
 
-const PLAN_PROMPT = (kind) => `
+const PLAN_PROMPT = (kind, blueprint = "") => `
 PLANNING STEP (do not build yet)
 The user wants a ${kind === "app" ? "phone app" : kind === "system" ? "management system / dashboard" : "website"}. Do NOT write any files and do not use file blocks now.
 Reply in the user's language with a clear, friendly plan they can approve:
@@ -254,6 +255,11 @@ Reply in the user's language with a clear, friendly plan they can approve:
 ## ⚙️ the main features
 ## 🎨 the design: colours, style, fonts${kind === "system" ? "\n## 👥 the users / roles and what data is saved" : ""}
 Keep it short and easy to scan (max ~220 words). Fill in smart defaults for anything the user did not say.
+MAKE IT AS COMPLETE AS A PROFESSIONAL TEMPLATE, even when the request is one short line ("a system for a pharmacy"):
+- 5–7 main parts that this kind of business really needs (never more than 8 in the first build; more ideas go into the "suggest" block).
+${kind === "system" ? "- User roles with demo logins that will be shown on the login screen (e.g. admin / admin123 and a staff role / 1234).\n" : ""}- Realistic sample data for the field; money in Iraqi dinar (IQD) unless the user says otherwise; all labels in the user's language.
+- Search and filters on lists, and a printable receipt / invoice / report where the field needs one.
+- What the user asked always comes first; the field blueprint below only fills the gaps.${blueprint ? `\nFIELD BLUEPRINT (what a good ${kind === "app" ? "app" : kind === "system" ? "system" : "website"} for this field contains):\n${blueprint}` : ""}
 End with one line telling them to tap "✅ Build it" or write what to change.
 Then add ONE block with the info string "suggest" holding exactly 3 lines starting with "- ": extra features that would make it better (in the user's language).`;
 
@@ -500,7 +506,7 @@ VOICE CONVERSATION MODE (most important rules)
 - CLEAR SPEECH: everyday words that everyone understands, short sentences, no rare or very formal words. In Kurdish: standard Central Kurdish (Sorani) as spoken in Sulaymaniyah and Erbil, correct Sorani spelling (ڕ ڵ ێ ۆ ە), Kurdish words instead of Arabic or English ones where a common Kurdish word exists, numbers written as words. In Arabic: simple Modern Standard Arabic. In English: plain everyday English.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind) + (cloudDb ? "\nThe project will have a cloud database: data is saved online and shared by every device — mention it in the plan in one short line." : "") : BUILD_PROMPT + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "")) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
+      systemInstruction: SYSTEM_PROMPT(lang) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind, blueprintText(matchBlueprints(messages.filter((m) => m.role === "user").slice(-3).map((m) => m.content).join(" ")), buildKind)) + (cloudDb ? "\nThe project will have a cloud database: data is saved online and shared by every device — mention it in the plan in one short line." : "") : BUILD_PROMPT + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "")) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
       maxOutputTokens: (file || build) && !planOnly ? 32768 : 8192,
       safetySettings: GEMINI_SAFETY,
     };

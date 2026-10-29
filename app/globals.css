@@ -2180,3 +2180,4 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .tpl-grid button span { font-size: 20px; }
 .tpl-grid button:hover { border-color: rgb(var(--gold-rgb) / .6); transform: translateY(-1px); }
 .tpl-grid button:disabled { opacity: .5; }
+.tpl-more { display: block; margin: 10px auto 0; border: 0; background: none; color: var(--gold-text); font: 700 13.5px var(--font); cursor: pointer; padding: 6px 10px; }
