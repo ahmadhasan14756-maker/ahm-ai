@@ -15,6 +15,7 @@ import HouseStudio from "../components/HouseStudio";
 import SlidesStudio from "../components/SlidesStudio";
 import OfficeCard from "../components/OfficeCard";
 import { checkProject } from "../lib/selfcheck";
+import { templatesFor } from "../lib/templates";
 import { PlanView, PredictCard } from "../components/ChatCards";
 import DesignStudio from "../components/DesignStudio";
 import VoiceMode from "../components/VoiceMode";
@@ -2327,11 +2328,11 @@ function Main({ session }) {
       const res = await checkProject(files, { onPage: (i, n, p) => mark({ state: "run", i, n, p }) });
       // problems the code can't fix (no internet in the test, outside services) are left out
       const probs = res.problems.filter((p) => p.kind === "blank" || !/Failed to fetch|NetworkError|Load failed|net::|ERR_|CORS|fetch.*fail|googleapis|cdn|429|quota|login_needed|unauthori[sz]ed|\b40[13]\b|slow_down/i.test(p.text));
-      if (!probs.length) { mark({ state: "ok", pages: res.pages, clicked: res.clicked }); return; }
+      if (!probs.length) { mark({ state: "ok", pages: res.pages, clicked: res.clicked, views: res.views || 0 }); return; }
       const canFix = (opts.checks || 0) < 2;
       mark({ state: canFix ? "fix" : "left", pages: res.pages, clicked: res.clicked, n: probs.length });
       if (!canFix || chatId !== activeIdRef.current) return;
-      const list = probs.slice(0, 8).map((p) => `- ${p.page}: ${p.kind === "blank" ? t("chkBlank") : p.text}`).join("\n");
+      const list = probs.slice(0, 8).map((p) => `- ${p.page}: ${p.kind === "blank" ? t("chkBlank") : p.kind === "blankView" ? t("chkBlankView").replace("{v}", p.text) : p.kind === "login" ? t("chkLogin") : p.text}`).join("\n");
       setTimeout(() => autoRef.current?.(t("chkFixAsk").replace("{list}", list), 2, { checks: (opts.checks || 0) + 1 }), 400);
     } catch (e) { console.error("self-check", e); }
     finally { reviewing.current = false; }
@@ -3230,6 +3231,18 @@ function Main({ session }) {
                       <div className="chips">
                         {suggestions.map((sg) => <button key={sg} onClick={() => send(sg)}>{sg}</button>)}
                       </div>
+                      {mode === "build" && templatesFor(active.buildKind).length > 0 && (
+                        <div className="tpl-box">
+                          <div className="tpl-head"><b>⚡ {t("tplTitle")}</b><small>{t("tplSub")}</small></div>
+                          <div className="tpl-grid">
+                            {templatesFor(active.buildKind).map((tp) => (
+                              <button key={tp.name.en} type="button" disabled={busy} onClick={() => send(tp.prompt[lang] || tp.prompt.ckb)}>
+                                <span aria-hidden="true">{tp.ic}</span><b>{tp.name[lang] || tp.name.ckb}</b>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {mode === "build" && (
                         <button className="zip-import-card" disabled={zipBusy} onClick={() => zipInput.current?.click()}>
                           <span className="zic-ic">{zipBusy ? <span className="mini-spin" /> : "📦"}</span>
@@ -3261,7 +3274,7 @@ function Main({ session }) {
                           <div className={"chk chk-" + m.check.state} role="status">
                             {m.check.state === "run" && <span className="mini-spin" />}
                             <span>{m.check.state === "run" ? t("chkRun").replace("{i}", num(m.check.i || 1)).replace("{n}", m.check.n ? num(m.check.n) : "…")
-                              : m.check.state === "ok" ? t("chkOk").replace("{p}", num(m.check.pages)).replace("{c}", num(m.check.clicked))
+                              : m.check.state === "ok" ? t(m.check.views ? "chkOk" : "chkOkSimple").replace("{p}", num(m.check.pages)).replace("{v}", num(m.check.views || 0)).replace("{c}", num(m.check.clicked))
                               : m.check.state === "fix" ? t("chkFix").replace("{n}", num(m.check.n)) : t("chkLeft").replace("{n}", num(m.check.n))}</span>
                           </div>
                         )}
