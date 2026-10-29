@@ -201,6 +201,7 @@ ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - Keep it 100% consistent with the files already written, the file list and the SHARED CONTRACT: the same class names, ids, function names, global variables, data keys and links. Link only to files in the list.
 - Shared code lives on window objects exactly as named in the contract (window.Auth, window.Store…); define each one once, in its own file, and never rename it.
 - In every HTML page load the scripts in the contract's order: shared files first, the page's own script LAST.
+- Write compact, clean code: short comments only where needed, no repeated blocks, no huge inline data (8–15 sample records are enough); aim for under ~350 lines per file.
 - Never call a function or read an id/key that is not in the contract or in the files already written. Start page code after DOMContentLoaded and check that a shared object exists before using it, so a page never goes blank.`;
 const STEP_SECRET = () => serverEnv("PUSH_SECRET") || serverEnv("SUPABASE_SERVICE_ROLE_KEY") || "ahm-dev";
 const signStep = (data) => { const b = Buffer.from(JSON.stringify(data)).toString("base64url"); return b + "." + createHmac("sha256", "ahm-step:" + STEP_SECRET()).update(b).digest("base64url"); };
@@ -256,7 +257,7 @@ Reply in the user's language with a clear, friendly plan they can approve:
 ## 🎨 the design: colours, style, fonts${kind === "system" ? "\n## 👥 the users / roles and what data is saved" : ""}
 Keep it short and easy to scan (max ~220 words). Fill in smart defaults for anything the user did not say.
 MAKE IT AS COMPLETE AS A PROFESSIONAL TEMPLATE, even when the request is one short line ("a system for a pharmacy"):
-- 5–7 main parts that this kind of business really needs (never more than 8 in the first build; more ideas go into the "suggest" block).
+- 5–6 main parts that this kind of business really needs (never more than 7 in the first build — it is faster and comes out cleaner; more ideas go into the "suggest" block and can be added later).
 ${kind === "system" ? "- User roles with demo logins that will be shown on the login screen (e.g. admin / admin123 and a staff role / 1234).\n" : ""}- Realistic sample data for the field; money in Iraqi dinar (IQD) unless the user says otherwise; all labels in the user's language.
 - Search and filters on lists, and a printable receipt / invoice / report where the field needs one.
 - What the user asked always comes first; the field blueprint below only fills the gaps.${blueprint ? `\nFIELD BLUEPRINT (what a good ${kind === "app" ? "app" : kind === "system" ? "system" : "website"} for this field contains):\n${blueprint}` : ""}
@@ -632,7 +633,8 @@ VOICE CONVERSATION MODE (most important rules)
             const mark = `\u0000F:${doneN + ++begun}/${total}:${f.path}\n`;
             full += mark; send(mark);
             let out = "", shown = 0;
-            for await (const piece of answer(models, stepContents(askFor(f, last), written), stepConfig, false, REFUSAL[lang], level)) {
+            const fileModels = /^readme\.md$/i.test(f.path) ? [...new Set(["gemini-3.5-flash-lite", ...models])] : models; // the guide is simple text: the fast model
+            for await (const piece of answer(fileModels, stepContents(askFor(f, last), written), stepConfig, false, REFUSAL[lang], level)) {
               // never run into the server's hard time limit (the work would be lost and the app would wait forever):
               // a file that is not finished in time is written again in the next part
               if (Date.now() - reqStart > (Number(serverEnv("STEP_HARD_MS")) || 268000)) { out = "\u0000ERR:time"; break; }
@@ -670,14 +672,20 @@ VOICE CONVERSATION MODE (most important rules)
           const order = [...core, ...pages];
           const lastPath = order[order.length - 1].path;
           const leftAll = () => order.filter((f) => !(f.path in written));
-          for (let k = 0; k < firstN && !stopped; k++) {
-            if (Date.now() - t0 > BUDGET) { await more(leftAll()); break; }
-            if (!(await writeOne(core[k], core[k].path === lastPath, true, 2))) { if (made || doneN) await more(leftAll()); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } break; }
+          // the shared design and the main page are written at the same time (the contract gives both the same names);
+          // without a contract they are written one after the other
+          if (firstN) {
+            const firsts = core.slice(0, firstN);
+            const liveOne = firsts.find((f) => /\.html?$/i.test(f.path)) || firsts[0];
+            const results = contract
+              ? await Promise.all(firsts.map((f) => writeOne(f, f.path === lastPath, f === liveOne, 2)))
+              : await (async () => { const out = []; for (const f of firsts) { if (stopped) break; out.push(await writeOne(f, f.path === lastPath, true, 2)); if (!out[out.length - 1]) break; } return out; })();
+            if (results.includes(false) || results.length < firsts.length) { if (made || doneN) await more(leftAll()); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } }
           }
           const rest = [...core.slice(firstN), ...pages];
-          for (let i = 0; i < rest.length && !stopped; i += 4) {
+          for (let i = 0; i < rest.length && !stopped; i += 5) {
             if (Date.now() - t0 > BUDGET * 0.85) { await more(leftAll()); break; }
-            const batch = rest.slice(i, i + 4);
+            const batch = rest.slice(i, i + 5);
             // a single file alone (e.g. the last one) is shown live
             const ok = await Promise.all(batch.map((f) => writeOne(f, f.path === lastPath, batch.length === 1, 2)));
             if (ok.includes(false)) { await more(leftAll()); break; }
