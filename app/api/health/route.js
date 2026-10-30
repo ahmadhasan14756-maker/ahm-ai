@@ -4,6 +4,7 @@ import { serverEnv, SUPABASE_URL, SUPABASE_ANON_KEY } from "../../../lib/env";
 import { redis, hasRedis } from "../../../lib/redis";
 import { keyCount, allKeys } from "../../../lib/gemini";
 import { pushKeys } from "../../../lib/push";
+import { extraProviders } from "../../../lib/extraAI";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function GET() {
     return { key: i + 1, starts: k.slice(0, 2), length: k.length, google: ok };
   }));
   out.push = pushKeys() ? "ok" : "missing";
+  out.extra_ai = extraProviders().map((p) => p.id); // other free AI services with a key (only their names)
   if (hasRedis()) { try { out.ratings = { up: Number(await redis("GET", "rate:up")) || 0, down: Number(await redis("GET", "rate:down")) || 0 }; } catch {} }
   out.redis = !hasRedis() ? "missing" : (await redis("PING")) === "PONG" ? "ok" : "ERROR";
   try {

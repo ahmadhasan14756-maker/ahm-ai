@@ -14,6 +14,7 @@ import { TEMPLATES } from "../../../lib/templates";
 import { redis, hasRedis } from "../../../lib/redis";
 import { randomUUID, createHmac, timingSafeEqual, createHash } from "crypto";
 import { sendPush } from "../../../lib/push";
+import { extraWrite, extraCount } from "../../../lib/extraAI";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Big projects take more than a minute to write: allow up to 5 minutes (the answer keeps streaming the whole time).
@@ -736,7 +737,21 @@ VOICE CONVERSATION MODE (most important rules)
             // every Gemini model has its own free limit, so two of them together carry about twice as many builds
             const fileModels = /^readme\.md$/i.test(f.path) ? [...new Set(["gemini-3.5-flash-lite", ...models])]
               : pageLike(f.path) && models.length > 1 && begun % 2 === 1 ? [models[1], models[0], ...models.slice(2)] : models;
-            for await (const piece of answer(fileModels, stepContents(askFor(f, last), written, f.path), stepConfig, false, REFUSAL[lang], level)) {
+            // Other free AI services (if their keys are set) write code files when Gemini is crowded or full:
+            // more builds at the same time. Kurdish chat always stays on Gemini.
+            const viaExtra = async () => {
+              if (live || !extraCount() || /^readme\.md$/i.test(f.path)) return null;
+              for (let k = 0, avoid = []; k < Math.min(2, extraCount()); k++) {
+                try {
+                  const r = await extraWrite({ system: stepConfig.systemInstruction, contents: stepContents(askFor(f, last), written, f.path), timeoutMs: Math.max(20_000, (Number(serverEnv("STEP_HARD_MS")) || 268000) - (Date.now() - reqStart) - 5000) });
+                  noteDebug("builds", { mode: "extra_ai", provider: r.provider, model: r.model, file: f.path.slice(0, 60) });
+                  return r.text;
+                } catch (e) { avoid.push(e.provider); noteDebug("ai_errors", { where: "extra", error: errText(e).slice(0, 160) }); }
+              }
+              return null;
+            };
+            if (crowded && !live) { const t = await viaExtra(); if (t && blockOf(asFileBlock(t, f.path), f.path) != null) out = t; }
+            if (!out) for await (const piece of answer(fileModels, stepContents(askFor(f, last), written, f.path), stepConfig, false, REFUSAL[lang], level)) {
               // never run into the server's hard time limit (the work would be lost and the app would wait forever):
               // a file that is not finished in time is written again in the next part
               if (Date.now() - reqStart > (Number(serverEnv("STEP_HARD_MS")) || 268000)) { out = "\u0000ERR:time"; break; }
@@ -747,6 +762,7 @@ VOICE CONVERSATION MODE (most important rules)
               out += piece;
               if (live && !piece.includes("\u0000ERR:")) { full += piece; send(piece); shown += piece.length; saveSoFar(); }
             }
+            if (/\u0000ERR:busy/.test(out) && !live) { const t = await viaExtra(); if (t) out = t; } // Gemini full: another service writes it
             if (/\u0000ERR:/.test(out) || !out.trim()) {
               if (live && shown) { send(`\u0000UNDO:${shown}\n`); full = full.slice(0, full.length - shown); }
               return false;
@@ -803,7 +819,7 @@ VOICE CONVERSATION MODE (most important rules)
               }
             }
           };
-          if (!stopped) await Promise.all(Array.from({ length: Math.min(crowded ? 2 : 6, rest.length) }, worker));
+          if (!stopped) await Promise.all(Array.from({ length: Math.min(crowded && !extraCount() ? 2 : 6, rest.length) }, worker));
           if (readmeJob && !(await readmeJob) && !stopped) failed = true;
           if ((failed || late) && !stopped) await more(leftAll());
           noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
