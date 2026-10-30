@@ -1,7 +1,7 @@
 import { serverEnv } from "../../../lib/env";
 import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
 import { SAFETY_RULES, GEMINI_SAFETY, GEMINI_SAFETY_RELAXED, REFUSAL, isSafetyStop } from "../../../lib/safety";
-import { gemini, keyCount, jsonCall, isKeyError, markBadKey } from "../../../lib/gemini";
+import { gemini, keyCount, jsonCall, isKeyError, markBadKey, markBusyKey } from "../../../lib/gemini";
 import { OFFICE_WORDS, officeTurn, lastFile, stripFiles } from "../../../lib/officeServer";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
@@ -423,7 +423,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
       if (search) config.tools = [{ googleSearch: {} }];
       try {
         const t0 = Date.now();
-        ai = gemini();
+        ai = gemini(model);
         const stream = await ai.models.generateContentStream({ model, contents, config });
         thinkingOk.set(model + ":" + start, level);
         const sources = new Map();
@@ -451,6 +451,7 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         if (/PROHIBITED_CONTENT|BLOCKLIST|blocked.*safety|SAFETY.*block|finishReason.*SAFETY/i.test(errText(e))) { lastWhy = model + " error: " + errText(e); if (yield* refuseOrRetry()) return; break; }
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
         if (search && (isBadConfig(e) || isRateLimit(e))) { search = false; searchOff.add(model); continue; }
+        if (isRateLimit(e)) markBusyKey(ai, model); // this key is full for this model: rest it for a minute
         if (isRateLimit(e) && keyTries < keyCount() - 1) { keyTries++; continue; } // same model, another key
         if (isKeyError(e) && keyFails++ < 3) { markBadKey(ai); continue; } // a wrong / deleted key: skip it, use the next key
         if (isRateLimit(e) || isModelMissing(e)) break;
@@ -731,7 +732,10 @@ VOICE CONVERSATION MODE (most important rules)
             }
             saveSoFar(begun <= 2); // the app shows "file 1 of 13" right away when it is opened again
             let out = "", shown = 0;
-            const fileModels = /^readme\.md$/i.test(f.path) ? [...new Set(["gemini-3.5-flash-lite", ...models])] : models; // the guide is simple text: the fast model
+            // the guide is simple text: the fast model. Pages / screens take turns between the first two models:
+            // every Gemini model has its own free limit, so two of them together carry about twice as many builds
+            const fileModels = /^readme\.md$/i.test(f.path) ? [...new Set(["gemini-3.5-flash-lite", ...models])]
+              : pageLike(f.path) && models.length > 1 && begun % 2 === 1 ? [models[1], models[0], ...models.slice(2)] : models;
             for await (const piece of answer(fileModels, stepContents(askFor(f, last), written, f.path), stepConfig, false, REFUSAL[lang], level)) {
               // never run into the server's hard time limit (the work would be lost and the app would wait forever):
               // a file that is not finished in time is written again in the next part
@@ -842,7 +846,7 @@ VOICE CONVERSATION MODE (most important rules)
             const made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
             const txt = (office.reply || made) + "\n\n```ahm-file\n" + JSON.stringify(office.file) + "\n```\n";
             full += txt; send(txt);
-          } else for await (const raw of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], crowded ? Math.max(startLevel, 2) : startLevel)) { // crowded: think less, answer sooner
+          } else for await (const raw of answer(crowded && models.length > 1 && Math.random() < 0.5 ? [models[1], models[0], ...models.slice(2)] : models, contents, baseConfig, useSearch, REFUSAL[lang], crowded ? Math.max(startLevel, 2) : startLevel)) { // crowded: think less, answer sooner
             if (!raw.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
             const piece = lang === "ckb" ? tidyKurdish(raw) : raw;
             full += piece;
