@@ -650,7 +650,7 @@ VOICE CONVERSATION MODE (most important rules)
             finally { liveOn--; if (!liveOn && held.length) { const h = held.splice(0).join(""); full += h; send(h); saveSoFar(true); } }
           };
           const writeFile = async (f, last, live, level) => {
-            const mark = `\u0000F:${doneN + ++begun}/${total}:${f.path}\n`;
+            const mark = `\u0000F:${Math.min(total, doneN + ++begun)}/${total}:${f.path}\n`;
             if (live) { full += mark; send(mark); } else emit(mark);
             saveSoFar(begun <= 2); // the app shows "file 1 of 13" right away when it is opened again
             let out = "", shown = 0;
@@ -714,7 +714,12 @@ VOICE CONVERSATION MODE (most important rules)
               if (Date.now() - t0 > BUDGET * 0.85) { late = true; return; }
               const f = rest[next++]; // taken BEFORE waiting on anything, so two workers never take the same / a missing file
               if (await stopNow()) { stopped = true; return; }
-              if (!(await writeOne(f, f.path === lastPath, rest.length === 1, 2))) { failed = true; return; }
+              // a busy AI (many files at once) gets one more try after a short pause before giving up
+              if (!(await writeOne(f, f.path === lastPath, rest.length === 1, 2))) {
+                if (stopped || Date.now() - t0 > BUDGET * 0.8) { failed = true; return; }
+                await new Promise((r) => setTimeout(r, 2500));
+                if (!(await writeOne(f, f.path === lastPath, false, 2))) { failed = true; return; }
+              }
             }
           };
           if (!stopped) await Promise.all(Array.from({ length: Math.min(6, rest.length) }, worker));
@@ -794,19 +799,28 @@ VOICE CONVERSATION MODE (most important rules)
       if (chainNext) {
         // save what is made so far, then start the next part (a new server run) and stop here — no notification yet
         await saveJob(user.id, jobId, "running", full);
-        try {
-          const proj = { ...(body.project && typeof body.project === "object" ? body.project : {}), ...writtenAll };
-          const res = await fetch(new URL("/api/chat", req.url), { method: "POST", headers: { "Content-Type": "application/json", Authorization: req.headers.get("authorization") || "" },
-            body: JSON.stringify({ ...body, project: proj, cont: chainNext, chain: true, chainN: chainN + 1, jobId }) });
-          try { await res.body?.cancel(); } catch {}
-          noteDebug("builds", { mode: "chain", part: chainN + 1, status: res.status });
-          if (res.ok) return;
-        } catch (e) { console.error("chain", errText(e)); }
+        const proj = { ...(body.project && typeof body.project === "object" ? body.project : {}), ...writtenAll };
+        // the public address the phone used first (the deployment's own address can be locked by Vercel's
+        // protection, and then the next part never started); tried twice
+        const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim();
+        const bases = [...new Set([host ? `https://${host}` : "", new URL(req.url).origin].filter(Boolean))];
+        for (let k = 0; k < 2; k++) {
+          const base = bases[Math.min(k, bases.length - 1)];
+          try {
+            const res = await fetch(new URL("/api/chat", base), { method: "POST", headers: { "Content-Type": "application/json", Authorization: req.headers.get("authorization") || "" },
+              body: JSON.stringify({ ...body, project: proj, cont: chainNext, chain: true, chainN: chainN + 1, jobId }) });
+            try { await res.body?.cancel(); } catch {}
+            noteDebug("builds", { mode: "chain", part: chainN + 1, status: res.status, host: base.replace(/^https:\/\//, "").slice(0, 60) });
+            if (res.ok) return;
+          } catch (e) { console.error("chain", errText(e)); noteDebug("builds", { mode: "chain", part: chainN + 1, error: errText(e).slice(0, 120) }); }
+          await new Promise((r) => setTimeout(r, 1500));
+        }
         // the next part could not start: leave a "continue" note for the app instead
         full += `\u0000MORE:${chainNext}\n`;
       }
       if (jobId) await saveJob(user.id, jobId, "done", full);
-      if (!(await stopNow()) && await awayNow()) {
+      // "done" only when it is really done: a build that stopped half way (it goes on when the app is opened) sends no "ready" message
+      if (!(await stopNow()) && !/\u0000MORE:/.test(full) && await awayNow()) {
         const done = { ckb: ["✅ AHM AI — تەواو بوو", build ? "پرۆژەکەت ئامادەیە. بۆ بینین دایبگرە." : "وەڵامەکەت ئامادەیە. بۆ بینین دایبگرە."],
           ar: ["✅ AHM AI — انتهى", build ? "مشروعك جاهز. اضغط لعرضه." : "ردّك جاهز. اضغط لعرضه."],
           en: ["✅ AHM AI — done", build ? "Your project is ready. Tap to see it." : "Your answer is ready. Tap to see it."] }[lang];
