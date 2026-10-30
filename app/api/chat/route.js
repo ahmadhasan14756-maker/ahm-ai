@@ -221,6 +221,43 @@ function templateKey({ messages, planOnly, kind, lang, cloudDb }) {
   if (!planOnly && messages.length === 3 && messages[1].role === "assistant" && norm(messages[2].content).length < 200) return base + ":build:" + h16(messages[1].content);
   return null;
 }
+// The standard files of an installable phone app are always the same shape: written by code, not by the AI.
+function boilerplate(path, files, list, lang) {
+  const html = files["index.html"] || "";
+  const css = Object.entries(files).filter(([k]) => /\.css$/i.test(k)).map(([, v]) => v).join("\n");
+  const name = (/<title>([^<]{1,60})<\/title>/i.exec(html)?.[1] || "App").trim();
+  const color = (/--(?:primary|accent|main|brand)[\w-]*\s*:\s*(#[0-9a-f]{3,8})/i.exec(css)?.[1] || /(#[0-9a-f]{6})\b/i.exec(css)?.[1] || "#4f46e5");
+  const bg = (/--(?:bg|background)[\w-]*\s*:\s*(#[0-9a-f]{3,8})/i.exec(css)?.[1] || "#0f172a");
+  const icon = list.find((f) => /^icons?\/[^/]+\.svg$/i.test(f.path))?.path || "icons/icon.svg";
+  if (/^(manifest\.json|manifest\.webmanifest)$/i.test(path)) {
+    return JSON.stringify({ name, short_name: name.slice(0, 14), start_url: "./index.html", scope: "./", display: "standalone",
+      background_color: bg, theme_color: color, dir: lang === "en" ? "ltr" : "rtl", lang: lang === "ckb" ? "ckb" : lang,
+      icons: [{ src: icon, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }] }, null, 2);
+  }
+  if (/^(sw|service-worker)\.js$/i.test(path)) {
+    const assets = ["./", ...list.map((f) => "./" + f.path).filter((p) => !/readme\.md$/i.test(p))];
+    return `// Offline helper: keeps the app's files on the phone so it opens without internet.
+const CACHE = "app-v1";
+const FILES = ${JSON.stringify(assets, null, 2)};
+self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES).catch(() => {}))); self.skipWaiting(); });
+self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))); self.clients.claim(); });
+self.addEventListener("fetch", (e) => {
+  if (e.request.method !== "GET") return;
+  e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+    const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {}); return res;
+  }).catch(() => caches.match("./index.html"))));
+});`;
+  }
+  if (path === icon) {
+    const letter = [...name.replace(/[^\p{L}\p{N}]/gu, "")][0] || "A";
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="${bg}"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <text x="256" y="318" text-anchor="middle" font-family="system-ui, sans-serif" font-size="230" font-weight="700" fill="#fff">${letter.replace(/[<&>"]/g, "")}</text>
+</svg>`;
+  }
+  return null;
+}
 const STEP_SECRET = () => serverEnv("PUSH_SECRET") || serverEnv("SUPABASE_SERVICE_ROLE_KEY") || "ahm-dev";
 const signStep = (data) => { const b = Buffer.from(JSON.stringify(data)).toString("base64url"); return b + "." + createHmac("sha256", "ahm-step:" + STEP_SECRET()).update(b).digest("base64url"); };
 function readStep(tok, uid) {
@@ -536,11 +573,15 @@ VOICE CONVERSATION MODE (most important rules)
     // A new project is built one file after another; "cont" = a signed note to continue the same build (not counted again).
     const contTok = build && !planOnly && !file ? readStep(body.cont, user.id) : null;
     const stepBuild = build && !planOnly && !file && serverEnv("STEP_BUILD") !== "0" && (!!contTok || project.filter(([k]) => k !== "js/ahm-db.js").length === 0);
-    const stepContents = (extra, written) => messages.map((m, i) => {
+    // A page / screen only needs the shared files (styles, data, router, main page), not its sibling pages:
+    // much less text per request = faster, and many more builds fit in the AI's free limits.
+    const pageLike = (p) => (/\.html?$/i.test(p) && p !== "index.html") || /(^|\/)(pages|screens)\//i.test(p) || /^readme\.md$/i.test(p);
+    const stepContents = (extra, written, forPath) => messages.map((m, i) => {
       let text = m.content.slice(0, 30000);
       const last = i === messages.length - 1;
       if (last) {
-        const all = Object.entries({ ...Object.fromEntries(project), ...written }); // new versions replace the old ones
+        let all = Object.entries({ ...Object.fromEntries(project), ...written }); // new versions replace the old ones
+        if (forPath && pageLike(forPath)) all = all.filter(([k]) => k === forPath || !pageLike(k));
         const files = all.length ? all.map(([k, v]) => `\`\`\`file:${k}\n${v}\n\`\`\``).join("\n\n") : "(empty project)";
         text = `Current project files:\n\n${files}\n\nRequest: ${text}\n\n${extra}`;
       }
@@ -679,10 +720,19 @@ VOICE CONVERSATION MODE (most important rules)
           const writeFile = async (f, last, live, level) => {
             const mark = `\u0000F:${Math.min(total, doneN + ++begun)}/${total}:${f.path}\n`;
             if (live) { full += mark; send(mark); } else emit(mark);
+            // standard app files (install info, offline helper, icon) are made by code: no AI needed, instant
+            const made0 = !editing && !last ? boilerplate(f.path, { ...Object.fromEntries(project), ...written }, list, lang) : null;
+            if (made0 != null) {
+              const block = "```file:" + f.path + "\n" + made0 + "\n```\n\n";
+              written[f.path] = made0;
+              if (live) { full += block; send(block); } else emit(block);
+              made++; saveSoFar();
+              return true;
+            }
             saveSoFar(begun <= 2); // the app shows "file 1 of 13" right away when it is opened again
             let out = "", shown = 0;
             const fileModels = /^readme\.md$/i.test(f.path) ? [...new Set(["gemini-3.5-flash-lite", ...models])] : models; // the guide is simple text: the fast model
-            for await (const piece of answer(fileModels, stepContents(askFor(f, last), written), stepConfig, false, REFUSAL[lang], level)) {
+            for await (const piece of answer(fileModels, stepContents(askFor(f, last), written, f.path), stepConfig, false, REFUSAL[lang], level)) {
               // never run into the server's hard time limit (the work would be lost and the app would wait forever):
               // a file that is not finished in time is written again in the next part
               if (Date.now() - reqStart > (Number(serverEnv("STEP_HARD_MS")) || 268000)) { out = "\u0000ERR:time"; break; }
@@ -792,7 +842,7 @@ VOICE CONVERSATION MODE (most important rules)
             const made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
             const txt = (office.reply || made) + "\n\n```ahm-file\n" + JSON.stringify(office.file) + "\n```\n";
             full += txt; send(txt);
-          } else for await (const raw of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], startLevel)) {
+          } else for await (const raw of answer(models, contents, baseConfig, useSearch, REFUSAL[lang], crowded ? Math.max(startLevel, 2) : startLevel)) { // crowded: think less, answer sooner
             if (!raw.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
             const piece = lang === "ckb" ? tidyKurdish(raw) : raw;
             full += piece;
