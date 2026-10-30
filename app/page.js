@@ -2909,6 +2909,8 @@ function Main({ session }) {
   }
 
   // An answer that was finished on the server while the user was away: fetch it and show it.
+  const msg0Kind = (m) => m?.pending?.kind;
+  const resent = useRef(new Set());
   async function resumeJob(chatId, jobId) {
     if (resuming.current.has(jobId) || liveJobs.current.has(jobId)) return;
     resuming.current.add(jobId);
@@ -2971,7 +2973,20 @@ function Main({ session }) {
           });
           return;
         }
-        if (j.status === "unknown" && i >= 4) { fail(t("errConn")); return; } // nothing saved (e.g. update 3 not installed)
+        if (j.status === "unknown" && i >= 6) {
+          // the message never reached the server (the phone closed the app the moment it was sent):
+          // send it again by itself, once, instead of showing an error
+          const chat = chatsRef.current.find((c) => c.id === chatId);
+          const k = chat ? chat.messages.findIndex((x) => x.pending?.job === jobId) : -1;
+          const mine = k > 0 && chat.messages[k - 1]?.role === "user" ? chat.messages[k - 1] : null;
+          if (mine && mine.content && !resent.current.has(chatId + mine.content) && chatId === activeIdRef.current && msg0Kind(chat.messages[k]) !== "studio") {
+            patchIf(chatId, (c) => ({ ...c, messages: c.messages.filter((_, n) => n !== k && n !== k - 1) }));
+            resent.current.add(chatId + mine.content);
+            queueRef.current.push({ chat: chatId, text: mine.content }); setQueued([...queueRef.current]);
+            return;
+          }
+          fail(t("errConn")); return;
+        }
         // the server stopped without finishing (no news for 5 minutes): keep what was made and let the app make
         // the rest by itself (missing files), instead of waiting forever
         if (j.status === "running" && j.updated_at && Date.now() - Date.parse(j.updated_at) > 300000) {

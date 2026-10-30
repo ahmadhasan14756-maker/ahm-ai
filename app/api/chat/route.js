@@ -739,7 +739,7 @@ VOICE CONVERSATION MODE (most important rules)
             const piece = lang === "ckb" ? tidyKurdish(raw) : raw;
             full += piece;
             send(piece);
-            if (build) saveSoFar(); // a change being written is kept now and then (the app shows it on return)
+            saveSoFar(); // what is written is kept now and then (the app shows it on return)
           }
           // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
           // the answer is already on screen, and a few seconds later the corrected text replaces it.
