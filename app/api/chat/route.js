@@ -637,10 +637,21 @@ VOICE CONVERSATION MODE (most important rules)
             ? `FILES TO CHANGE for this request (in order):\n${listText}\n\nNow write the COMPLETE new version of ONLY the file \`${f.path}\` with this change: ${f.about}. Keep everything else in it working and consistent with the other files.`
             : `FILE LIST of this project (in order)${doneN ? " — the files before these are already written (see the project files above)" : ""}:\n${listText}\n\n${contract ? `SHARED CONTRACT — use EXACTLY these names (other files are written at the same time and rely on them):\n${contract}\n\n` : ""}Now write ONLY the file \`${f.path}\` — ${f.about}`) + `${last ? "\nAfter the file block, add the \"suggest\" block (exactly 3 lines starting with \"- \") with next improvements, in the user's language." : ""}`;
           // Writes one file. live = its text appears in the app while it is being written.
+          // While one file is shown live (its text arrives piece by piece), files finished at the same time are held
+          // back and added right after it — otherwise they landed in the middle of its code and broke it.
+          let liveOn = 0; const held = [];
+          const emit = (txt) => { if (liveOn) held.push(txt); else { full += txt; send(txt); } };
           const writeOne = async (f, last, live, level) => {
             if (stopped) return false;
+            if (live && liveOn) live = false; // only one file is shown live at a time
+            if (!live) return writeFile(f, last, false, level);
+            liveOn++;
+            try { return await writeFile(f, last, true, level); }
+            finally { liveOn--; if (!liveOn && held.length) { const h = held.splice(0).join(""); full += h; send(h); saveSoFar(true); } }
+          };
+          const writeFile = async (f, last, live, level) => {
             const mark = `\u0000F:${doneN + ++begun}/${total}:${f.path}\n`;
-            full += mark; send(mark);
+            if (live) { full += mark; send(mark); } else emit(mark);
             saveSoFar(begun <= 2); // the app shows "file 1 of 13" right away when it is opened again
             let out = "", shown = 0;
             const fileModels = /^readme\.md$/i.test(f.path) ? [...new Set(["gemini-3.5-flash-lite", ...models])] : models; // the guide is simple text: the fast model
@@ -665,7 +676,7 @@ VOICE CONVERSATION MODE (most important rules)
             if (live) {
               if (blockOf(out, f.path) == null) { send(`\u0000UNDO:${shown}\n`); full = full.slice(0, full.length - shown); full += fixed; send(fixed); }
               full += "\n\n"; send("\n\n");
-            } else { full += fixed + "\n\n"; send(fixed + "\n\n"); }
+            } else emit(fixed + "\n\n");
             made++;
             saveSoFar();
             return true;
