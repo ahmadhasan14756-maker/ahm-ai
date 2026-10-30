@@ -564,10 +564,14 @@ VOICE CONVERSATION MODE (most important rules)
     const chained = body.chain === true && !!contTok && !!jobId;
     let chainNext = null, writtenAll = {}, saveSoFar = () => {};
     // the app told us it went to the background (iPhone often keeps the connection half-open, so "left" alone is not enough)
+    // the user pressed ⏹ (only then does the work stop — leaving the app never stops it)
+    let userStopped = false;
+    const stopNow = async () => { if (userStopped) return true; if (!jobId || !hasRedis()) return false; try { userStopped = (await redis("GET", "stop:" + jobId)) === "1"; } catch {} return userStopped; };
     const awayNow = async () => { if (left) return true; if (!jobId || !hasRedis()) return false; try { return (await redis("GET", "away:" + jobId)) === "1"; } catch { return false; } };
     const work = (async () => {
       let full = "";
       if (chained) { const prev = await readJob(user.id, jobId); full = String(prev?.result || "").replace(/\u0000MORE:[^\n]*\n/g, ""); }
+      if (chained && await stopNow()) { await saveJob(user.id, jobId, "done", full); return; } // stopped while the server was going on by itself
       // Saved in the background (don't make the user wait for the database).
       const started = jobId && !chained ? saveJob(user.id, jobId, "running") : null;
       // a small "still working" signal every 12 s, so the app can tell a quiet moment from a broken connection
@@ -623,6 +627,7 @@ VOICE CONVERSATION MODE (most important rules)
           let stopped = false, made = 0, begun = 0;
           const more = async (rest) => {
             if (stopped || !rest.length) return; stopped = true;
+            if (await stopNow()) return; // the user stopped it: no next part
             const tok = signStep({ u: user.id, f: rest, d: total - rest.length, n: total, e: Date.now() + 3600000, ed: editing ? 1 : 0, c: contract });
             writtenAll = written;
             if ((chained || await awayNow()) && jobId && chainN < 8) { chainNext = tok; send("\u0000CHAIN\n"); return; } // nobody is watching: the server goes on by itself
@@ -688,6 +693,7 @@ VOICE CONVERSATION MODE (most important rules)
           }
           const rest = [...core.slice(firstN), ...pages];
           for (let i = 0; i < rest.length && !stopped; i += 5) {
+            if (await stopNow()) { stopped = true; break; }
             if (Date.now() - t0 > BUDGET * 0.85) { await more(leftAll()); break; }
             const batch = rest.slice(i, i + 5);
             // a single file alone (e.g. the last one) is shown live
@@ -780,7 +786,7 @@ VOICE CONVERSATION MODE (most important rules)
         full += `\u0000MORE:${chainNext}\n`;
       }
       if (jobId) await saveJob(user.id, jobId, "done", full);
-      if (await awayNow()) {
+      if (!(await stopNow()) && await awayNow()) {
         const done = { ckb: ["✅ AHM AI — تەواو بوو", build ? "پرۆژەکەت ئامادەیە. بۆ بینین دایبگرە." : "وەڵامەکەت ئامادەیە. بۆ بینین دایبگرە."],
           ar: ["✅ AHM AI — انتهى", build ? "مشروعك جاهز. اضغط لعرضه." : "ردّك جاهز. اضغط لعرضه."],
           en: ["✅ AHM AI — done", build ? "Your project is ready. Tap to see it." : "Your answer is ready. Tap to see it."] }[lang];

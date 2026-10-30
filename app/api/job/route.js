@@ -23,6 +23,8 @@ export async function POST(req) {
   const body = await req.json().catch(() => null);
   const ids = (Array.isArray(body?.ids) ? body.ids : [body?.id]).map(validJobId).filter(Boolean).slice(0, 5);
   if (!ids.length || !hasRedis()) return new Response(null, { status: 204 });
+  // the user pressed ⏹: the work on the server stops too (also a build that goes on by itself)
+  if (body.stop) { await Promise.all(ids.map((id) => redis("SET", "stop:" + id, "1", "EX", 3600))); return new Response(null, { status: 204 }); }
   await Promise.all(ids.map((id) => (body.away ? redis("SET", "away:" + id, "1", "EX", 3600) : redis("DEL", "away:" + id))));
   return new Response(null, { status: 204 });
 }

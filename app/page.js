@@ -2288,6 +2288,10 @@ function Main({ session }) {
   }
   const [syncTick, setSyncTick] = useState(0);
   useEffect(() => { if (ready) pullChats(); }, [ready]);
+  useEffect(() => { // phone, tablet and computer show the same chats: look for changes from the others now and then
+    const iv = setInterval(() => { if (document.visibilityState === "visible" && !busyRef.current) pullChats(); }, 45000);
+    return () => clearInterval(iv);
+  }, []);
   useEffect(() => { // check for changes from other devices when the app comes back to the front
     let last = Date.now();
     const onShow = () => { if (document.visibilityState === "visible" && Date.now() - last > 30000) { last = Date.now(); pullChats(); } };
@@ -2910,6 +2914,25 @@ function Main({ session }) {
 
   // An answer that was finished on the server while the user was away: fetch it and show it.
   const msg0Kind = (m) => m?.pending?.kind;
+  // ⏹ stops everything of this chat — also work that goes on on the server while the app was closed.
+  // (Leaving the app never stops anything: only this button does.)
+  const stoppedJobs = useRef(new Set());
+  function stopAll() {
+    const ids = new Set(liveJobs.current);
+    for (const x of messages) if (x.pending?.job) ids.add(x.pending.job);
+    if (ids.size) {
+      const data = JSON.stringify({ ids: [...ids].slice(0, 5), stop: true });
+      try { if (!(navigator.sendBeacon && navigator.sendBeacon("/api/job", new Blob([data], { type: "application/json" })))) fetch("/api/job", { method: "POST", body: data, headers: { "Content-Type": "application/json" }, keepalive: true }).catch(() => {}); } catch {}
+    }
+    for (const id of ids) stoppedJobs.current.add(id);
+    abortRef.current?.abort();
+    queueRef.current = queueRef.current.filter((q) => q.chat !== active.id); setQueued([...queueRef.current]);
+    patchIf(active.id, (c) => ({ ...c, messages: c.messages.flatMap((x) => {
+      if (!x.pending?.job || !ids.has(x.pending.job)) return [x];
+      const { pending: _p, progress: _g, waiting: _w, ...rest } = x;
+      return rest.content ? [{ ...rest, content: rest.content.replace(/\u0000[^\n]*\n?/g, "") }] : [];
+    }) }));
+  }
   const resent = useRef(new Set());
   async function resumeJob(chatId, jobId) {
     if (resuming.current.has(jobId) || liveJobs.current.has(jobId)) return;
@@ -2917,6 +2940,7 @@ function Main({ session }) {
     const fail = (txt) => patchIf(chatId, (c) => ({ ...c, messages: c.messages.map((x) => (x.pending?.job === jobId ? { role: "assistant", content: (x.content ? x.content + "\n\n" : "") + txt, failed: true } : x)) }));
     try {
       for (let i = 0; i < 400; i++) { // big builds can go on for many minutes on the server
+        if (stoppedJobs.current.has(jobId)) return; // the user pressed ⏹
         if (document.visibilityState === "hidden") { await new Promise((r) => setTimeout(r, 3000)); i--; continue; }
         let j = {};
         try {
@@ -3456,15 +3480,15 @@ function Main({ session }) {
                   onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
                   onPaste={onPaste}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 700) { e.preventDefault(); send(); } }} />
-                {!busy && !deciding && !input.trim() && !images.length && !file ? (
+                {!busy && !jobWait && !deciding && !input.trim() && !images.length && !file ? (
                   <span className="send-pair">
                     <button className="send mic" aria-label={t("record")} title={t("record")} onClick={startRec}><Svg d={Icon.mic} size={18} /></button>
                     {chatLike && <button className="send live" aria-label={t("liveVoice")} title={t("liveVoice")} onClick={() => openVoice()}><Svg d={Icon.wave} size={18} /></button>}
                   </span>
-                ) : busy ? (
+                ) : busy || jobWait ? (
                   <span className="send-pair">
                     {input.trim() && <button className="send queue" aria-label={t("sendLater")} title={t("sendLater")} onClick={() => send()}><Svg d={Icon.up} size={18} w={2.4} /></button>}
-                    <button className="send stop" aria-label={t("stop")} onClick={() => abortRef.current?.abort()}><Svg d={Icon.stop} size={18} /></button>
+                    <button className="send stop" aria-label={t("stop")} onClick={stopAll}><Svg d={Icon.stop} size={18} /></button>
                   </span>
                 ) : (
                   <button className="send" aria-label={t("send")} onClick={() => send()} disabled={!input.trim() && !file && !images.length}><Svg d={Icon.up} size={18} w={2.4} /></button>
