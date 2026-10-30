@@ -181,12 +181,13 @@ FILES: index.html (login + app shell, pages switch with #hash routes), css/style
 // If the 5-minute server limit gets close, a signed "continue" note is sent and the app continues by itself.
 const FILELIST_PROMPT = (kind, lang) => `You are a senior developer planning the files of a ${kind === "app" ? "phone app" : kind === "system" ? "management system" : "website"} that the user agreed on in this conversation (the plan is in the conversation).
 ${KIND_PROMPT[kind]}
-Return JSON only: {"intro": "1-3 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you are building now, file by file", "files": [{"path": "index.html", "about": "what this file contains, in English, max 25 words"}], "contract": "…"}
-"contract" = the SHARED NAMES every file must use exactly (the files are written separately, so this is what keeps them working together), in English, max ~1200 characters:
+Return JSON only: {"intro": "1-2 short, simple, natural sentences in ${LANG_NAME[lang] || LANG_NAME.ckb} (everyday words, perfect spelling): what you are building now, file by file", "files": [{"path": "index.html", "about": "what this file contains, in English, max 25 words"}], "contract": "…"}
+"contract" = the SHARED NAMES every file must use exactly (the files are written separately, so this is what keeps them working together), in English, max ~1500 characters:
 - each global object and its functions with arguments and what they return, e.g. "window.Auth = { login(user, pass) → bool, logout(), isLoggedIn() → bool, currentUser() → {name, role} }", "window.Store = { all(col) → array, save(col, item), remove(col, id) }"
 - localStorage keys and the shape of saved records, e.g. "products: [{id, name, price, stock, category}]"
 - element ids / CSS classes several files rely on (e.g. "#app", ".card", ".btn-primary", ".sidebar")
 - the <script> order on every page, shared files first and the page's own script last (e.g. "js/data.js → js/auth.js → js/ui.js → page script")
+- the ROUTES (apps and systems): every #hash route name, the file that registers it and how, e.g. "#home dashboard.js, #add add-expense.js, #list expenses.js — each screen file does window.Screens['add'] = { title, render(root) }"; every menu / tab / nav button uses exactly these names
 Rules: 4 to 18 files. Follow the FILES list of the project type above and the pages/screens/modules of the plan — every page/screen/module gets its own file. Order: files others depend on first (styles, data/storage, auth, router/app), then the pages / screens / modules, README.md last. Paths: forward slashes, no leading slash. Only text files (HTML, CSS, JS, JSON, MD, SVG) — no photos.`;
 // A broad change to an existing project ("make the design more beautiful", "improve everything"): the AI first
 // decides which files to change, then rewrites them one by one — the user never has to name files.
@@ -202,7 +203,9 @@ ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - Shared code lives on window objects exactly as named in the contract (window.Auth, window.Store…); define each one once, in its own file, and never rename it.
 - In every HTML page load the scripts in the contract's order: shared files first, the page's own script LAST.
 - Write compact, clean code: short comments only where needed, no repeated blocks, no huge inline data (8–15 sample records are enough); aim for under ~350 lines per file.
-- Never call a function or read an id/key that is not in the contract or in the files already written. Start page code after DOMContentLoaded and check that a shared object exists before using it, so a page never goes blank.`;
+- Every menu, tab and nav button must open its screen: use only the route names from the contract, and a screen file must register itself exactly as the contract says (a button that does nothing is a bug).
+- Never call a function or read an id/key that is not in the contract or in the files already written. Start page code after DOMContentLoaded and check that a shared object exists before using it, so a page never goes blank.
+- KURDISH TEXT in the app (when its language is Sorani): short, clear, everyday Sorani with correct spelling (ڕ ڵ ێ ۆ ە), a space between separate words, Kurdish digits only where the plan asks. Use these common words: Home سەرەکی · Dashboard داشبۆرد · Add زیادکردن · Save پاشەکەوتکردن · Cancel پاشگەزبوونەوە · Edit دەستکاری · Delete سڕینەوە · Search گەڕان · Filter فلتەر · Settings ڕێکخستنەکان · Reports ڕاپۆرتەکان · Total کۆی گشتی · Recent … دوایین … · See all هەمووی ببینە · Back گەڕانەوە · Login چوونەژوورەوە · Logout چوونەدەرەوە · Username ناوی بەکارهێنەر · Password وشەی نهێنی · Date بەروار · Amount بڕ · Price نرخ · Category جۆر · Notes تێبینی · Print چاپکردن · No data yet هێشتا هیچ زانیارییەک نییە · Saved ✓ پاشەکەوت کرا · Are you sure? دڵنیایت؟ · IQD د.ع.`;
 const STEP_SECRET = () => serverEnv("PUSH_SECRET") || serverEnv("SUPABASE_SERVICE_ROLE_KEY") || "ahm-dev";
 const signStep = (data) => { const b = Buffer.from(JSON.stringify(data)).toString("base64url"); return b + "." + createHmac("sha256", "ahm-step:" + STEP_SECRET()).update(b).digest("base64url"); };
 function readStep(tok, uid) {

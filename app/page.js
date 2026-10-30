@@ -24,6 +24,7 @@ import Landing from "../components/Landing";
 import { quickGuess } from "../lib/intent";
 import { REFUSAL } from "../lib/safety";
 import { useUpdateReady, refreshApp } from "../lib/update";
+import { getItem, setItem } from "../lib/store";
 
 const BOT_URL = TELEGRAM_BOT ? `https://t.me/${TELEGRAM_BOT}` : null;
 const MAX_FILE_BYTES = 1_500_000;
@@ -2195,9 +2196,12 @@ function Main({ session }) {
 
   // load saved chats (and bring over chats saved by the older version)
   useEffect(() => {
+    let off = false;
+    (async () => {
     let list = [];
     try {
-      list = JSON.parse(localStorage.getItem(storeKey) || "[]");
+      const got = await getItem(storeKey);
+      list = Array.isArray(got) ? got : [];
       if (!list.length) {
         const oldChat = JSON.parse(localStorage.getItem(`ahm-chat-${uid}`) || "[]");
         const oldBuild = JSON.parse(localStorage.getItem(`ahm-build-${uid}`) || "[]");
@@ -2207,24 +2211,31 @@ function Main({ session }) {
         if (oldChat.length) list.push({ ...blank("chat"), messages: oldChat, title: title(oldChat) });
       }
     } catch {}
+    if (off) return;
     setChats(list);
     setReady(true);
     loadMe();
+    })();
+    return () => { off = true; };
   }, [uid]);
 
   // Saved on the phone a moment after the last change (not on every streamed word: writing all chats
   // many times a second made the app slow), and straight away when the app goes to the background.
   const chatsRef0 = useRef(chats);
   chatsRef0.current = chats;
+  const lastSave = useRef(0);
   const saveLocal = () => {
+    lastSave.current = Date.now();
     try {
       const slim = chatsRef0.current.slice(0, 60).map((c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => slimStudio(i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) }));
-      localStorage.setItem(storeKey, JSON.stringify(slim));
+      setItem(storeKey, slim);
     } catch {}
   };
   useEffect(() => {
     if (!ready) return;
-    const tm = setTimeout(saveLocal, 1200);
+    // while a build is written the chats change all the time: still save at least every 5 s,
+    // so closing the app suddenly never brings back an old copy
+    const tm = setTimeout(saveLocal, Date.now() - lastSave.current > 5000 ? 0 : 1200);
     return () => clearTimeout(tm);
   }, [chats, ready]);
   useEffect(() => {
@@ -2240,6 +2251,18 @@ function Main({ session }) {
   const cloudOn = useRef(false);  // false until the first download worked (or if the table doesn't exist yet)
   const delKey = `ahm-deleted-${uid}`;
   const slimChat = (c) => ({ ...c, messages: c.messages.map(({ fixed, ...m }, i, all) => slimStudio(i < all.length - 12 ? { ...m, thumbs: undefined } : m)).slice(-80) });
+  // A chat for the account copy: when it is very big, the code inside older answers is left out
+  // (the project files themselves are always kept, so nothing of the app is lost).
+  const fitChat = (c) => {
+    if (JSON.stringify(c).length < 1_400_000) return c;
+    const keep = 4;
+    let seen = 0;
+    const msgs = [...c.messages].reverse().map((m) => {
+      if (m.role !== "assistant" || ++seen <= keep || String(m.content || "").length < 4000) return m;
+      return { ...m, content: String(m.content).replace(/```[^\n]*\n[\s\S]*?```/g, "```\n…\n```") };
+    }).reverse();
+    return { ...c, messages: msgs };
+  };
   const readDeleted = () => { try { return JSON.parse(localStorage.getItem(delKey) || "[]"); } catch { return []; } };
 
   async function pullChats() {
@@ -2271,17 +2294,30 @@ function Main({ session }) {
     document.addEventListener("visibilitychange", onShow);
     return () => document.removeEventListener("visibilitychange", onShow);
   }, []);
-  useEffect(() => { // upload changed chats a moment after the last change
+  const lastUp = useRef(0);
+  useEffect(() => { // upload changed chats a moment after the last change (and at least every 20 s while a build is written)
     if (!ready || !cloudOn.current) return;
     const timer = setTimeout(async () => {
-      const dirty = chats.filter((c) => c.messages.length && synced.current[c.id] !== c.updated).slice(0, 20);
+      lastUp.current = Date.now();
+      // One request stays small (the server takes about 4 MB): big chats go one by one, the newest first.
+      const all = chats.filter((c) => c.messages.length && synced.current[c.id] !== c.updated);
+      const dirty = [], body = [];
+      let size = 0;
+      for (const c of all) {
+        const one = fitChat(slimChat(c));
+        const n = JSON.stringify(one).length;
+        if (n > 1_450_000) { synced.current[c.id] = c.updated; continue; } // too big even when made smaller: keep it on this phone
+        if (dirty.length && size + n > 2_000_000) break;
+        dirty.push(c); body.push(one); size += n;
+        if (dirty.length >= 20) break;
+      }
       const deleted = readDeleted();
       if (!dirty.length && !deleted.length) return;
       try {
         const res = await fetch("/api/chats", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) },
-          body: JSON.stringify({ chats: dirty.map(slimChat), deleted }),
+          body: JSON.stringify({ chats: body, deleted }),
         });
         if (!res.ok) return;
         for (const c of dirty) synced.current[c.id] = c.updated;
@@ -2289,7 +2325,7 @@ function Main({ session }) {
         try { localStorage.setItem(delKey, JSON.stringify(readDeleted().filter((d) => !sent.has(d.id)))); } catch {}
         if (chats.some((c) => c.messages.length && synced.current[c.id] !== c.updated)) setSyncTick((n) => n + 1); // more left
       } catch {}
-    }, 2500);
+    }, Date.now() - lastUp.current > 20000 ? 300 : 2500);
     return () => clearTimeout(timer);
   }, [chats, ready, syncTick]);
 
@@ -2334,7 +2370,7 @@ function Main({ session }) {
       const canFix = (opts.checks || 0) < 2;
       mark({ state: canFix ? "fix" : "left", pages: res.pages, clicked: res.clicked, n: probs.length });
       if (!canFix || chatId !== activeIdRef.current) return;
-      const list = probs.slice(0, 8).map((p) => `- ${p.page}: ${p.kind === "blank" ? t("chkBlank") : p.kind === "blankView" ? t("chkBlankView").replace("{v}", p.text) : p.kind === "login" ? t("chkLogin") : p.text}`).join("\n");
+      const list = probs.slice(0, 8).map((p) => `- ${p.page}: ${p.kind === "blank" ? t("chkBlank") : p.kind === "blankView" ? t("chkBlankView").replace("{v}", p.text) : p.kind === "login" ? t("chkLogin") : p.kind === "deadNav" ? t("chkDeadNav").replace("{v}", p.text) : p.text}`).join("\n");
       setTimeout(() => autoRef.current?.(t("chkFixAsk").replace("{list}", list), 2, { checks: (opts.checks || 0) + 1 }), 400);
     } catch (e) { console.error("self-check", e); }
     finally { reviewing.current = false; }
@@ -3237,7 +3273,7 @@ function Main({ session }) {
                         <div className="tpl-box">
                           <div className="tpl-head"><b>⚡ {t("tplTitle")}</b><small>{t("tplSub")}</small></div>
                           <div className="tpl-grid">
-                            {templatesFor(active.buildKind).map((tp) => (
+                            {templatesFor(active.buildKind).slice(0, tplMore ? 99 : 8).map((tp) => (
                               <button key={tp.name.en} type="button" disabled={busy} onClick={() => send(tp.prompt[lang] || tp.prompt.ckb)}>
                                 <span aria-hidden="true">{tp.ic}</span><b>{tp.name[lang] || tp.name.ckb}</b>
                               </button>
@@ -3249,7 +3285,7 @@ function Main({ session }) {
                               </button>
                             ))}
                           </div>
-                          <button type="button" className="tpl-more" onClick={() => setTplMore(!tplMore)}>{tplMore ? t("tplLess") : t("tplMore").replace("{n}", num(BLUEPRINTS.filter((b) => !templatesFor(active.buildKind).some((tp) => tp.name.en === b.name.en)).length))}</button>
+                          <button type="button" className="tpl-more" onClick={() => setTplMore(!tplMore)}>{tplMore ? t("tplLess") : t("tplMore").replace("{n}", num(Math.max(0, templatesFor(active.buildKind).length - 8) + BLUEPRINTS.filter((b) => !templatesFor(active.buildKind).some((tp) => tp.name.en === b.name.en)).length))}</button>
                         </div>
                       )}
                       {mode === "build" && (
