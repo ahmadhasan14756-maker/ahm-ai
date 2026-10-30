@@ -3055,7 +3055,7 @@ function Main({ session }) {
             return { ...c, messages: msgs, ...(ch?.changed ? { project: ch.files } : {}) };
           });
         }
-        await new Promise((r) => setTimeout(r, i < 12 ? 2500 : 5000));
+        await new Promise((r) => setTimeout(r, i < 12 ? 2000 : 4000));
       }
       fail(t("errConn"));
     } finally {

@@ -578,7 +578,7 @@ VOICE CONVERSATION MODE (most important rules)
       const beat = setInterval(() => send("\u0000H\n"), 12000);
       // what is made so far is saved now and then: the app shows it when the user comes back, even before the end
       let savedAt = 0;
-      saveSoFar = () => { if (!jobId || Date.now() - savedAt < 4000) return; savedAt = Date.now(); saveJob(user.id, jobId, "running", full).catch?.(() => {}); };
+      saveSoFar = (force) => { if (!jobId || (!force && Date.now() - savedAt < 4000)) return; savedAt = Date.now(); saveJob(user.id, jobId, "running", full).catch?.(() => {}); };
       // Wait in the fair line (Pro first). The app shows "you are number N".
       const ticket = jobId || randomUUID();
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
@@ -641,6 +641,7 @@ VOICE CONVERSATION MODE (most important rules)
             if (stopped) return false;
             const mark = `\u0000F:${doneN + ++begun}/${total}:${f.path}\n`;
             full += mark; send(mark);
+            saveSoFar(begun <= 2); // the app shows "file 1 of 13" right away when it is opened again
             let out = "", shown = 0;
             const fileModels = /^readme\.md$/i.test(f.path) ? [...new Set(["gemini-3.5-flash-lite", ...models])] : models; // the guide is simple text: the fast model
             for await (const piece of answer(fileModels, stepContents(askFor(f, last), written), stepConfig, false, REFUSAL[lang], level)) {
