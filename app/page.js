@@ -2789,9 +2789,21 @@ function Main({ session }) {
       // network changed, iPhone kept a dead connection open), stop waiting here and fetch the saved work instead.
       let lastByte = Date.now();
       const dog = setInterval(() => {
-        if (document.visibilityState === "visible" && Date.now() - lastByte > 40000) { stalled = true; clearInterval(dog); try { reader.cancel(); } catch {} }
+        if (document.visibilityState === "visible" && Date.now() - lastByte > 26000) { stalled = true; clearInterval(dog); try { reader.cancel(); } catch {} }
       }, 3000);
-      const onBack = () => { if (document.visibilityState === "visible" && Date.now() - lastByte > 20000) { stalled = true; try { reader.cancel(); } catch {} } };
+      const onBack = async () => {
+        if (document.visibilityState !== "visible") return;
+        if (Date.now() - lastByte > 20000) { stalled = true; try { reader.cancel(); } catch {} return; }
+        // back in the app: if the server already finished while we were away (the phone kept a dead connection),
+        // show the saved answer at once instead of waiting on the old connection
+        if (Date.now() - lastByte > 4000) {
+          try {
+            const r = await fetch("/api/job?id=" + jobId, { headers: { Authorization: "Bearer " + (await token()) }, cache: "no-store" });
+            const j = await r.json();
+            if (j.status === "done" && Date.now() - lastByte > 4000) { stalled = true; try { reader.cancel(); } catch {} }
+          } catch {}
+        }
+      };
       document.addEventListener("visibilitychange", onBack);
       try {
       while (true) {
