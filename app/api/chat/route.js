@@ -194,7 +194,8 @@ Rules: 4 to 18 files. Follow the FILES list of the project type above and the pa
 const BROAD_CHANGE = /(جوان|دیزاین|ستایل|ڕەنگ|هەموو|گشت|سەرلەنوێ|باشتر|نوێی بکەرەوە|مۆدێرن|تەواوی|تصميم|جميل|أجمل|كل |بالكامل|حدّث|طوّر|design|beautiful|prettier|redesign|modern|style|all |every|whole|improve|better|revamp|polish)/i;
 const CHANGE_PROMPT = (lang) => `You are a senior developer. The user wants a change to their existing project (files below). Decide yourself EXACTLY which files must be changed or created to do it completely and well — the user will not name files.
 Return JSON only: {"intro": "1-2 short friendly sentences in ${LANG_NAME[lang] || LANG_NAME.ckb}: what you will change", "files": [{"path": "css/style.css", "about": "precisely what to change in this file, in English, max 35 words", "note": "the same change in 4-10 simple words in ${LANG_NAME[lang] || LANG_NAME.ckb}, for the user"}]}
-Rules: list every file that needs work (shared CSS first, then shared scripts, then pages/screens), new files too; 1 to 15 files; never js/ahm-db.js; don't list files that need no change.`;
+Rules: list every file that needs work (shared CSS first, then shared scripts, then pages/screens), new files too; 1 to 15 files; never js/ahm-db.js; don't list files that need no change. For a fix ("this button does nothing", "X doesn't open") include every file involved (the screen, the router/app file, the HTML that loads the scripts).
+If the user is only asking a question or chatting (no change to make), return "files": [].`;
 const STEP_RULES = `
 ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - You are writing the project ONE FILE AT A TIME. You get the full file list and every file already written.
@@ -600,14 +601,14 @@ VOICE CONVERSATION MODE (most important rules)
         }
         // a broad change to an existing project: the AI picks the files itself, then they are rewritten one by one
         const textFiles = project.filter(([k, v]) => !v.startsWith("[image file") && k !== "js/ahm-db.js");
-        if (!list && build && !planOnly && !file && !contTok && !stepBuild && textFiles.length >= 2 && BROAD_CHANGE.test(lastText) && serverEnv("STEP_BUILD") !== "0") {
+        if (!list && build && !planOnly && !file && !contTok && !stepBuild && textFiles.length >= 2 && (BROAD_CHANGE.test(lastText) || textFiles.length >= 4) && serverEnv("STEP_BUILD") !== "0") {
           let budget = 120_000;
           const filesText = textFiles.map(([k, v]) => { const c = v.slice(0, Math.max(0, Math.min(6000, budget))); budget -= c.length; return `--- ${k} (${v.length} chars)\n${c}`; }).join("\n\n");
           const convo = messages.slice(-6).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 3000)).join("\n\n");
           try {
             const out = await jsonCall(SYSTEM_PROMPT(lang) + CHANGE_PROMPT(lang), [{ text: `CONVERSATION:\n${convo}\n\nPROJECT FILES:\n${filesText}\n\nREQUEST: ${lastText}` }], { maxTokens: 3000, think: "minimal" });
             const picked = cleanList(out?.files);
-            if (picked.length >= 2) {
+            if (picked.length >= 1) {
               list = picked; total = picked.length; editing = true;
               const intro = String(out?.intro || "").replace(/\u0000/g, "").trim().slice(0, 500);
               if (intro) { full += intro + "\n\n"; send(intro + "\n\n"); }
@@ -738,6 +739,7 @@ VOICE CONVERSATION MODE (most important rules)
             const piece = lang === "ckb" ? tidyKurdish(raw) : raw;
             full += piece;
             send(piece);
+            if (build) saveSoFar(); // a change being written is kept now and then (the app shows it on return)
           }
           // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
           // the answer is already on screen, and a few seconds later the corrected text replaces it.
