@@ -684,6 +684,9 @@ VOICE CONVERSATION MODE (most important rules)
           const leftAll = () => order.filter((f) => !(f.path in written));
           // the shared design and the main page are written at the same time (the contract gives both the same names);
           // without a contract they are written one after the other
+          // the guide (README) needs only the file list: it is written at the same time as the first files
+          const readme = !doneN && !editing ? pages.find((f) => /^readme\.md$/i.test(f.path)) : null;
+          const readmeJob = readme && firstN ? writeOne(readme, readme.path === lastPath, false, 2) : null;
           if (firstN) {
             const firsts = core.slice(0, firstN);
             const liveOne = firsts.find((f) => /\.html?$/i.test(f.path)) || firsts[0];
@@ -692,15 +695,20 @@ VOICE CONVERSATION MODE (most important rules)
               : await (async () => { const out = []; for (const f of firsts) { if (stopped) break; out.push(await writeOne(f, f.path === lastPath, true, 2)); if (!out[out.length - 1]) break; } return out; })();
             if (results.includes(false) || results.length < firsts.length) { if (made || doneN) await more(leftAll()); else { const er = "\u0000ERR:ai"; full += er; send(er); stopped = true; } }
           }
-          const rest = [...core.slice(firstN), ...pages];
-          for (let i = 0; i < rest.length && !stopped; i += 5) {
-            if (await stopNow()) { stopped = true; break; }
-            if (Date.now() - t0 > BUDGET * 0.85) { await more(leftAll()); break; }
-            const batch = rest.slice(i, i + 5);
-            // a single file alone (e.g. the last one) is shown live
-            const ok = await Promise.all(batch.map((f) => writeOne(f, f.path === lastPath, batch.length === 1, 2)));
-            if (ok.includes(false)) { await more(leftAll()); break; }
-          }
+          const rest = [...core.slice(firstN), ...pages].filter((f) => f !== readme || !readmeJob);
+          // 6 files are written at the same time; a new one starts as soon as one is finished (no waiting for the slowest)
+          let failed = false, late = false, next = 0;
+          const worker = async () => {
+            while (!stopped && !failed && next < rest.length) {
+              if (Date.now() - t0 > BUDGET * 0.85) { late = true; return; }
+              if (await stopNow()) { stopped = true; return; }
+              const f = rest[next++];
+              if (!(await writeOne(f, f.path === lastPath, rest.length === 1, 2))) { failed = true; return; }
+            }
+          };
+          if (!stopped) await Promise.all(Array.from({ length: Math.min(6, rest.length) }, worker));
+          if (readmeJob && !(await readmeJob) && !stopped) failed = true;
+          if ((failed || late) && !stopped) await more(leftAll());
           noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
           if (!stopped && !/\u0000(MORE|ERR):/.test(full)) {
             const n = doneN + list.length;
