@@ -2788,26 +2788,32 @@ function Main({ session }) {
       // The server sends a small signal every 12 s. If nothing at all arrives for a while (the phone slept, the
       // network changed, iPhone kept a dead connection open), stop waiting here and fetch the saved work instead.
       let lastByte = Date.now();
+      // iPhone: a connection that died in the background can leave reader.read() waiting FOREVER, even after
+      // reader.cancel(). So stopping to wait never depends on it: every read races against "give up".
+      let giveUp; const gaveUp = new Promise((r) => { giveUp = r; });
+      const stall = () => { stalled = true; try { reader.cancel(); } catch {} giveUp({ stalledNow: true }); };
       const dog = setInterval(() => {
-        if (document.visibilityState === "visible" && Date.now() - lastByte > 26000) { stalled = true; clearInterval(dog); try { reader.cancel(); } catch {} }
+        if (document.visibilityState === "visible" && Date.now() - lastByte > 26000) { clearInterval(dog); stall(); }
       }, 3000);
       const onBack = async () => {
         if (document.visibilityState !== "visible") return;
-        if (Date.now() - lastByte > 20000) { stalled = true; try { reader.cancel(); } catch {} return; }
+        if (Date.now() - lastByte > 20000) { stall(); return; }
         // back in the app: if the server already finished while we were away (the phone kept a dead connection),
         // show the saved answer at once instead of waiting on the old connection
         if (Date.now() - lastByte > 4000) {
           try {
             const r = await fetch("/api/job?id=" + jobId, { headers: { Authorization: "Bearer " + (await token()) }, cache: "no-store" });
             const j = await r.json();
-            if (j.status === "done" && Date.now() - lastByte > 4000) { stalled = true; try { reader.cancel(); } catch {} }
+            if (j.status === "done" && Date.now() - lastByte > 4000) stall();
           } catch {}
         }
       };
       document.addEventListener("visibilitychange", onBack);
       try {
       while (true) {
-        const { done, value } = await reader.read();
+        const got = await Promise.race([reader.read(), gaveUp]);
+        if (got.stalledNow) break;
+        const { done, value } = got;
         if (done) break;
         lastByte = Date.now();
         acc += dec.decode(value, { stream: true });
