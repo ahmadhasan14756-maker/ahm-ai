@@ -3057,7 +3057,7 @@ function Main({ session }) {
           if (rs2 >= 0) part = part.slice(rs2 + 7);
           let pg = null;
           for (const fm of part.matchAll(/\u0000F:(\d+)\/(\d+):([^\n]*)\n/g)) pg = { i: +fm[1], n: +fm[2], path: fm[3].slice(0, 120) };
-          part = part.replace(/\u0000(F:\d+\/\d+:[^\n]*|MORE:[^\n]*|CHAIN|H)\n/g, "");
+          part = part.replace(/\u0000(F:\d+\/\d+:[^\n]*|MORE:[^\n]*|CHAIN|H)\n/g, "").replace(/(^|\n)`{1,3}[^\n]*$/, "$1"); // a code block cut in the middle of its first line is not shown yet
           patchIf(chatId, (c) => {
             const k = c.messages.findIndex((x) => x.pending?.job === jobId);
             if (k < 0 || c.messages[k].content === part) return c;

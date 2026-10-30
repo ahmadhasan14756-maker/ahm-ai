@@ -664,7 +664,7 @@ VOICE CONVERSATION MODE (most important rules)
                 out = ""; shown = 0; continue;
               }
               out += piece;
-              if (live && !piece.includes("\u0000ERR:")) { full += piece; send(piece); shown += piece.length; }
+              if (live && !piece.includes("\u0000ERR:")) { full += piece; send(piece); shown += piece.length; saveSoFar(); }
             }
             if (/\u0000ERR:/.test(out) || !out.trim()) {
               if (live && shown) { send(`\u0000UNDO:${shown}\n`); full = full.slice(0, full.length - shown); }
@@ -712,8 +712,8 @@ VOICE CONVERSATION MODE (most important rules)
           const worker = async () => {
             while (!stopped && !failed && next < rest.length) {
               if (Date.now() - t0 > BUDGET * 0.85) { late = true; return; }
+              const f = rest[next++]; // taken BEFORE waiting on anything, so two workers never take the same / a missing file
               if (await stopNow()) { stopped = true; return; }
-              const f = rest[next++];
               if (!(await writeOne(f, f.path === lastPath, rest.length === 1, 2))) { failed = true; return; }
             }
           };
