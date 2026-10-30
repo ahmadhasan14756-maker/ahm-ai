@@ -9,9 +9,10 @@ import { waitUntil } from "@vercel/functions";
 import { saveJob, readJob, validJobId } from "../../../lib/jobs";
 import { notifyOwner, escHtml } from "../../../lib/telegram";
 import { matchBlueprints, blueprintText } from "../../../lib/blueprints";
-import { waitTurn, doneTurn, priorityScore } from "../../../lib/queue";
+import { waitTurn, doneTurn, priorityScore, lineStats } from "../../../lib/queue";
+import { TEMPLATES } from "../../../lib/templates";
 import { redis, hasRedis } from "../../../lib/redis";
-import { randomUUID, createHmac, timingSafeEqual } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual, createHash } from "crypto";
 import { sendPush } from "../../../lib/push";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -207,6 +208,19 @@ ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - Every menu, tab and nav button must open its screen: use only the route names from the contract, and a screen file must register itself exactly as the contract says (a button that does nothing is a bug).
 - Never call a function or read an id/key that is not in the contract or in the files already written. Start page code after DOMContentLoaded and check that a shared object exists before using it, so a page never goes blank.
 - KURDISH TEXT in the app (when its language is Sorani): short, clear, everyday Sorani with correct spelling (ڕ ڵ ێ ۆ ە), a space between separate words, Kurdish digits only where the plan asks. Use these common words: Home سەرەکی · Dashboard داشبۆرد · Add زیادکردن · Save پاشەکەوتکردن · Cancel پاشگەزبوونەوە · Edit دەستکاری · Delete سڕینەوە · Search گەڕان · Filter فلتەر · Settings ڕێکخستنەکان · Reports ڕاپۆرتەکان · Total کۆی گشتی · Recent … دوایین … · See all هەمووی ببینە · Back گەڕانەوە · Login چوونەژوورەوە · Logout چوونەدەرەوە · Username ناوی بەکارهێنەر · Password وشەی نهێنی · Date بەروار · Amount بڕ · Price نرخ · Category جۆر · Notes تێبینی · Print چاپکردن · No data yet هێشتا هیچ زانیارییەک نییە · Saved ✓ پاشەکەوت کرا · Are you sure? دڵنیایت؟ · IQD د.ع.`;
+// ---- Ready templates are made by the AI only ONCE, then shared: the next person who picks the same template (and
+// builds the same plan) gets it at once from the cache, with no AI work — so many more people can build at the same time.
+const TPL_PROMPTS = new Set(Object.values(TEMPLATES).flat().flatMap((t) => Object.values(t.prompt)).map((x) => x.trim()));
+const norm = (x) => String(x || "").replace(/\s+/g, " ").trim();
+const h16 = (x) => createHash("sha256").update(norm(x)).digest("hex").slice(0, 16);
+function templateKey({ messages, planOnly, kind, lang, cloudDb }) {
+  const first = String(messages[0]?.content || "").trim();
+  if (!TPL_PROMPTS.has(first)) return null;
+  const base = `tplc:v1:${kind}:${lang}:${cloudDb ? 1 : 0}:${h16(first)}`;
+  if (planOnly && messages.length === 1) return base + ":plan";
+  if (!planOnly && messages.length === 3 && messages[1].role === "assistant" && norm(messages[2].content).length < 200) return base + ":build:" + h16(messages[1].content);
+  return null;
+}
 const STEP_SECRET = () => serverEnv("PUSH_SECRET") || serverEnv("SUPABASE_SERVICE_ROLE_KEY") || "ahm-dev";
 const signStep = (data) => { const b = Buffer.from(JSON.stringify(data)).toString("base64url"); return b + "." + createHmac("sha256", "ahm-step:" + STEP_SECRET()).update(b).digest("base64url"); };
 function readStep(tok, uid) {
@@ -563,6 +577,11 @@ VOICE CONVERSATION MODE (most important rules)
     const chainN = Math.max(0, Math.min(10, Number(body.chainN) || 0));
     const chained = body.chain === true && !!contTok && !!jobId;
     let chainNext = null, writtenAll = {}, saveSoFar = () => {};
+    // a ready template that someone already built: served from the shared cache (no AI)
+    let served = false;
+    // (a build that goes on by itself in several parts is kept when its last part ends)
+    const tplKey = build && !attachments.length && (chained || (!contTok && project.filter(([k]) => k !== "js/ahm-db.js").length === 0))
+      ? templateKey({ messages, planOnly, kind: buildKind, lang, cloudDb }) : null;
     // the app told us it went to the background (iPhone often keeps the connection half-open, so "left" alone is not enough)
     // the user pressed ⏹ (only then does the work stop — leaving the app never stops it)
     let userStopped = false;
@@ -580,12 +599,19 @@ VOICE CONVERSATION MODE (most important rules)
       let savedAt = 0;
       saveSoFar = (force) => { if (!jobId || (!force && Date.now() - savedAt < 4000)) return; savedAt = Date.now(); saveJob(user.id, jobId, "running", full).catch?.(() => {}); };
       // Wait in the fair line (Pro first). The app shows "you are number N".
+      // how busy the AI is right now (shared by all servers): when many people use it at once, each answer
+      // asks less of it (fewer files at the same time, no extra proofreading pass), so everyone keeps moving
+      let crowded = false;
+      try { const ls = await lineStats(); crowded = !!ls && (ls.waiting > 0 || ls.active >= ls.slots * 0.6); } catch {}
       const ticket = jobId || randomUUID();
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
         { onPlace: (n) => send(`\u0000Q:${n}\n`) });
       try {
         let list = null, total = 0, doneN = 0, editing = false, contract = "";
-        if (stepBuild) {
+        if (tplKey && !contTok && hasRedis()) {
+          try { const hit = await redis("GET", tplKey); if (typeof hit === "string" && hit.length > 40) { served = true; full = hit; send(hit); countUsage(); noteDebug("builds", { mode: "template_cache", part: planOnly ? "plan" : "build" }); } } catch {}
+        }
+        if (stepBuild && !served) {
           if (contTok) { list = cleanList(contTok.f); doneN = Number(contTok.d) || 0; total = Number(contTok.n) || doneN + list.length; editing = !!contTok.ed; contract = String(contTok.c || "").slice(0, 2000); }
           else {
             const convo = messages.slice(-10).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 6000)).join("\n\n");
@@ -605,7 +631,7 @@ VOICE CONVERSATION MODE (most important rules)
         }
         // a broad change to an existing project: the AI picks the files itself, then they are rewritten one by one
         const textFiles = project.filter(([k, v]) => !v.startsWith("[image file") && k !== "js/ahm-db.js");
-        if (!list && build && !planOnly && !file && !contTok && !stepBuild && textFiles.length >= 2 && (BROAD_CHANGE.test(lastText) || textFiles.length >= 4) && serverEnv("STEP_BUILD") !== "0") {
+        if (!served && !list && build && !planOnly && !file && !contTok && !stepBuild && textFiles.length >= 2 && (BROAD_CHANGE.test(lastText) || textFiles.length >= 4) && serverEnv("STEP_BUILD") !== "0") {
           let budget = 120_000;
           const filesText = textFiles.map(([k, v]) => { const c = v.slice(0, Math.max(0, Math.min(6000, budget))); budget -= c.length; return `--- ${k} (${v.length} chars)\n${c}`; }).join("\n\n");
           const convo = messages.slice(-6).map((m) => (m.role === "user" ? "USER: " : "ASSISTANT: ") + m.content.slice(0, 3000)).join("\n\n");
@@ -620,7 +646,8 @@ VOICE CONVERSATION MODE (most important rules)
             }
           } catch (e) { console.error("change plan", errText(e)); }
         }
-        if (list && list.length >= 2) {
+        if (served) { /* answered from the shared template cache */ }
+        else if (list && list.length >= 2) {
           const t0 = Date.now(), written = {}, BUDGET = Number(serverEnv("STEP_BUDGET_MS")) || 210000; // time for one server run
           const stepConfig = { ...baseConfig, systemInstruction: baseConfig.systemInstruction + STEP_RULES };
           const listText = list.map((f, i) => `${doneN + i + 1}. ${f.path} — ${f.about}`).join("\n");
@@ -722,7 +749,7 @@ VOICE CONVERSATION MODE (most important rules)
               }
             }
           };
-          if (!stopped) await Promise.all(Array.from({ length: Math.min(6, rest.length) }, worker));
+          if (!stopped) await Promise.all(Array.from({ length: Math.min(crowded ? 2 : 6, rest.length) }, worker));
           if (readmeJob && !(await readmeJob) && !stopped) failed = true;
           if ((failed || late) && !stopped) await more(leftAll());
           noteDebug("builds", { mode: editing ? "edit" : contTok ? "continue" : "new", kind: buildKind, cloud: cloudDb, planned: list.length, made, result: stopped ? (/\u0000MORE:/.test(full) ? "continue_later" : "error") : "ok", secs: Math.round((Date.now() - t0) / 1000) });
@@ -774,7 +801,7 @@ VOICE CONVERSATION MODE (most important rules)
           }
           // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
           // the answer is already on screen, and a few seconds later the corrected text replaces it.
-          if (lang === "ckb" && kind === "chat" && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
+          if (lang === "ckb" && kind === "chat" && !crowded && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
             // code / cards (``` blocks) are kept aside untouched; only the Kurdish text around them is checked
             const blocks = [];
             const textOnly = full.replace(/```[\s\S]*?```/g, (b) => `⟦${blocks.push(b) - 1}⟧`);
@@ -819,6 +846,10 @@ VOICE CONVERSATION MODE (most important rules)
         full += `\u0000MORE:${chainNext}\n`;
       }
       if (jobId) await saveJob(user.id, jobId, "done", full);
+      // a template made fully and without errors is kept for the next person (30 days)
+      if (tplKey && !served && !userStopped && hasRedis() && full.length > 200 && full.length < 900_000 && !/\u0000(MORE|ERR):|\u0000RESET/.test(full.replace(/^[\s\S]*\u0000RESET\n/, "")) && (planOnly || /```file:/.test(full))) {
+        try { await redis("SET", tplKey, full.replace(/^[\s\S]*\u0000RESET\n/, ""), "EX", 30 * 86400); } catch {}
+      }
       // "done" only when it is really done: a build that stopped half way (it goes on when the app is opened) sends no "ready" message
       if (!(await stopNow()) && !/\u0000MORE:/.test(full) && await awayNow()) {
         const done = { ckb: ["✅ AHM AI — تەواو بوو", build ? "پرۆژەکەت ئامادەیە. بۆ بینین دایبگرە." : "وەڵامەکەت ئامادەیە. بۆ بینین دایبگرە."],
