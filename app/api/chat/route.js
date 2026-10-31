@@ -169,12 +169,12 @@ PROJECT TYPE: WEBSITE — a public website (landing / business / portfolio / sho
 FILES: index.html + one .html file for every page in the plan (e.g. about.html, services.html, contact.html), the same header/footer on every page, css/style.css, js/main.js, assets/ for SVG logos and icons drawn in code, README.md.`,
   app: `
 PROJECT TYPE: APP — it must look and feel like a real phone app: app bar on top, bottom tab navigation (3–5 tabs), screens that switch without page reloads, big touch targets, smooth transitions, data saved in localStorage, works offline as an installable web app (add manifest.json with name, colours and icons, and a small service worker). On a computer show it centred like a phone or as a responsive layout.
-FILES: index.html (the app shell), css/app.css, js/app.js (router: screens switch with #hash), js/screens/<name>.js — one file per screen, js/storage.js (all saving), manifest.json, sw.js, icons/icon.svg, README.md.`,
+FILES: index.html (the app shell), css/app.css, js/app.js (router: screens switch with #hash), js/screens/<group>.js — related screens together, 2–3 small screens per file (e.g. js/screens/money.js with add + list, js/screens/stats.js with chart + settings), js/storage.js (all saving), manifest.json, sw.js, icons/icon.svg, README.md.`,
   system: `
 PROJECT TYPE: SYSTEM — a management system / dashboard (e.g. shop, school, clinic, stock, accounting): a login screen (demo user shown on screen), a sidebar menu, a dashboard with stat cards and a chart, data tables with search, add / edit / delete forms, simple user roles (admin / staff) and printable reports. Save all data in localStorage (one clear data layer in js/data.js so it can be moved to a real database later). Explain in README.md how to connect a real database later.
 PHONES: on screens under 900px the sidebar is hidden and opens from a ☰ button in a top bar (sliding over the page with a dark backdrop, closing after a choice); the page content always uses the full width. Tables scroll sideways inside their card or turn into stacked cards; forms are one column.
 NEVER EMPTY: right after login the dashboard shows real content — stat cards, a chart and recent items from realistic sample data (seeded once into js/data.js storage on first run); every list shows a friendly empty state with an "add" button when it has no data. Each module renders inside the same main area; a module that fails shows a short error message there instead of a blank page.
-FILES: index.html (login + app shell, pages switch with #hash routes), css/style.css, js/data.js (all data + saving), js/auth.js (login, roles), js/app.js (router, sidebar), js/pages/<module>.js — one file per module in the plan (e.g. products.js, sales.js, reports.js, users.js), README.md.`,
+FILES: index.html (login + app shell, pages switch with #hash routes), css/style.css, js/data.js (all data + saving), js/auth.js (login, roles), js/app.js (router, sidebar), js/pages/<group>.js — related modules together, 2–3 per file (e.g. js/pages/sales.js with point of sale + receipts, js/pages/admin.js with users + settings), README.md.`,
 };
 
 // ---- Building a new project ONE FILE AFTER ANOTHER (like a developer) ----
@@ -190,7 +190,7 @@ Return JSON only: {"intro": "1-2 short, simple, natural sentences in ${LANG_NAME
 - element ids / CSS classes several files rely on (e.g. "#app", ".card", ".btn-primary", ".sidebar")
 - the <script> order on every page, shared files first and the page's own script last (e.g. "js/data.js → js/auth.js → js/ui.js → page script")
 - the ROUTES (apps and systems): every #hash route name, the file that registers it and how, e.g. "#home dashboard.js, #add add-expense.js, #list expenses.js — each screen file does window.Screens['add'] = { title, render(root) }"; every menu / tab / nav button uses exactly these names
-Rules: 4 to 18 files. Follow the FILES list of the project type above and the pages/screens/modules of the plan — every page/screen/module gets its own file. Order: files others depend on first (styles, data/storage, auth, router/app), then the pages / screens / modules, README.md last. Paths: forward slashes, no leading slash. Only text files (HTML, CSS, JS, JSON, MD, SVG) — no photos.`;
+Rules: 4 to 12 files — FEWER, well-filled files are better (each file is one AI request: fewer files = faster builds and room for more people). Follow the FILES list of the project type above; every page/screen/module of the plan must exist, but in apps and systems related small screens/modules share one file (each registers its own route as the contract says). In websites every page is its own .html file. Order: files others depend on first (styles, data/storage, auth, router/app), then the pages / screens / modules, README.md last. Paths: forward slashes, no leading slash. Only text files (HTML, CSS, JS, JSON, MD, SVG) — no photos.`;
 // A broad change to an existing project ("make the design more beautiful", "improve everything"): the AI first
 // decides which files to change, then rewrites them one by one — the user never has to name files.
 const BROAD_CHANGE = /(جوان|دیزاین|ستایل|ڕەنگ|هەموو|گشت|سەرلەنوێ|باشتر|نوێی بکەرەوە|مۆدێرن|تەواوی|تصميم|جميل|أجمل|كل |بالكامل|حدّث|طوّر|design|beautiful|prettier|redesign|modern|style|all |every|whole|improve|better|revamp|polish)/i;
@@ -205,7 +205,7 @@ ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - Keep it 100% consistent with the files already written, the file list and the SHARED CONTRACT: the same class names, ids, function names, global variables, data keys and links. Link only to files in the list.
 - Shared code lives on window objects exactly as named in the contract (window.Auth, window.Store…); define each one once, in its own file, and never rename it.
 - In every HTML page load the scripts in the contract's order: shared files first, the page's own script LAST.
-- Write compact, clean code: short comments only where needed, no repeated blocks, no huge inline data (8–15 sample records are enough); aim for under ~350 lines per file.
+- Write compact, clean code: short comments only where needed, no repeated blocks, no huge inline data (8–15 sample records are enough); aim for under ~450 lines per file.
 - Every menu, tab and nav button must open its screen: use only the route names from the contract, and a screen file must register itself exactly as the contract says (a button that does nothing is a bug).
 - Never call a function or read an id/key that is not in the contract or in the files already written. Start page code after DOMContentLoaded and check that a shared object exists before using it, so a page never goes blank.
 - KURDISH TEXT in the app (when its language is Sorani): short, clear, everyday Sorani with correct spelling (ڕ ڵ ێ ۆ ە), a space between separate words, Kurdish digits only where the plan asks. Use these common words: Home سەرەکی · Dashboard داشبۆرد · Add زیادکردن · Save پاشەکەوتکردن · Cancel پاشگەزبوونەوە · Edit دەستکاری · Delete سڕینەوە · Search گەڕان · Filter فلتەر · Settings ڕێکخستنەکان · Reports ڕاپۆرتەکان · Total کۆی گشتی · Recent … دوایین … · See all هەمووی ببینە · Back گەڕانەوە · Login چوونەژوورەوە · Logout چوونەدەرەوە · Username ناوی بەکارهێنەر · Password وشەی نهێنی · Date بەروار · Amount بڕ · Price نرخ · Category جۆر · Notes تێبینی · Print چاپکردن · No data yet هێشتا هیچ زانیارییەک نییە · Saved ✓ پاشەکەوت کرا · Are you sure? دڵنیایت؟ · IQD د.ع.`;
@@ -709,7 +709,7 @@ VOICE CONVERSATION MODE (most important rules)
           // Writes one file. live = its text appears in the app while it is being written.
           // While one file is shown live (its text arrives piece by piece), files finished at the same time are held
           // back and added right after it — otherwise they landed in the middle of its code and broke it.
-          let liveOn = 0; const held = [];
+          let liveOn = 0, pageTurn = 0; const held = [];
           const emit = (txt) => { if (liveOn) held.push(txt); else { full += txt; send(txt); } };
           const writeOne = async (f, last, live, level) => {
             if (stopped) return false;
@@ -743,14 +743,19 @@ VOICE CONVERSATION MODE (most important rules)
               if (live || !extraCount() || /^readme\.md$/i.test(f.path)) return null;
               for (let k = 0, avoid = []; k < Math.min(2, extraCount()); k++) {
                 try {
-                  const r = await extraWrite({ system: stepConfig.systemInstruction, contents: stepContents(askFor(f, last), written, f.path), timeoutMs: Math.max(20_000, (Number(serverEnv("STEP_HARD_MS")) || 268000) - (Date.now() - reqStart) - 5000) });
+                  // a short system text: the free services allow fewer words per request than Gemini
+                  const r = await extraWrite({ system: `You are a senior web developer. You write ONE file of a ${buildKind === "app" ? "phone app" : buildKind === "system" ? "management system" : "website"} at a time, plain HTML/CSS/JS, beautiful, responsive and fully working. All text the user sees is in ${LANG_NAME[lang] || LANG_NAME.ckb}, with perfect spelling; right-to-left for Kurdish and Arabic.` + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "") + STEP_RULES, contents: stepContents(askFor(f, last), written, f.path), timeoutMs: Math.max(20_000, (Number(serverEnv("STEP_HARD_MS")) || 268000) - (Date.now() - reqStart) - 5000) });
                   noteDebug("builds", { mode: "extra_ai", provider: r.provider, model: r.model, file: f.path.slice(0, 60) });
                   return r.text;
                 } catch (e) { avoid.push(e.provider); noteDebug("ai_errors", { where: "extra", error: errText(e).slice(0, 160) }); }
               }
               return null;
             };
-            if (crowded && !live) { const t = await viaExtra(); if (t && blockOf(asFileBlock(t, f.path), f.path) != null) out = t; }
+            // Pages / screens are shared with the other free services ALWAYS (every second one), not only when Gemini
+            // is full: three services writing at once carry two to three times as many builds. Shared files (design,
+            // data, router, main page) always stay with Gemini.
+            const share = !live && pageLike(f.path) && !/^readme\.md$/i.test(f.path) && extraCount() > 0 && (crowded || (pageTurn++ % 2) === 1);
+            if (share) { const t = await viaExtra(); if (t && blockOf(asFileBlock(t, f.path), f.path) != null) out = t; }
             if (!out) for await (const piece of answer(fileModels, stepContents(askFor(f, last), written, f.path), stepConfig, false, REFUSAL[lang], level)) {
               // never run into the server's hard time limit (the work would be lost and the app would wait forever):
               // a file that is not finished in time is written again in the next part
