@@ -464,6 +464,18 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
   }
   if (safetyRetry && !sentAny) { noteRefusal(lastWhy + " | last: " + errText(lastErr)); yield refusal; return; }
   noteDebug("ai_errors", { models: models.join(","), error: errText(lastErr).replace(/key=[^&\s]+/gi, "key=…").slice(0, 200) });
+  // every Gemini key is full: the other free services answer instead (Gemma first — on the same keys, with its own
+  // free limit, and good with Kurdish), so chat, files and construction keep going when many people use the app
+  if (isRateLimit(lastErr) && !sentAny && extraCount() > 0 && !(contents || []).some((c) => (c.parts || []).some((x) => x.inlineData))) {
+    for (let k = 0, avoid = []; k < Math.min(3, extraCount()); k++) {
+      try {
+        const r = await extraWrite({ system: baseConfig.systemInstruction, contents, maxTokens: Math.min(16000, baseConfig.maxOutputTokens || 8192), timeoutMs: 120_000, avoid, prefer: "gemma" });
+        noteDebug("builds", { mode: "extra_ai", provider: r.provider, model: r.model, file: "answer" });
+        yield r.text;
+        return;
+      } catch (e) { avoid.push(e.provider); noteDebug("ai_errors", { where: "extra_answer", error: errText(e).slice(0, 160) }); }
+    }
+  }
   yield isRateLimit(lastErr) ? "\u0000ERR:busy" : "\u0000ERR:ai";
 }
 
