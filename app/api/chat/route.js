@@ -873,7 +873,7 @@ VOICE CONVERSATION MODE (most important rules)
         } else {
           // A real Excel / PowerPoint / Word / PDF file asked for (or a change to the file made just before):
           // the AI writes its content as JSON and the phone turns it into the file (lib/office.js).
-          let office = null;
+          let office = null, officeWhy = "";
           if (officeGate) {
             // "making your file…" only when a file was clearly asked for (a follow-up may just be a question)
             const note = OFFICE_WORDS.test(lastText) ? { ckb: "📄 فایلەکەت ئامادە دەکەم…", ar: "📄 أجهّز ملفك…", en: "📄 Making your file…" }[lang] || "" : "";
@@ -882,11 +882,12 @@ VOICE CONVERSATION MODE (most important rules)
             if (note) { full += note; send(note); }
             // a live "… 12 seconds" so the user sees it is working (only shown, not saved)
             const tick = note ? setInterval(() => send("\u0000RESET\n" + note + " " + digitsOf(Math.round((Date.now() - o0) / 1000)) + " " + secsWord), 3000) : null;
-            let why = "";
-            try { office = await officeTurn({ messages, lang, attachments }); }
-            catch (e) { why = String(e?.message || e).slice(0, 120); if (why === "unsafe") office = { refused: true }; else console.error("office", why); }
+            // a hard cap well under the server's limit: the function always finishes, saves the job and sends the
+            // notification, even if the model is very slow (a long math solution, a big table from a photo)
+            try { office = await Promise.race([officeTurn({ messages, lang, attachments }), new Promise((_, no) => setTimeout(() => no(new Error("office timeout")), 185000))]); }
+            catch (e) { officeWhy = String(e?.message || e).slice(0, 120); if (officeWhy === "unsafe") { office = { refused: true }; officeWhy = ""; } else console.error("office", officeWhy); }
             if (tick) clearInterval(tick);
-            noteDebug("builds", { mode: "office", kind: office?.file?.type || (office?.refused ? "refused" : "none"), result: office ? "ok" : why ? "error: " + why : "chat", secs: Math.round((Date.now() - o0) / 1000) });
+            noteDebug("builds", { mode: "office", kind: office?.file?.type || (office?.refused ? "refused" : "none"), result: office ? "ok" : officeWhy ? "error: " + officeWhy : "chat", secs: Math.round((Date.now() - o0) / 1000) });
             if (note) { full += "\u0000RESET\n"; send("\u0000RESET\n"); }
           }
           if (office?.refused) { full += REFUSAL[lang]; send(REFUSAL[lang]); }
@@ -895,6 +896,13 @@ VOICE CONVERSATION MODE (most important rules)
             const made = { ckb: "✅ فایلەکەت ئامادەیە.", ar: "✅ ملفك جاهز.", en: "✅ Your file is ready." }[lang];
             const txt = (office.reply || made) + "\n\n```ahm-file\n" + JSON.stringify(office.file) + "\n```\n";
             full += txt; send(txt);
+          } else if (officeGate && officeWhy) {
+            // making the file took too long or failed: a short message instead of a frozen ticker (the file was asked for,
+            // so a whole fresh answer here would only make the wait longer)
+            const msg = { ckb: "⚠️ ببورە، دروستکردنی فایلەکە زیاتر لە چاوەڕوانکراو خایاند. تکایە دووبارە هەوڵ بدەرەوە، یان داواکارییەکەت کورتتر بکەرەوە.",
+              ar: "⚠️ عذراً، استغرق إنشاء الملف وقتاً أطول من المتوقع. حاول مرة أخرى أو اجعل طلبك أقصر.",
+              en: "⚠️ Sorry, making the file took longer than expected. Please try again, or make your request shorter." }[lang];
+            full += msg; send(msg);
           } else for await (const raw of answer(crowded && models.length > 1 && Math.random() < 0.5 ? [models[1], models[0], ...models.slice(2)] : models, contents, baseConfig, useSearch, REFUSAL[lang], crowded ? Math.max(startLevel, 2) : startLevel)) { // crowded: think less, answer sooner
             if (!raw.includes("\u0000ERR:")) countUsage(); // only count questions that got an answer
             const piece = lang === "ckb" ? tidyKurdish(raw) : raw;
