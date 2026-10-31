@@ -15,7 +15,7 @@ import { redis, hasRedis } from "../../../lib/redis";
 import { randomUUID, createHmac, timingSafeEqual, createHash } from "crypto";
 import { sendPush } from "../../../lib/push";
 import { extraWrite, extraCount } from "../../../lib/extraAI";
-import { tidyMath } from "../../../lib/mathfmt";
+import { mathForScreen } from "../../../lib/mathfmt";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Big projects take more than a minute to write: allow up to 5 minutes (the answer keeps streaming the whole time).
@@ -929,8 +929,9 @@ VOICE CONVERSATION MODE (most important rules)
           }
           // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
           // the answer is already on screen, and a few seconds later the corrected text replaces it.
-          // the app can't show LaTeX: turn any $…$ / \frac the model slipped in into clean book-style maths
-          if (/[$\\]|_[A-Za-z0-9{]/.test(full)) { const clean = tidyMath(full); if (clean !== full) { full = clean; send("\u0000RESET\n" + full); } }
+          // the app can't show LaTeX, and RTL text flips equations: clean any $…$/\frac and make equations read
+          // left-to-right. Only re-sends when it actually changed, so plain answers are untouched.
+          if (/[$\\]|[\u2080-\u209c\u2070-\u2079]|=/.test(full)) { const clean = mathForScreen(full); if (clean !== full) { full = clean; send("\u0000RESET\n" + full); } }
           // skip proofreading a maths-heavy answer: the editor could change numbers or break the working
           const mathy = (full.match(/[=×÷]|[₀-₉]/g) || []).length > 8;
           if (lang === "ckb" && kind === "chat" && !crowded && !mathy && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
