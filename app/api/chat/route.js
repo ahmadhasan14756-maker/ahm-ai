@@ -209,6 +209,13 @@ ONE-FILE STEP MODE (overrides "ANSWER SHAPE" above)
 - Every menu, tab and nav button must open its screen: use only the route names from the contract, and a screen file must register itself exactly as the contract says (a button that does nothing is a bug).
 - Never call a function or read an id/key that is not in the contract or in the files already written. Start page code after DOMContentLoaded and check that a shared object exists before using it, so a page never goes blank.
 - KURDISH TEXT in the app (when its language is Sorani): short, clear, everyday Sorani with correct spelling (ڕ ڵ ێ ۆ ە), a space between separate words, Kurdish digits only where the plan asks. Use these common words: Home سەرەکی · Dashboard داشبۆرد · Add زیادکردن · Save پاشەکەوتکردن · Cancel پاشگەزبوونەوە · Edit دەستکاری · Delete سڕینەوە · Search گەڕان · Filter فلتەر · Settings ڕێکخستنەکان · Reports ڕاپۆرتەکان · Total کۆی گشتی · Recent … دوایین … · See all هەمووی ببینە · Back گەڕانەوە · Login چوونەژوورەوە · Logout چوونەدەرەوە · Username ناوی بەکارهێنەر · Password وشەی نهێنی · Date بەروار · Amount بڕ · Price نرخ · Category جۆر · Notes تێبینی · Print چاپکردن · No data yet هێشتا هیچ زانیارییەک نییە · Saved ✓ پاشەکەوت کرا · Are you sure? دڵنیایت؟ · IQD د.ع.`;
+// How busy the AI is, shared by all servers — asked at most every 5 s per server (fewer Redis commands).
+let lineCache = { t: 0, v: null };
+async function lineNow() {
+  if (Date.now() - lineCache.t < 5000) return lineCache.v;
+  lineCache = { t: Date.now(), v: await lineStats() };
+  return lineCache.v;
+}
 // ---- Ready templates are made by the AI only ONCE, then shared: the next person who picks the same template (and
 // builds the same plan) gets it at once from the cache, with no AI work — so many more people can build at the same time.
 const TPL_PROMPTS = new Set(Object.values(TEMPLATES).flat().flatMap((t) => Object.values(t.prompt)).map((x) => x.trim()));
@@ -640,7 +647,16 @@ VOICE CONVERSATION MODE (most important rules)
     // the app told us it went to the background (iPhone often keeps the connection half-open, so "left" alone is not enough)
     // the user pressed ⏹ (only then does the work stop — leaving the app never stops it)
     let userStopped = false;
-    const stopNow = async () => { if (userStopped) return true; if (!jobId || !hasRedis()) return false; try { userStopped = (await redis("GET", "stop:" + jobId)) === "1"; } catch {} return userStopped; };
+    // checked at most every 3 s (each check is one trip to Redis, whose free plan counts every command)
+    let stopAt = 0, stopAsk = null;
+    const stopNow = async () => {
+      if (userStopped) return true;
+      if (stopAsk) return stopAsk; // a check is on its way: everyone waits for the same answer
+      if (!jobId || !hasRedis() || Date.now() - stopAt < 3000) return false;
+      stopAt = Date.now();
+      stopAsk = redis("GET", "stop:" + jobId).then((v) => (userStopped = v === "1"), () => userStopped).finally(() => { stopAsk = null; });
+      return stopAsk;
+    };
     const awayNow = async () => { if (left) return true; if (!jobId || !hasRedis()) return false; try { return (await redis("GET", "away:" + jobId)) === "1"; } catch { return false; } };
     const work = (async () => {
       let full = "";
@@ -657,7 +673,7 @@ VOICE CONVERSATION MODE (most important rules)
       // how busy the AI is right now (shared by all servers): when many people use it at once, each answer
       // asks less of it (fewer files at the same time, no extra proofreading pass), so everyone keeps moving
       let crowded = false;
-      try { const ls = await lineStats(); crowded = !!ls && (ls.waiting > 0 || ls.active >= ls.slots * 0.6); } catch {}
+      try { const ls = await lineNow(); crowded = !!ls && (ls.waiting > 0 || ls.active >= ls.slots * 0.6); } catch {}
       const ticket = jobId || randomUUID();
       await waitTurn(ticket, priorityScore({ pro: usage.pro || usage.unlimited, voice: !!body.voice, short: !build && !file && lastText.length < 300 }),
         { onPlace: (n) => send(`\u0000Q:${n}\n`) });
