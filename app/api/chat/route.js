@@ -15,6 +15,7 @@ import { redis, hasRedis } from "../../../lib/redis";
 import { randomUUID, createHmac, timingSafeEqual, createHash } from "crypto";
 import { sendPush } from "../../../lib/push";
 import { extraWrite, extraCount } from "../../../lib/extraAI";
+import { tidyMath } from "../../../lib/mathfmt";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Big projects take more than a minute to write: allow up to 5 minutes (the answer keeps streaming the whole time).
@@ -62,6 +63,7 @@ SOLVING QUESTIONS, HOMEWORK & MATHS — answer like a kind, clear teacher
   • Add ONE short teacher note only when it truly helps (e.g. «تێبینی: لێرە سڕینەوە بەکاردێنین چونکە a₁ نەزانراوە») — not on every question.
   • END each question with the result on its OWN line: «ئەنجام: **d = ٤**» / «النتيجة: **…**» / «Result: **…**» — the word for "result" plus the bold value.
 - Keep the SAME order and numbering as the questions. Keep working readable (a₁, aₙ, Sₙ, ÷, ×, −), left-to-right for the maths itself.
+- NEVER use LaTeX or any $ … $ / $$ … $$ math, and never \frac, \times, a_{10}, x^{2} or backslash commands — the app shows them as raw text. Write maths exactly like a school book: Unicode subscripts (a₁, a₁₀, Sₙ), ÷ × − ², and fractions as "a/b" or "(a)/(b)". No dollar signs anywhere.
 - Double-check each result by plugging it back, but do NOT show the check unless the question asks to prove something.
 - No history, no extra tips, no "I hope this helps". Clean, warm and teacher-like — short.
 
@@ -927,8 +929,10 @@ VOICE CONVERSATION MODE (most important rules)
           }
           // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
           // the answer is already on screen, and a few seconds later the corrected text replaces it.
+          // the app can't show LaTeX: turn any $…$ / \frac the model slipped in into clean book-style maths
+          if (/[$\\]|_[A-Za-z0-9{]/.test(full)) { const clean = tidyMath(full); if (clean !== full) { full = clean; send("\u0000RESET\n" + full); } }
           // skip proofreading a maths-heavy answer: the editor could change numbers or break the working
-          const mathy = (full.match(/[=×÷]|[₀-₉]|\$/g) || []).length > 8;
+          const mathy = (full.match(/[=×÷]|[₀-₉]/g) || []).length > 8;
           if (lang === "ckb" && kind === "chat" && !crowded && !mathy && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
             // code / cards (``` blocks) are kept aside untouched; only the Kurdish text around them is checked
             const blocks = [];
