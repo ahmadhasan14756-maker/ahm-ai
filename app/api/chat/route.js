@@ -636,9 +636,10 @@ VOICE CONVERSATION MODE (most important rules)
     // Short everyday questions think the least, so the first words appear fast.
     // everyday questions think the least (fast first words); maths, code and long questions think a bit more
     const hard = /[=+*/^√∑]|\d+\s*[x×]\s*\d+|```|function|code|کۆد|بیرکاری|حیساب|معادلة|رياضيات|calculate|prove|equation/i.test(lastText) || lastText.length > 1200;
-    // a photo often carries a problem to read and solve, and maths needs real (but light) reasoning to be correct
-    const hasPhoto = attachments.some((x) => /^image\//.test(x.mimeType));
-    const startLevel = planOnly ? 2 : kind === "chat" ? (hard || hasPhoto ? 1 : 2) : START[kind];
+    // Speed first: chat thinks the least so the answer comes fast. Only heavy maths/code reasoning (equations,
+    // proofs, code) gets a small bump — the clear step-by-step format comes from the prompt, not from long thinking.
+    const heavyMath = /\b(prove|سەلماند|أثبت|معادلة|هاوکێشە|integral|derivative|تەفاضل|تکامل)\b/i.test(lastText) || /```/.test(lastText);
+    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : 2) : START[kind];
     const officeGate = kind === "chat" && !tutor && !body.voiceNote && serverEnv("OFFICE") !== "0" && (OFFICE_WORDS.test(lastText) || lastFile(messages).recent);
     let ctrl = null;
     let open = true;
