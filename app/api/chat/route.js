@@ -53,6 +53,15 @@ HOW TO ANSWER (clear answers everyone understands)
 - If something is uncertain, say so honestly in one sentence. Never invent facts, numbers, sources or links.
 - Be friendly and respectful, like a smart friend. No unnecessary apologies or filler.
 
+MATHS (solve clearly and simply — a student must understand every step)
+- Keep it SIMPLE and TIDY, never a wall of symbols. Short lines, one step per line, everyday words.
+- If a worksheet or photo has MANY problems that use the same formulas, FIRST write a tiny "یاساکان / القوانين / Formulas" box: the 1–4 formulas needed, each on its own line. Then solve each problem using them — do not repeat the theory every time.
+- For EACH problem: show only the needed steps (usually 1–3 lines), then put the final answer on its own line clearly marked in **bold** (e.g. "**d = 4**", "**S₂₀ = 670**"). Nothing extra after the answer.
+- Number every answer with the problem's own number. Keep the SAME order as the questions.
+- Write formulas and working left-to-right and keep the numbers readable (a₁, aₙ, Sₙ, n÷2, ×, −). Use plain ÷ and × and simple fractions like "n÷2", not heavy notation.
+- Always double-check each result by plugging it back, but do NOT show the check unless it is the question (e.g. "prove it is arithmetic").
+- Do not add tips, history or warnings. Just the clean solution.
+
 CODE
 - You are an expert programmer in every major language and framework.
 - Write complete, working, clean code with sensible names and short comments where they help. Never leave "..." or TODO placeholders unless asked.
@@ -627,7 +636,9 @@ VOICE CONVERSATION MODE (most important rules)
     // Short everyday questions think the least, so the first words appear fast.
     // everyday questions think the least (fast first words); maths, code and long questions think a bit more
     const hard = /[=+*/^√∑]|\d+\s*[x×]\s*\d+|```|function|code|کۆد|بیرکاری|حیساب|معادلة|رياضيات|calculate|prove|equation/i.test(lastText) || lastText.length > 1200;
-    const startLevel = planOnly ? 2 : kind === "chat" && !hard ? 2 : START[kind];
+    // a photo often carries a problem to read and solve, and maths needs real (but light) reasoning to be correct
+    const hasPhoto = attachments.some((x) => /^image\//.test(x.mimeType));
+    const startLevel = planOnly ? 2 : kind === "chat" ? (hard || hasPhoto ? 1 : 2) : START[kind];
     const officeGate = kind === "chat" && !tutor && !body.voiceNote && serverEnv("OFFICE") !== "0" && (OFFICE_WORDS.test(lastText) || lastFile(messages).recent);
     let ctrl = null;
     let open = true;
@@ -912,7 +923,9 @@ VOICE CONVERSATION MODE (most important rules)
           }
           // Kurdish answers get a quick proofreading pass (the AI's Kurdish grammar is sometimes a little off):
           // the answer is already on screen, and a few seconds later the corrected text replaces it.
-          if (lang === "ckb" && kind === "chat" && !crowded && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
+          // skip proofreading a maths-heavy answer: the editor could change numbers or break the working
+          const mathy = (full.match(/[=×÷]|[₀-₉]|\$/g) || []).length > 8;
+          if (lang === "ckb" && kind === "chat" && !crowded && !mathy && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
             // code / cards (``` blocks) are kept aside untouched; only the Kurdish text around them is checked
             const blocks = [];
             const textOnly = full.replace(/```[\s\S]*?```/g, (b) => `⟦${blocks.push(b) - 1}⟧`);
