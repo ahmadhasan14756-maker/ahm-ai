@@ -2628,10 +2628,15 @@ function Main({ session }) {
   }
 
   async function send(preset, baseMessages, extra = [], forced, opts = {}) {
-    // still building / answering: keep the message and send it by itself as soon as the work is done
-    if ((busy || jobWait) && !opts.auto && !opts.cont) {
+    // still building / answering: keep the message and send it by itself as soon as the work is done.
+    // BUT a deliberate "Build it" tap (fromPlan) must run now unless something is actively streaming — a leftover
+    // "finishing on the server" state must never swallow the build button (that felt like "nothing happened").
+    const buildTap = opts.fromPlan && !busy; // tapping "Build it" while nothing is actively streaming must run now
+    if ((busy || jobWait) && !opts.auto && !opts.cont && !buildTap) {
       const q = (preset ?? input).trim();
-      if (q) { queueRef.current.push({ chat: active.id, text: q }); setQueued([...queueRef.current]); setInput(""); }
+      // don't queue the very same request twice (impatient double taps → one build, not two)
+      if (q && !queueRef.current.some((x) => x.chat === active.id && x.text === q)) { queueRef.current.push({ chat: active.id, text: q }); setQueued([...queueRef.current]); }
+      setInput("");
       return;
     }
     const typed = (preset ?? input).trim();
