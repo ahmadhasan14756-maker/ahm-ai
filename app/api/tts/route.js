@@ -43,13 +43,19 @@ function smoothPcm(pcm, rate = 24000) {
   if (!pcm || pcm.length < 4) return pcm;
   let n = Math.floor(pcm.length / 2); // 16-bit samples
   const win = Math.max(1, Math.floor(rate * 0.02)); // 20 ms windows
-  const THRESH = 350;      // RMS below this is silence / low static
-  const NEED = 4;          // need 4 windows (~80 ms) in a row of real sound = speech, not a click/burst
+  const total = Math.floor(pcm.length / 2);
   const rms = (start) => {
     let sum = 0, c = 0;
-    for (let i = 0; i < win && start + i < n; i++) { const v = pcm.readInt16LE((start + i) * 2); sum += v * v; c++; }
+    for (let i = 0; i < win && start + i < total; i++) { const v = pcm.readInt16LE((start + i) * 2); sum += v * v; c++; }
     return c ? Math.sqrt(sum / c) : 0;
   };
+  // Find the loudest window (the speech level) so the threshold adapts to each clip. Trailing radio-style static /
+  // hiss sits well below the speech level, so anything under ~18% of the peak (and a small floor) is treated as
+  // noise/silence and cut, even when it is continuous.
+  let peak = 0;
+  for (let start = 0; start < total; start += win) { const r = rms(start); if (r > peak) peak = r; }
+  const THRESH = Math.max(350, peak * 0.18);
+  const NEED = 4;          // need ~80 ms of sound in a row to count as real speech, not a click/burst
   let run = 0, speechEnd = n;
   for (let start = n - win; start >= 0; start -= win) {
     if (rms(start) >= THRESH) {
