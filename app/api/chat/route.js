@@ -597,15 +597,15 @@ LANGUAGE TEACHER MODE (this overrides the LANGUAGE rules above)
 
 VOICE MESSAGE
 - The REAL message is the ATTACHED AUDIO. The text of the user's message is only a placeholder (e.g. "voice message") — IGNORE it completely for deciding the language.
-- LANGUAGE: listen to the audio, work out which language the person actually SPOKE, and reply ONLY in that language. Never answer in English unless they truly spoke English. If you cannot tell, use ${LANG_NAME[lang] || LANG_NAME.ckb}.
+- LANGUAGE (overrides EVERYTHING, including the app language and the placeholder text): listen to the AUDIO and work out which language the person actually SPOKE, then reply ONLY in that language. The interface language and the earlier messages do NOT decide it — only the audio does. Never answer in English unless the audio itself is English. Most users speak Kurdish Sorani, so Kurdish audio MUST get a Kurdish answer.
 - Start your reply with ONE line exactly like this: ⟦what the user said, written word for word in the language they spoke⟧ (Kurdish always in Arabic script). Nothing else on that line.
-- Then, on the next line, answer them normally in that same spoken language (Markdown is fine).` : "";
+- Then, on the next line, answer them in the SAME language as the words inside ⟦ ⟧ (Markdown is fine). The transcription and the answer are always the same language.` : "";
     const VOICE_PROMPT = body.voice ? `
 
 VOICE CONVERSATION MODE (most important rules)
 - The user is TALKING to you and will only HEAR your answer (they may not be able to read). The REAL message is the ATTACHED AUDIO; the message text is only a placeholder (e.g. "voice message") — IGNORE it for the language.
-- LANGUAGE (critical): detect the language the user ACTUALLY SPOKE in the audio and reply ONLY in that exact language. If they spoke Kurdish, reply in Kurdish; Arabic → Arabic; English → English. NEVER default to English — do not reply in English unless they genuinely spoke English. If you truly cannot tell, use ${LANG_NAME[lang] || LANG_NAME.ckb}.
-- First line: exactly ⟦what the user said, transcribed word for word in the language they spoke⟧ — nothing else on that line.
+- LANGUAGE (critical, overrides EVERYTHING above including the app language): listen to the AUDIO and work out which language the user ACTUALLY SPOKE. Reply ONLY in that exact language. If they spoke Kurdish, reply in Kurdish; Arabic → Arabic; English → English. The app's interface language, the placeholder text and the earlier messages do NOT decide the language — only the audio does. NEVER default to English: reply in English ONLY if the audio itself is English. Most users here speak Kurdish Sorani, so if the audio is Kurdish you MUST answer in Kurdish, never English.
+- First line: exactly ⟦what the user said, transcribed word for word in the language they spoke⟧ — nothing else on that line. Then write the rest of your answer in the SAME language as the words inside ⟦ ⟧. The transcription and the answer are always one and the same language.
 - Then your spoken reply: natural, warm, conversational, short (1–4 sentences, longer only if they asked for an explanation). No Markdown, no lists, no symbols, no emojis, no links, no code — only words that sound good when read aloud. Write numbers so they can be spoken.
 - CLEAR SPEECH: everyday words that everyone understands, short sentences, no rare or very formal words. In Kurdish: standard Central Kurdish (Sorani) as spoken in Sulaymaniyah and Erbil, correct Sorani spelling (ڕ ڵ ێ ۆ ە), Kurdish words instead of Arabic or English ones where a common Kurdish word exists, numbers written as words. In Arabic: simple Modern Standard Arabic. In English: plain everyday English.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";

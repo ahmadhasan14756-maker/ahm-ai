@@ -21,6 +21,10 @@ const MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1
 // Remove things that should not be spoken: code, links, markdown symbols.
 function speakable(text) {
   return String(text || "")
+    .replace(/⟦[^⟧]*⟧/g, " ")
+    .replace(/[⟦⟧]/g, " ")
+    .replace(/\u0000RESET\n?/g, " ")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
@@ -28,8 +32,11 @@ function speakable(text) {
     .replace(/^#{1,6}\s*/gm, "")
     .replace(/[*_~>|#]+/g, "")
     .replace(/^\s*[-•]\s+/gm, "")
+    .replace(/[⁦-⁩‎‏​-‍﻿]/g, "")
+    .replace(/[←-➿⬀-⯿]/g, "")
     .replace(/\u0000ERR:\w+/g, "")
     .replace(/\p{Extended_Pictographic}\uFE0F?/gu, "") // emojis are not read out
+    .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{2,}/g, "\n")
     .trim()
     .slice(0, 1500);
