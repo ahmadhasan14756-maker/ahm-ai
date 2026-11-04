@@ -35,22 +35,31 @@ function speakable(text) {
     .slice(0, 1500);
 }
 
-// The TTS sometimes leaves a trailing breath, click or burst of static after the speech ends (heard as "noise at the
-// end"), and occasionally a click at the very start. We find where the real speech ends using short-window energy,
-// cut everything after it (plus a small natural tail), and apply a fade-in and fade-out so nothing clicks.
+// The TTS often appends a trailing breath, click or burst of static AFTER the speech ends (heard as "noise at the
+// end"). That burst can be loud, so a simple energy test mistakes it for speech. We scan short windows from the end
+// and only treat SUSTAINED energy (several windows in a row) as real speech — a short loud burst is skipped — then
+// cut everything after the real speech (keeping a small natural tail) and fade the start and end so nothing clicks.
 function smoothPcm(pcm, rate = 24000) {
   if (!pcm || pcm.length < 4) return pcm;
   let n = Math.floor(pcm.length / 2); // 16-bit samples
   const win = Math.max(1, Math.floor(rate * 0.02)); // 20 ms windows
-  const THRESH = 350; // RMS below this is silence / low static, not speech
-  // Walk windows from the end and find the last one that is clearly speech.
-  let lastSpeechEnd = n;
+  const THRESH = 350;      // RMS below this is silence / low static
+  const NEED = 4;          // need 4 windows (~80 ms) in a row of real sound = speech, not a click/burst
+  const rms = (start) => {
+    let sum = 0, c = 0;
+    for (let i = 0; i < win && start + i < n; i++) { const v = pcm.readInt16LE((start + i) * 2); sum += v * v; c++; }
+    return c ? Math.sqrt(sum / c) : 0;
+  };
+  let run = 0, speechEnd = n;
   for (let start = n - win; start >= 0; start -= win) {
-    let sum = 0;
-    for (let i = 0; i < win; i++) { const v = pcm.readInt16LE((start + i) * 2); sum += v * v; }
-    if (Math.sqrt(sum / win) >= THRESH) { lastSpeechEnd = Math.min(n, start + win + Math.floor(rate * 0.06)); break; } // keep a 60 ms tail
+    if (rms(start) >= THRESH) {
+      run++;
+      if (run >= NEED) { speechEnd = Math.min(n, start + NEED * win + Math.floor(rate * 0.06)); break; } // +60 ms tail
+    } else {
+      run = 0; // a gap resets: a short loud burst near the end is not counted as the speech end
+    }
   }
-  if (lastSpeechEnd < n) n = lastSpeechEnd;
+  if (speechEnd < n) n = speechEnd;
   const out = Buffer.from(pcm.subarray(0, n * 2));
   const fadeIn = Math.min(Math.floor(rate * 0.01), n);   // ~10 ms
   const fadeOut = Math.min(Math.floor(rate * 0.04), n);  // ~40 ms
