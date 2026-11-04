@@ -606,13 +606,22 @@ LANGUAGE TEACHER MODE (this overrides the LANGUAGE rules above)
 - If the learner's last message has mistakes, add a short section starting with "✏️" in their own language: show the corrected sentence and explain the mistake in one line. If there were no mistakes, praise them briefly.
 - For beginners (A0/A1) add the meaning in their own language in brackets after difficult sentences.
 - If they ask for help or a translation, give it, then continue the conversation.` : "";
-    const NOTE_PROMPT = body.voiceNote && !body.voice ? `
+    // A voice message inside a build / construction section is a SPOKEN instruction, not a chat: carry it out
+    // (build or change the project) and never add a ⟦…⟧ line, which would break the file output. Everywhere else a
+    // voice message is conversational and starts with the ⟦transcription⟧ line.
+    const NOTE_PROMPT = body.voiceNote && !body.voice ? (
+      (build || construct) ? `
+
+VOICE MESSAGE (spoken instruction)
+- The REAL request is the ATTACHED AUDIO. The message text is only a placeholder (e.g. "voice message") — IGNORE it; the audio is what to do.
+- Understand what the user asked for in the audio and carry it out exactly as if they had typed it (build or change the project accordingly). Do NOT write a ⟦…⟧ transcription line and do NOT reply conversationally instead of doing the work.
+- LANGUAGE: any words you write to the user (explanations, labels, UI text they asked for) must be in the language they SPOKE in the audio — Kurdish audio → Kurdish. The interface language does not decide it; the audio does.` : `
 
 VOICE MESSAGE
 - The REAL message is the ATTACHED AUDIO. The text of the user's message is only a placeholder (e.g. "voice message") — IGNORE it completely for deciding the language.
 - LANGUAGE (overrides EVERYTHING, including the app language and the placeholder text): listen to the AUDIO and work out which language the person actually SPOKE, then reply ONLY in that language. The interface language and the earlier messages do NOT decide it — only the audio does. Never answer in English unless the audio itself is English. Most users speak Kurdish Sorani, so Kurdish audio MUST get a Kurdish answer.
 - Start your reply with ONE line exactly like this: ⟦what the user said, written word for word in the language they spoke⟧ (Kurdish always in Arabic script). Nothing else on that line.
-- Then, on the next line, answer them in the SAME language as the words inside ⟦ ⟧ (Markdown is fine). The transcription and the answer are always the same language.` : "";
+- Then, on the next line, answer them in the SAME language as the words inside ⟦ ⟧ (Markdown is fine). The transcription and the answer are always the same language.`) : "";
     const VOICE_PROMPT = body.voice ? `
 
 VOICE CONVERSATION MODE (most important rules)
