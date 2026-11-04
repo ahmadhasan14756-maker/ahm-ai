@@ -371,6 +371,11 @@ const MAX_FILE_CHARS = 1_500_000;
 const MAX_PROJECT_CHARS = 600_000;
 const MAX_ATTACH_CHARS = 4_200_000; // Vercel accepts ~4.5 MB per request
 const FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+// A "this year / latest / who won / now" question needs fresh web facts. \b word boundaries only work for Latin
+// text in JS, so Kurdish/Arabic terms are matched WITHOUT \b. Used both to pick a stronger model and to turn search on.
+const TIME_RE_LATIN = /\b(20(2[5-9]|3\d)|latest|newest|current(ly)?|right now|this (year|week|month|season)|today|yesterday|who won|winner|most recent|breaking|just announced)\b/i;
+const TIME_RE_OTHER = /(نوێترین|ئەمساڵ|ئەمڕۆ|ئێستا|دوایین|کێ ?(بردی|بردیەوە|براوە)|ئەم ?(ساڵ|مانگ|هەفتە)|تازەترین|أحدث|الآن|هذا ?(العام|الأسبوع|الشهر)|من فاز|الفائز|اليوم|براوەی)/;
+const isTimeSensitive = (s) => TIME_RE_LATIN.test(s) || TIME_RE_OTHER.test(s);
 const ATTACH_TYPES = /^(audio\/(webm|mp4|mpeg|ogg|wav|aac|x-m4a|m4a)|image\/(jpeg|png|webp)|application\/pdf)$/; // voice messages, photos and PDFs
 
 // Small spelling slips the AI sometimes makes in Kurdish: Persian digits (۲۵ → ٢٥), Arabic vowel marks on Kurdish words
@@ -579,9 +584,17 @@ export async function POST(req) {
     // Only fixing an uploaded file uses the slow big model. Building uses the fast model (it writes code well and
     // starts in a few seconds instead of a long wait).
     const deep = !!file;
+    const lastText = String(messages[messages.length - 1].content || "");
+    // Voice (audio language detection + clear answers) and "latest / who won / this year" questions need a
+    // stronger model than the light free one: the light model answers English to Kurdish audio and cannot use
+    // Google search well. Voice volume is low, so this costs little. Override in Vercel with GEMINI_MODEL_VOICE.
+    const voiceKind = !!(body.voice || body.voiceNote);
+    const strongFree = voiceKind || (!build && !file && !construct && isTimeSensitive(lastText));
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
-      : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
+      : strongFree
+        ? [serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
+        : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
     const models = [...new Set([...preferred, ...(proUser ? FALLBACK_MODELS : [...FALLBACK_MODELS].reverse())].filter(Boolean))];
     const TUTOR_LANG = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
     const tutor = body.tutor && TUTOR_LANG[body.tutor.target] ? body.tutor : null;
@@ -649,7 +662,6 @@ VOICE CONVERSATION MODE (most important rules)
     // The answer keeps being made even if the phone disconnects (user left the app);
     // the full text is saved as a "job" so the app can show it when the user comes back.
     const jobId = validJobId(body.jobId);
-    const lastText = String(messages[messages.length - 1].content || "");
     const kind = body.voice ? "voice" : build && !planOnly ? "build" : file ? "file" : construct ? "construct" : "chat";
     // Short everyday questions think the least, so the first words appear fast.
     // everyday questions think the least (fast first words); maths, code and long questions think a bit more
@@ -660,11 +672,7 @@ VOICE CONVERSATION MODE (most important rules)
     const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : 2) : START[kind];
     // A current-events / "this year / latest / who won / now" question needs fresh facts, so search is turned on for it
     // by itself (training data is out of date). If grounding is not allowed on the key it degrades gracefully.
-    // \b word boundaries only work for Latin text in JS, so Kurdish/Arabic terms are matched WITHOUT \b.
-    const timeSensitive = kind === "chat" && !tutor && (
-      /\b(20(2[5-9]|3\d)|latest|newest|current(ly)?|right now|this (year|week|month|season)|today|yesterday|who won|winner|most recent|breaking|just announced)\b/i.test(lastText) ||
-      /(نوێترین|ئەمساڵ|ئەمڕۆ|ئێستا|دوایین|کێ ?(بردی|بردیەوە|براوە)|ئەم ?(ساڵ|مانگ|هەفتە)|تازەترین|أحدث|الآن|هذا ?(العام|الأسبوع|الشهر)|من فاز|الفائز|اليوم|براوەی)/.test(lastText)
-    );
+    const timeSensitive = (kind === "chat" || kind === "voice") && !tutor && isTimeSensitive(lastText);
     const useSearch = (!build && (usage.pro || timeSensitive) && serverEnv("ENABLE_SEARCH") !== "0") || (planOnly && serverEnv("PLAN_SEARCH") === "1");
     const officeGate = kind === "chat" && !tutor && !body.voiceNote && serverEnv("OFFICE") !== "0" && (OFFICE_WORDS.test(lastText) || lastFile(messages).recent);
     let ctrl = null;

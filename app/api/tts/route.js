@@ -2,7 +2,6 @@
 import { getUser, getProfile, usageOf, getSettings } from "../../../lib/server";
 import { voiceLimitMin, voiceUsedSec, addVoiceSec } from "../../../lib/voice";
 import { gemini, keyCount } from "../../../lib/gemini";
-import { detectLang } from "../../../lib/i18n";
 
 import { allow, tooMany } from "../../../lib/ratelimit";
 export const runtime = "nodejs";
@@ -10,12 +9,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const preferredRegion = "fra1";
 
-// How the voice should sound (a direction for the voice, not read out): clear, natural, a calm pace.
-const STYLE = {
-  ckb: "Say in a warm, clear Central Kurdish (Sorani) voice, Sulaymaniyah accent, at a calm pace, every word clearly pronounced:",
-  ar: "Say in a warm, clear Modern Standard Arabic voice, at a calm pace, every word clearly pronounced:",
-  en: "Say in a warm, clear, natural English voice, at a calm pace:",
-};
 const MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"];
 
 // Remove things that should not be spoken: code, links, markdown symbols.
@@ -40,6 +33,26 @@ function speakable(text) {
     .replace(/\n{2,}/g, "\n")
     .trim()
     .slice(0, 1500);
+}
+
+// The TTS sometimes leaves a short click or burst of static at the very end (and sometimes the start) of the raw
+// audio. A short fade-in and fade-out on the 16-bit PCM smooths those away, so there is no odd noise at the end.
+function smoothPcm(pcm, rate = 24000) {
+  if (!pcm || pcm.length < 4) return pcm;
+  const out = Buffer.from(pcm);
+  const n = Math.floor(out.length / 2); // 16-bit samples
+  const fadeIn = Math.min(Math.floor(rate * 0.01), n);   // ~10 ms
+  const fadeOut = Math.min(Math.floor(rate * 0.12), n);  // ~120 ms
+  for (let i = 0; i < fadeIn; i++) {
+    const g = i / fadeIn;
+    out.writeInt16LE(Math.round(out.readInt16LE(i * 2) * g), i * 2);
+  }
+  for (let i = 0; i < fadeOut; i++) {
+    const g = i / fadeOut;
+    const idx = (n - 1 - i) * 2;
+    out.writeInt16LE(Math.round(out.readInt16LE(idx) * g), idx);
+  }
+  return out;
 }
 
 // Gemini returns raw 16-bit PCM; browsers need a WAV header in front of it.
@@ -74,7 +87,9 @@ export async function POST(req) {
     try {
       const r = await gemini().models.generateContent({
         model,
-        contents: [{ parts: [{ text: (STYLE[detectLang(text) || body?.lang] || STYLE.en) + " " + text }] }],
+        // NOTE: never prepend an English style instruction to the text — the TTS sometimes reads it out loud, so the
+        // user hears English before the real answer. The voice (voiceName below) already sounds warm and natural.
+        contents: [{ parts: [{ text }] }],
         config: {
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
@@ -83,7 +98,7 @@ export async function POST(req) {
       const part = r.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
       if (!part) throw new Error("no audio");
       const rate = Number(/rate=(\d+)/.exec(part.inlineData.mimeType || "")?.[1]) || 24000;
-      const pcm = Buffer.from(part.inlineData.data, "base64");
+      const pcm = smoothPcm(Buffer.from(part.inlineData.data, "base64"), rate);
       const audio = wav(pcm, rate);
       await addVoiceSec(user.id, pcm.length / (rate * 2)); // count the seconds spoken
       return new Response(audio, { headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" } });
