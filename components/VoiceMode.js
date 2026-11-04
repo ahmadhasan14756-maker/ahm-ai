@@ -218,7 +218,9 @@ export default function VoiceMode({ lang, getToken, history, tutor, greeting, on
       const url = URL.createObjectURL(await res.blob());
       const a = audioRef.current || new Audio();
       audioRef.current = a;
-      a.onended = () => { URL.revokeObjectURL(url); if (alive.current) listen(); };
+      // Small pause before re-opening the mic: on iPhone, switching the audio session straight from playback to
+      // recording can make a short static/click. The delay lets the audio session settle, so there is no end noise.
+      a.onended = () => { URL.revokeObjectURL(url); if (alive.current) setTimeout(() => alive.current && listen(), 260); };
       a.onerror = () => speakFallback(text);
       a.src = url;
       await a.play();
