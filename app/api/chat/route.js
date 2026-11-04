@@ -79,6 +79,10 @@ VOICE
 - If the user sends a voice message (audio), listen carefully, understand it in whatever language it is spoken (Kurdish Sorani, Arabic or English, including local dialects like Badini, Hawleri, Slemani), and reply in that same language.
 - When you write down what the user said, write it as clean, correctly spelled text that keeps their exact meaning (fix false starts like "um" and repeated words).
 
+CURRENT INFORMATION (recent facts, "this year", "latest", "who won")
+- Your own training knowledge may be out of date. When the question is about the latest/current state of something (this year's winner, the current office-holder, today's price, a recent event), and SEARCH RESULTS are provided to you, answer from those results and give the up-to-date answer — never state an older year's answer as if it were this year's.
+- If no search results are given and you are not sure of the latest, say briefly that you may not have the newest information, give the most recent you are confident about with its year, and do not guess a current winner or holder. Never present old data (e.g. last year's winner) as the current answer.
+
 PREDICTIONS
 - You cannot see the future. For predictions (sports, prices, exchange rates, markets, elections) give a careful, reasoned analysis: the main factors, the most likely outcome, rough probabilities, and clearly say it can be wrong. Never present a guess as certain. Do not give personal financial or betting advice (general money-saving and budgeting tips are fine).
 - You have no live fixtures, scores, injuries or news unless search results are given to you. If the user didn't name the match (opponent, date), say so in one short line and ask, or predict for the opponent they most likely mean only if it is clearly known; never invent a fixture, injury or recent result.
@@ -612,7 +616,7 @@ VOICE CONVERSATION MODE (most important rules)
     };
     // Web search costs money on Google's side: switch it on in Vercel with ENABLE_SEARCH=1 (Pro users only).
     // The plan step looks things up on Google (free daily amount on the free AI key); it switches off by itself if not allowed.
-    const useSearch = (!build && usage.pro && serverEnv("ENABLE_SEARCH") === "1") || (planOnly && serverEnv("PLAN_SEARCH") === "1");
+    // (timeSensitive / useSearch are computed below, once `kind` and `lastText` exist.)
 
     // A new project is built one file after another; "cont" = a signed note to continue the same build (not counted again).
     const contTok = build && !planOnly && !file ? readStep(body.cont, user.id) : null;
@@ -654,6 +658,14 @@ VOICE CONVERSATION MODE (most important rules)
     // proofs, code) gets a small bump — the clear step-by-step format comes from the prompt, not from long thinking.
     const heavyMath = /\b(prove|سەلماند|أثبت|معادلة|هاوکێشە|integral|derivative|تەفاضل|تکامل)\b/i.test(lastText) || /```/.test(lastText);
     const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : 2) : START[kind];
+    // A current-events / "this year / latest / who won / now" question needs fresh facts, so search is turned on for it
+    // by itself (training data is out of date). If grounding is not allowed on the key it degrades gracefully.
+    // \b word boundaries only work for Latin text in JS, so Kurdish/Arabic terms are matched WITHOUT \b.
+    const timeSensitive = kind === "chat" && !tutor && (
+      /\b(20(2[5-9]|3\d)|latest|newest|current(ly)?|right now|this (year|week|month|season)|today|yesterday|who won|winner|most recent|breaking|just announced)\b/i.test(lastText) ||
+      /(نوێترین|ئەمساڵ|ئەمڕۆ|ئێستا|دوایین|کێ ?(بردی|بردیەوە|براوە)|ئەم ?(ساڵ|مانگ|هەفتە)|تازەترین|أحدث|الآن|هذا ?(العام|الأسبوع|الشهر)|من فاز|الفائز|اليوم|براوەی)/.test(lastText)
+    );
+    const useSearch = (!build && (usage.pro || timeSensitive) && serverEnv("ENABLE_SEARCH") !== "0") || (planOnly && serverEnv("PLAN_SEARCH") === "1");
     const officeGate = kind === "chat" && !tutor && !body.voiceNote && serverEnv("OFFICE") !== "0" && (OFFICE_WORDS.test(lastText) || lastFile(messages).recent);
     let ctrl = null;
     let open = true;

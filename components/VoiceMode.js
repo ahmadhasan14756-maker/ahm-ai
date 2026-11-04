@@ -24,6 +24,21 @@ const TX = {
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 const SPEECH_LANG = { ckb: "ar", ar: "ar-SA", en: "en-US" };
 const HEARD = /^\s*⟦([^⟧]*)⟧\s*/;
+// Clean the reply before it is spoken aloud: no leftover markers, emojis, directional marks or symbols that the
+// voice would turn into odd noises at the end.
+function forSpeech(t) {
+  return String(t || "")
+    .replace(/\u0000RESET\n?/g, "")
+    .replace(/[\u0000]/g, "")
+    .replace(/⟦[^⟧]*⟧/g, "")                  // transcription markers
+    .replace(/[\u2066-\u2069\u200e\u200f]/g, "") // directional isolates/marks
+    .replace(/[*_`#>~|]/g, "")                    // markdown signs
+    .replace(/\p{Extended_Pictographic}/gu, "")   // emojis
+    .replace(/[\u2600-\u27BF\uFE0F]/g, "")       // misc symbols / variation selectors
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
 
 export default function VoiceMode({ lang, getToken, history, tutor, greeting, onTurn, onClose, onLimit }) {
   const tl = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
@@ -140,7 +155,7 @@ export default function VoiceMode({ lang, getToken, history, tutor, greeting, on
       lang,
       voice: true,
       tutor: tutor || undefined,
-      messages: [...past, { role: "user", content: "(voice message)" }],
+      messages: [...past, { role: "user", content: "🎤" }],
       images: [{ mimeType: (blob.type || "audio/webm").split(";")[0], data }],
     });
     let acc = "";
@@ -170,7 +185,7 @@ export default function VoiceMode({ lang, getToken, history, tutor, greeting, on
     setHeard(you);
     setReply(answer);
     turnRef.current?.(you, answer);
-    speak(answer);
+    speak(forSpeech(answer));
   }
 
   function speakFallback(text) {
