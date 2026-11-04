@@ -35,14 +35,25 @@ function speakable(text) {
     .slice(0, 1500);
 }
 
-// The TTS sometimes leaves a short click or burst of static at the very end (and sometimes the start) of the raw
-// audio. A short fade-in and fade-out on the 16-bit PCM smooths those away, so there is no odd noise at the end.
+// The TTS sometimes leaves a trailing breath, click or burst of static after the speech ends (heard as "noise at the
+// end"), and occasionally a click at the very start. We find where the real speech ends using short-window energy,
+// cut everything after it (plus a small natural tail), and apply a fade-in and fade-out so nothing clicks.
 function smoothPcm(pcm, rate = 24000) {
   if (!pcm || pcm.length < 4) return pcm;
-  const out = Buffer.from(pcm);
-  const n = Math.floor(out.length / 2); // 16-bit samples
+  let n = Math.floor(pcm.length / 2); // 16-bit samples
+  const win = Math.max(1, Math.floor(rate * 0.02)); // 20 ms windows
+  const THRESH = 350; // RMS below this is silence / low static, not speech
+  // Walk windows from the end and find the last one that is clearly speech.
+  let lastSpeechEnd = n;
+  for (let start = n - win; start >= 0; start -= win) {
+    let sum = 0;
+    for (let i = 0; i < win; i++) { const v = pcm.readInt16LE((start + i) * 2); sum += v * v; }
+    if (Math.sqrt(sum / win) >= THRESH) { lastSpeechEnd = Math.min(n, start + win + Math.floor(rate * 0.06)); break; } // keep a 60 ms tail
+  }
+  if (lastSpeechEnd < n) n = lastSpeechEnd;
+  const out = Buffer.from(pcm.subarray(0, n * 2));
   const fadeIn = Math.min(Math.floor(rate * 0.01), n);   // ~10 ms
-  const fadeOut = Math.min(Math.floor(rate * 0.12), n);  // ~120 ms
+  const fadeOut = Math.min(Math.floor(rate * 0.04), n);  // ~40 ms
   for (let i = 0; i < fadeIn; i++) {
     const g = i / fadeIn;
     out.writeInt16LE(Math.round(out.readInt16LE(i * 2) * g), i * 2);
