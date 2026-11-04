@@ -592,20 +592,33 @@ footer > * { max-width: var(--col); margin-inline: auto; }
 .voice-top { width: 100%; max-width: 640px; display: flex; align-items: center; justify-content: space-between; }
 .voice-title { font-family: var(--brand); font-size: 13px; letter-spacing: 1.5px; color: var(--silver); }
 .voice-text-toggle { border: 1px solid var(--line); background: none; color: var(--text-2); border-radius: 999px; min-height: 36px; padding: 0 14px; font-size: 13px; }
-.voice-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
-.orb { --lv: 0; position: relative; width: 190px; height: 190px; border: 0; padding: 0; border-radius: 50%; background: none; display: grid; place-items: center; }
-.orb-core { width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f6d48a, var(--gold) 45%, #8a5f1a 100%);
-  box-shadow: 0 0 60px rgb(var(--gold-rgb) / .35); transform: scale(calc(1 + var(--lv) * .22)); transition: transform .08s linear; }
-.orb-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgb(var(--gold-rgb) / .35); }
-.orb.start .orb-core, .orb.idle .orb-core, .orb.error .orb-core { filter: saturate(.5) brightness(.8); }
+.voice-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; position: relative; }
+/* soft ambient glow behind the orb, brighter while it listens/speaks */
+.voice-center::before { content: ""; position: absolute; width: 360px; height: 360px; border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--gold-rgb) / .18) 0%, transparent 65%); filter: blur(10px);
+  animation: breathe 4s ease-in-out infinite; pointer-events: none; }
+.orb { --lv: 0; position: relative; width: 200px; height: 200px; border: 0; padding: 0; border-radius: 50%; background: none; display: grid; place-items: center; cursor: pointer; }
+.orb-core { width: 148px; height: 148px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fbe6b0, var(--gold) 48%, #7a5214 100%);
+  box-shadow: 0 0 50px rgb(var(--gold-rgb) / .45), inset 0 -10px 26px rgb(0 0 0 / .25), inset 0 8px 20px rgb(255 255 255 / .25);
+  transform: scale(calc(1 + var(--lv) * .22)); transition: transform .08s linear; }
+/* two concentric rings for a richer, more alive look */
+.orb-ring, .orb::before, .orb::after { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgb(var(--gold-rgb) / .30); content: ""; }
+.orb::after { inset: -16px; border-color: rgb(var(--gold-rgb) / .16); }
+.orb-ring { inset: 6px; border-color: rgb(var(--gold-rgb) / .22); }
+.orb.start .orb-core, .orb.idle .orb-core, .orb.error .orb-core { filter: saturate(.55) brightness(.82); }
+.orb.start .orb-core, .orb.idle .orb-core { animation: breathe 3.4s ease-in-out infinite; }
 .orb.thinking .orb-core { animation: think 1.2s ease-in-out infinite; }
 .orb.thinking .orb-ring { border-top-color: var(--gold-hi); animation: spin 1s linear infinite; }
 .orb.speaking .orb-core { animation: talk .9s ease-in-out infinite; }
-.orb.speaking .orb-ring { animation: ripple 1.6s ease-out infinite; }
-.orb.listening .orb-ring { border-color: rgba(246, 212, 138, calc(.25 + var(--lv))); }
+.orb.speaking::before { animation: ripple 1.6s ease-out infinite; }
+.orb.speaking::after { animation: ripple 1.6s ease-out .4s infinite; }
+.orb.listening::before { border-color: rgba(246, 212, 138, calc(.3 + var(--lv) * .6)); transform: scale(calc(1 + var(--lv) * .12)); transition: transform .08s linear; }
+.orb.listening::after { border-color: rgba(246, 212, 138, calc(.18 + var(--lv) * .4)); }
+@keyframes breathe { 50% { transform: scale(.96); opacity: .92; } }
 @keyframes think { 50% { transform: scale(.9); opacity: .8; } }
 @keyframes talk { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.08); } 60% { transform: scale(.97); } }
-@keyframes ripple { from { transform: scale(.85); opacity: .9; } to { transform: scale(1.35); opacity: 0; } }
+@keyframes ripple { from { transform: scale(.82); opacity: .85; } to { transform: scale(1.5); opacity: 0; } }
 .voice-status { margin: 0; color: var(--text-2); text-align: center; max-width: 320px; font-size: 16px; }
 .voice-status.err { color: var(--danger); }
 .voice-start { width: auto; padding: 0 34px; }
