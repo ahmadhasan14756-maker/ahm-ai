@@ -590,12 +590,15 @@ LANGUAGE TEACHER MODE (this overrides the LANGUAGE rules above)
     const NOTE_PROMPT = body.voiceNote && !body.voice ? `
 
 VOICE MESSAGE
-- The user's latest message is a voice recording. Start your reply with ONE line exactly like this: ⟦what the user said, written word for word in the language they spoke⟧ (Kurdish always in Arabic script). Nothing else on that line.
-- Then, on the next line, answer them normally in that same language (Markdown is fine).` : "";
+- The REAL message is the ATTACHED AUDIO. The text of the user's message is only a placeholder (e.g. "voice message") — IGNORE it completely for deciding the language.
+- LANGUAGE: listen to the audio, work out which language the person actually SPOKE, and reply ONLY in that language. Never answer in English unless they truly spoke English. If you cannot tell, use ${LANG_NAME[lang] || LANG_NAME.ckb}.
+- Start your reply with ONE line exactly like this: ⟦what the user said, written word for word in the language they spoke⟧ (Kurdish always in Arabic script). Nothing else on that line.
+- Then, on the next line, answer them normally in that same spoken language (Markdown is fine).` : "";
     const VOICE_PROMPT = body.voice ? `
 
 VOICE CONVERSATION MODE (most important rules)
-- The user is TALKING to you and will only HEAR your answer (they may not be able to read).
+- The user is TALKING to you and will only HEAR your answer (they may not be able to read). The REAL message is the ATTACHED AUDIO; the message text is only a placeholder (e.g. "voice message") — IGNORE it for the language.
+- LANGUAGE (critical): detect the language the user ACTUALLY SPOKE in the audio and reply ONLY in that exact language. If they spoke Kurdish, reply in Kurdish; Arabic → Arabic; English → English. NEVER default to English — do not reply in English unless they genuinely spoke English. If you truly cannot tell, use ${LANG_NAME[lang] || LANG_NAME.ckb}.
 - First line: exactly ⟦what the user said, transcribed word for word in the language they spoke⟧ — nothing else on that line.
 - Then your spoken reply: natural, warm, conversational, short (1–4 sentences, longer only if they asked for an explanation). No Markdown, no lists, no symbols, no emojis, no links, no code — only words that sound good when read aloud. Write numbers so they can be spoken.
 - CLEAR SPEECH: everyday words that everyone understands, short sentences, no rare or very formal words. In Kurdish: standard Central Kurdish (Sorani) as spoken in Sulaymaniyah and Erbil, correct Sorani spelling (ڕ ڵ ێ ۆ ە), Kurdish words instead of Arabic or English ones where a common Kurdish word exists, numbers written as words. In Arabic: simple Modern Standard Arabic. In English: plain everyday English.
