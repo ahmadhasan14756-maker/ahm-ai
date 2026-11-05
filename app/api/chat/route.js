@@ -614,9 +614,17 @@ export async function POST(req) {
       try {
         const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" });
         const yr = new Date().toLocaleDateString("en-GB", { year: "numeric", timeZone: "Asia/Baghdad" });
-        // "this year" questions often rank an older year's famous result first on Google, so pin the query to the
-        // current year unless the user already named one — this returns the actual current result, not a 2024 page.
-        const query = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
+        // A Kurdish/Arabic question makes Google return weak or old pages, so first turn it into a good ENGLISH web
+        // query (with the current year) — this is what makes "latest iPhone" return iPhone 18, not an old model.
+        let query = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
+        try {
+          const q = await jsonCall(
+            "You turn a user's question into the single best short English web-search query to find the most CURRENT answer. Keep names/brands. Add the current year for 'this year / latest / now' questions.",
+            [{ text: `Question (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"q":"<english search query, 4-9 words>"}` }],
+            { maxTokens: 120, think: "minimal", timeoutMs: 5000 },
+          );
+          if (q?.q && typeof q.q === "string" && q.q.trim().length > 2) query = q.q.trim().slice(0, 200);
+        } catch { /* keep the fallback query */ }
         searchBlockText = searchBlock(await webSearch(query, { max: 6, timeoutMs: 7000 }), today);
       } catch { searchBlockText = ""; }
       // Put the live results INTO the user's turn (the model trusts the user turn far more than the system prompt),
