@@ -1,5 +1,5 @@
 import { serverEnv } from "../../../lib/env";
-import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage } from "../../../lib/server";
+import { getUser, getProfile, usageOf, getSettings, blockedResponse, chargeUsage, isOwner } from "../../../lib/server";
 import { SAFETY_RULES, GEMINI_SAFETY, GEMINI_SAFETY_RELAXED, REFUSAL, isSafetyStop } from "../../../lib/safety";
 import { gemini, keyCount, jsonCall, isKeyError, markBadKey, markBusyKey } from "../../../lib/gemini";
 import { OFFICE_WORDS, officeTurn, lastFile, stripFiles } from "../../../lib/officeServer";
@@ -614,6 +614,7 @@ export async function POST(req) {
     // so every provider (Gemini, Gemma, Groq, OpenRouter) gives a current answer. Fetched only when TAVILY_API_KEY is
     // set and search is allowed; a failure or no key just leaves the block empty (falls back to the old behaviour).
     let searchBlockText = "";
+    let searchDebug = ""; // owner-only: shows what the live search actually returned, to diagnose wrong answers
     if (searchQ && !tutor && hasWebSearch() && serverEnv("ENABLE_SEARCH") !== "0") {
       try {
         const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" });
@@ -629,8 +630,13 @@ export async function POST(req) {
           );
           if (q?.q && typeof q.q === "string" && q.q.trim().length > 2) query = q.q.trim().slice(0, 200);
         } catch { /* keep the fallback query */ }
-        searchBlockText = searchBlock(await webSearch(query, { max: 6, timeoutMs: 7000 }), today);
-      } catch { searchBlockText = ""; }
+        const results = await webSearch(query, { max: 6, timeoutMs: 7000 });
+        searchBlockText = searchBlock(results, today);
+        if (isOwner(user)) {
+          searchDebug = `\n\n———\n🔎 \`${query}\` — ${results.length} ئەنجام\n` +
+            (results.length ? results.slice(0, 4).map((r, i) => `${i + 1}. ${r.title || "?"}: ${String(r.content || "").slice(0, 100)}`).join("\n") : "⚠️ هیچ ئەنجامێک نەگەڕایەوە (گەڕان کار ناکات)");
+        }
+      } catch (e) { searchBlockText = ""; if (isOwner(user)) searchDebug = `\n\n———\n🔎 ⚠️ هەڵەی گەڕان: ${String(e?.message || e).slice(0, 120)}`; }
       // Put the live results INTO the user's turn (the model trusts the user turn far more than the system prompt),
       // right before the question, so it answers from the fresh facts instead of its older training.
       if (searchBlockText) {
@@ -1023,6 +1029,8 @@ VOICE CONVERSATION MODE (most important rules)
             const fixed = ok ? edited.replace(/⟦(\d+)⟧/g, (_, i) => blocks[+i]) : null;
             if (fixed && fixed !== full) { full = fixed; send("\u0000RESET\n" + fixed); }
           }
+          // owner-only: show what the live search returned, so wrong answers can be diagnosed at a glance
+          if (searchDebug) { full += searchDebug; send(searchDebug); }
         }
       } catch (e) {
         console.error(e);
