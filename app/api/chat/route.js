@@ -627,22 +627,20 @@ export async function POST(req) {
         const yr = new Date().toLocaleDateString("en-GB", { year: "numeric", timeZone: "Asia/Baghdad" });
         // A Kurdish/Arabic question makes Google return weak or old pages, so first turn it into a good ENGLISH web
         // query (with the current year) — this is what makes "latest iPhone" return iPhone 18, not an old model.
+        // The owner wants EVERY real question searched on the web, so we always search; we only use the fast call to
+        // turn the message into good English search queries (one per distinct thing asked, up to 10).
         let queries = [];
-        let needWeb = isTimeSensitive(lastText); // fallback decision if the optimizer can't run
+        const needWeb = true;
         try {
-          // ONE call decides two things: (a) does answering need the live web at all (not for general knowledge,
-          // explanations, how-to, opinions, math, coding or creative writing), and (b) if so, the best English search
-          // queries — one per distinct thing asked (up to 10), with the current year for "latest/now" topics.
           const q = await jsonCall(
-            "Decide whether answering this message needs CURRENT information from the live web — today's facts, the latest versions/models, current people, prices, scores, news or events. It does NOT need the web for general knowledge, explanations, how-to, opinions, definitions, math, coding or creative writing. If it needs the web, also give the best English search queries: one per distinct thing asked (up to 10), keep names/brands, and add the current year for 'latest/this year/now' topics.",
-            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"web": true|false, "queries": ["<english query>", ...]} — queries empty when web is false.` }],
+            "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
+            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
             { maxTokens: 600, think: "minimal", timeoutMs: 6000 },
           );
-          if (typeof q?.web === "boolean") needWeb = q.web;
           const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
           if (got.length) queries = got.slice(0, 10);
-        } catch { /* fall back to the keyword decision */ }
-        if (needWeb && !queries.length) queries = [/\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`];
+        } catch { /* fall back to the raw question below */ }
+        if (!queries.length) queries = [/\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`];
         // search every query in parallel, then merge and de-duplicate the results — so a message with many questions
         // gets fresh facts for every one of them, not just the first.
         const lists = needWeb ? await Promise.all(queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 8000 }).catch(() => []))) : [];
