@@ -17,6 +17,7 @@ import { sendPush } from "../../../lib/push";
 import { extraWrite, extraCount } from "../../../lib/extraAI";
 import { mathForScreen } from "../../../lib/mathfmt";
 import { fixKurdishLetters, KURDISH_STYLE } from "../../../lib/kurdish";
+import { hasWebSearch, webSearch, searchBlock } from "../../../lib/webSearch";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Big projects take more than a minute to write: allow up to 5 minutes (the answer keeps streaming the whole time).
@@ -605,6 +606,16 @@ export async function POST(req) {
     const models = [...new Set([...preferred, ...(proUser ? FALLBACK_MODELS : [...FALLBACK_MODELS].reverse())].filter(Boolean))];
     const TUTOR_LANG = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
     const tutor = body.tutor && TUTOR_LANG[body.tutor.target] ? body.tutor : null;
+    // Up-to-date web search for a "this year / latest / who won / now" question. The results are put INTO the prompt,
+    // so every provider (Gemini, Gemma, Groq, OpenRouter) gives a current answer. Fetched only when TAVILY_API_KEY is
+    // set and search is allowed; a failure or no key just leaves the block empty (falls back to the old behaviour).
+    let searchBlockText = "";
+    if (searchQ && !tutor && hasWebSearch() && serverEnv("ENABLE_SEARCH") !== "0") {
+      try {
+        const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" });
+        searchBlockText = searchBlock(await webSearch(lastText, { max: 5, timeoutMs: 7000 }), today);
+      } catch { searchBlockText = ""; }
+    }
     const TUTOR_PROMPT = tutor ? `
 
 LANGUAGE TEACHER MODE (this overrides the LANGUAGE rules above)
@@ -639,7 +650,7 @@ VOICE CONVERSATION MODE (most important rules)
 - CLEAR SPEECH: everyday words that everyone understands, short sentences, no rare or very formal words. In Kurdish: standard Central Kurdish (Sorani) as spoken in Sulaymaniyah and Erbil, correct Sorani spelling (ڕ ڵ ێ ۆ ە), Kurdish words instead of Arabic or English ones where a common Kurdish word exists, numbers written as words. In Arabic: simple Modern Standard Arabic. In English: plain everyday English.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang, voiceKind) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind, blueprintText(matchBlueprints(messages.filter((m) => m.role === "user").slice(-3).map((m) => m.content).join(" ")), buildKind)) + (cloudDb ? "\nThe project will have a cloud database: data is saved online and shared by every device — mention it in the plan in one short line." : "") : BUILD_PROMPT + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "")) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
+      systemInstruction: SYSTEM_PROMPT(lang, voiceKind) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind, blueprintText(matchBlueprints(messages.filter((m) => m.role === "user").slice(-3).map((m) => m.content).join(" ")), buildKind)) + (cloudDb ? "\nThe project will have a cloud database: data is saved online and shared by every device — mention it in the plan in one short line." : "") : BUILD_PROMPT + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "")) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT + searchBlockText,
       maxOutputTokens: (file || build) && !planOnly ? 32768 : 8192,
       safetySettings: GEMINI_SAFETY,
     };
@@ -689,7 +700,9 @@ VOICE CONVERSATION MODE (most important rules)
     // A current-events / "this year / latest / who won / now" question needs fresh facts, so search is turned on for it
     // by itself (training data is out of date). If grounding is not allowed on the key it degrades gracefully.
     const timeSensitive = (kind === "chat" || kind === "voice") && !tutor && isTimeSensitive(lastText);
-    const useSearch = (!build && (usage.pro || timeSensitive) && serverEnv("ENABLE_SEARCH") !== "0") || (planOnly && serverEnv("PLAN_SEARCH") === "1");
+    // If the web search already gave us results in the prompt, don't also ask Gemini to ground (it needs billing and
+    // would just add latency/errors). Otherwise fall back to Gemini grounding as before.
+    const useSearch = searchBlockText ? false : ((!build && (usage.pro || timeSensitive) && serverEnv("ENABLE_SEARCH") !== "0") || (planOnly && serverEnv("PLAN_SEARCH") === "1"));
     const officeGate = kind === "chat" && !tutor && !body.voiceNote && serverEnv("OFFICE") !== "0" && (OFFICE_WORDS.test(lastText) || lastFile(messages).recent);
     let ctrl = null;
     let open = true;
