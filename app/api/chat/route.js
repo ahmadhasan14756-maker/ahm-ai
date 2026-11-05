@@ -376,8 +376,12 @@ const FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-fla
 // A "this year / latest / who won / now" question needs fresh web facts. \b word boundaries only work for Latin
 // text in JS, so Kurdish/Arabic terms are matched WITHOUT \b. Used both to pick a stronger model and to turn search on.
 const TIME_RE_LATIN = /\b(20(2[5-9]|3\d)|latest|newest|current(ly)?|right now|this (year|week|month|season)|today|yesterday|who won|winner|most recent|breaking|just announced)\b/i;
-const TIME_RE_OTHER = /(نوێترین|ئەمساڵ|ئەمڕۆ|ئێستا|دوایین|کێ ?(بردی|بردیەوە|براوە)|ئەم ?(ساڵ|مانگ|هەفتە)|تازەترین|أحدث|الآن|هذا ?(العام|الأسبوع|الشهر)|من فاز|الفائز|اليوم|براوەی)/;
-const isTimeSensitive = (s) => TIME_RE_LATIN.test(s) || TIME_RE_OTHER.test(s);
+const TIME_RE_OTHER = /(نوێترین|ئەمساڵ|ئەمڕۆ|ئێستا|دوایین|کێ ?(بردی|بردیەوە|براوە)|ئەم ?(ساڵ|مانگ|هەفتە)|تازەترین|أحدث|الآن|هذا ?(العام|الأسبوع|الشهر)|من فاز|الفائز|اليوم|براوەی|سەرۆک|وەزیر|پاڵەوان|حکومەت|پەرلەمان|نرخ|دۆلار|زێڕ|نەوت|هەواڵ|رئيس|وزير|سعر|دولار|أخبار)/;
+// Many users type Kurdish in Latin letters, so match the "latest / newest / this year / today / who won" words there
+// too (kota=last, nwe/nwetrin=new/newest, taza=fresh, dwayin=latest, emsal=this year, emro=today, ki brd=who won),
+// plus current-entity words that are almost always asked about in the present (president, minister, price, news…).
+const TIME_RE_KU_LATIN = /\b(nwe\w*|nwê\w*|taza\w*|dwayin|dwayn|kotay\w*|kota|emsa[lrř]\w*|emro|emrro|emřo|braw\w*|balndor|nrx\w*|dolar\w*|zer|newt\w*|hawal\w*|sarok\w*|serok\w*|wazir\w*|palawan\w*|hukum\w*|parlaman\w*|president\w*|minister\w*|price|news)\b|ki ?brd/i;
+const isTimeSensitive = (s) => TIME_RE_LATIN.test(s) || TIME_RE_OTHER.test(s) || TIME_RE_KU_LATIN.test(s);
 const ATTACH_TYPES = /^(audio\/(webm|mp4|mpeg|ogg|wav|aac|x-m4a|m4a)|image\/(jpeg|png|webp)|application\/pdf)$/; // voice messages, photos and PDFs
 
 // Small spelling slips the AI sometimes makes in Kurdish: Persian digits (۲۵ → ٢٥), Arabic vowel marks on Kurdish words
