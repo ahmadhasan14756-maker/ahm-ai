@@ -82,7 +82,7 @@ VOICE
 CURRENT INFORMATION (recent facts, "this year", "latest", "who won")
 - TODAY'S DATE is ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" })}. Use this to understand "this year", "now", "latest", "recently". "This year" means ${new Date().toLocaleDateString("en-GB", { year: "numeric", timeZone: "Asia/Baghdad" })}. An answer from an earlier year is OUT OF DATE.
 - Your own training knowledge stops before today, so it may be out of date. When the question is about the latest/current state of something (this year's winner, the current office-holder, today's price, a recent event), and SEARCH RESULTS are provided to you, answer from those results and give the up-to-date answer — never state an older year's answer as if it were this year's.
-- If no search results are given and you are not sure of the latest, say briefly that you may not have the newest information, give the most recent you are confident about with its year, and do not guess a current winner or holder. Never present old data (e.g. a 2024 winner) as this year's answer.
+- If NO search results are provided for a "this year / latest / who won / current" question, you do NOT know the current answer — your training is from an earlier year and a newer result almost certainly exists. In that case you MUST NOT name a specific winner, holder or figure as the answer. Instead: say clearly, in one short line, that you don't have this year's confirmed information yet. You may then add, as a clearly-labelled older fact, the most recent you know with its exact year (e.g. "the last result I'm sure of is from 2024: …") — but never present it as this year's answer. Do not guess.
 
 PREDICTIONS
 - You cannot see the future. For predictions (sports, prices, exchange rates, markets, elections) give a careful, reasoned analysis: the main factors, the most likely outcome, rough probabilities, and clearly say it can be wrong. Never present a guess as certain. Do not give personal financial or betting advice (general money-saving and budgeting tips are fine).
@@ -488,7 +488,10 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
         if (!dropSafety && /400|INVALID_ARGUMENT/i.test(errCode(e)) && /safety|harm_?category|threshold/i.test(errText(e))) { dropSafety = true; continue; }
         if (/PROHIBITED_CONTENT|BLOCKLIST|blocked.*safety|SAFETY.*block|finishReason.*SAFETY/i.test(errText(e))) { lastWhy = model + " error: " + errText(e); if (yield* refuseOrRetry()) return; break; }
         if (sentAny) { yield isRateLimit(e) ? "\n\n\u0000ERR:busy" : "\n\n\u0000ERR:ai"; return; }
-        if (search && (isBadConfig(e) || isRateLimit(e))) { search = false; searchOff.add(model); continue; }
+        // Only a real "this model can't ground" error (400 / invalid) disables Google search for the model. A rate
+        // limit is temporary, so we do NOT kill search for it (that used to leave search off on the whole warm
+        // instance after one busy moment) — we fall through and retry on another key with search still on.
+        if (search && isBadConfig(e)) { search = false; searchOff.add(model); continue; }
         if (isRateLimit(e)) markBusyKey(ai, model); // this key is full for this model: rest it for a minute
         if (isRateLimit(e) && keyTries < keyCount() - 1) { keyTries++; continue; } // same model, another key
         if (isKeyError(e) && keyFails++ < 3) { markBadKey(ai); continue; } // a wrong / deleted key: skip it, use the next key
@@ -590,12 +593,15 @@ export async function POST(req) {
     // stronger model than the light free one: the light model answers English to Kurdish audio and cannot use
     // Google search well. Voice volume is low, so this costs little. Override in Vercel with GEMINI_MODEL_VOICE.
     const voiceKind = !!(body.voice || body.voiceNote);
-    const strongFree = voiceKind || (!build && !file && !construct && isTimeSensitive(lastText));
+    const searchQ = !build && !file && !construct && isTimeSensitive(lastText); // a "this year / latest / who won" question
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
-      : strongFree
-        ? [serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
-        : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
+      : searchQ
+        // Google Search grounding works best on the fullest flash model, so a current-events question leads with it.
+        ? [serverEnv("GEMINI_MODEL_SEARCH") || "gemini-3.8-flash", serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
+        : voiceKind
+          ? [serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
+          : [serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"];
     const models = [...new Set([...preferred, ...(proUser ? FALLBACK_MODELS : [...FALLBACK_MODELS].reverse())].filter(Boolean))];
     const TUTOR_LANG = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
     const tutor = body.tutor && TUTOR_LANG[body.tutor.target] ? body.tutor : null;
