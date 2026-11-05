@@ -626,22 +626,23 @@ export async function POST(req) {
           // One message can ask several separate current things at once, so ask for up to 3 English queries — one per
           // distinct topic — and search them all, so a multi-part question gets fresh facts for every part.
           const q = await jsonCall(
-            "You turn a user's message into the best short English web-search queries to find the most CURRENT answers. Keep names/brands and add the current year for 'latest/this year/now' topics. If the message asks about SEVERAL different things, give one query per thing (max 3). If it asks one thing, give one query.",
-            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries":["<english query>", ...]} (1 to 3 queries, each 4-9 words)` }],
-            { maxTokens: 220, think: "minimal", timeoutMs: 5000 },
+            "You turn a user's message into the best short English web-search queries to find the most CURRENT answers. Keep names/brands and add the current year for 'latest/this year/now' topics. IMPORTANT: if the message asks about SEVERAL different things, give ONE separate query for EACH thing (up to 6) so every part can be answered. If it asks one thing, give one query.",
+            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries":["<english query>", ...]} (one query per distinct thing asked, 1 to 6 queries, each 4-9 words)` }],
+            { maxTokens: 400, think: "minimal", timeoutMs: 5000 },
           );
           const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
-          if (got.length) queries = got.slice(0, 3);
+          if (got.length) queries = got.slice(0, 6);
         } catch { /* keep the fallback query */ }
-        // search every query in parallel, then merge and de-duplicate the results
-        const lists = await Promise.all(queries.map((qq) => webSearch(qq, { max: 5, timeoutMs: 7000 }).catch(() => [])));
+        // search every query in parallel, then merge and de-duplicate the results — so a message with many questions
+        // gets fresh facts for every one of them, not just the first.
+        const lists = await Promise.all(queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 7000 }).catch(() => [])));
         const seen = new Set();
         const results = [];
         for (const list of lists) for (const r of list) {
           const key = (r.url || r.content || "").slice(0, 80);
           if (key && !seen.has(key)) { seen.add(key); results.push(r); }
         }
-        searchBlockText = searchBlock(results.slice(0, 12), today);
+        searchBlockText = searchBlock(results.slice(0, 20), today);
         const query = queries.join(" | ");
         // Owner-only diagnostic, kept available behind a flag: set SEARCH_DEBUG=1 in Vercel to show the query and the
         // top results under each current-events answer (only the owner ever sees it). Off by default so answers stay clean.
