@@ -635,7 +635,7 @@ export async function POST(req) {
           const q = await jsonCall(
             "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
             [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
-            { maxTokens: 600, think: "minimal", timeoutMs: 6000 },
+            { maxTokens: 600, think: "minimal", timeoutMs: 9000 },
           );
           const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
           if (got.length) queries = got.slice(0, 10);
@@ -652,13 +652,13 @@ export async function POST(req) {
         }
         searchBlockText = results.length ? searchBlock(results.slice(0, 32), today) : "";
         const query = needWeb ? queries.join(" | ") : "(no web needed)";
-        // Owner-only diagnostic: shows the query used and the top results under each answer, so wrong answers can be
-        // diagnosed. Only the owner ever sees it; turn it off with SEARCH_DEBUG=0 in Vercel once everything is confirmed.
-        if (isOwner(user) && serverEnv("SEARCH_DEBUG") !== "0") {
+        // Owner-only diagnostic, hidden by default: set SEARCH_DEBUG=1 in Vercel to show the query and top results
+        // under each answer (only the owner ever sees it) when something needs checking again.
+        if (isOwner(user) && serverEnv("SEARCH_DEBUG") === "1") {
           searchDebug = `\n\n———\n🔎 \`${query}\` — ${results.length} ئەنجام\n` +
             (results.length ? results.slice(0, 4).map((r, i) => `${i + 1}. ${r.title || "?"}: ${String(r.content || "").slice(0, 100)}`).join("\n") : "⚠️ هیچ ئەنجامێک نەگەڕایەوە");
         }
-      } catch (e) { searchBlockText = ""; if (isOwner(user) && serverEnv("SEARCH_DEBUG") !== "0") searchDebug = `\n\n———\n🔎 ⚠️ هەڵەی گەڕان: ${String(e?.message || e).slice(0, 120)}`; }
+      } catch (e) { searchBlockText = ""; if (isOwner(user) && serverEnv("SEARCH_DEBUG") === "1") searchDebug = `\n\n———\n🔎 ⚠️ هەڵەی گەڕان: ${String(e?.message || e).slice(0, 120)}`; }
       // Put the live results INTO the user's turn (the model trusts the user turn far more than the system prompt),
       // right before the question, so it answers from the fresh facts instead of its older training.
       if (searchBlockText) {
