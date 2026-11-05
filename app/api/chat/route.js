@@ -598,7 +598,13 @@ export async function POST(req) {
     // stronger model than the light free one: the light model answers English to Kurdish audio and cannot use
     // Google search well. Voice volume is low, so this costs little. Override in Vercel with GEMINI_MODEL_VOICE.
     const voiceKind = !!(body.voice || body.voiceNote);
-    const searchQ = !build && !file && !construct && isTimeSensitive(lastText); // a "this year / latest / who won" question
+    // The owner wants the web checked for real questions, not only keyword ones. A greeting/ack or a writing/coding/
+    // math task never needs the web; anything else that looks like a question or info request is a candidate, and the
+    // optimizer below makes the final call on whether to actually search (so we don't waste searches on general knowledge).
+    const trivialMsg = lastText.trim().length < 5 || /^(\s*(سڵاو|بەیانی باش|سوپاس|باشە|اوکەی|تەواو|ئۆکەی|ok(ay)?|h(i|ey)+|hello|thx|thanks?|slaw|supas|basha|kra(yawa)?|tawaw|esa ch\w*)\s*[.!؟?,]*\s*)+$/i.test(lastText);
+    const creativeOrCalc = /\b(بنووسە|بنوسه|هۆنراوە|شیعر|چیرۆک|نامە|گۆرانی|write|poem|story|essay|letter|email|code|کۆد|پرۆگرام|program|function|وەرگێڕە|ترجم|translate)\b/i.test(lastText) || /^[\d\s+\-*/=().,^×÷%]+\s*[=؟?]?\s*$/.test(lastText.trim());
+    const maybeQuestion = /[?؟]/.test(lastText) || /(چی|چییە|چیە|کێ|کوا|کام|چەند|چۆن|کەی|بۆچی|لەکوێ|what|who|where|when|how|why|which|\bkya\b|\bkiya\b|\bchi\w*|\bchend\b|\bkam\b|\bkey\b)/i.test(lastText);
+    const searchQ = !build && !file && !construct && !trivialMsg && !creativeOrCalc && (isTimeSensitive(lastText) || maybeQuestion);
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
       : searchQ
@@ -621,29 +627,33 @@ export async function POST(req) {
         const yr = new Date().toLocaleDateString("en-GB", { year: "numeric", timeZone: "Asia/Baghdad" });
         // A Kurdish/Arabic question makes Google return weak or old pages, so first turn it into a good ENGLISH web
         // query (with the current year) — this is what makes "latest iPhone" return iPhone 18, not an old model.
-        let queries = [/\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`];
+        let queries = [];
+        let needWeb = isTimeSensitive(lastText); // fallback decision if the optimizer can't run
         try {
-          // One message can ask several separate current things at once, so ask for up to 3 English queries — one per
-          // distinct topic — and search them all, so a multi-part question gets fresh facts for every part.
+          // ONE call decides two things: (a) does answering need the live web at all (not for general knowledge,
+          // explanations, how-to, opinions, math, coding or creative writing), and (b) if so, the best English search
+          // queries — one per distinct thing asked (up to 10), with the current year for "latest/now" topics.
           const q = await jsonCall(
-            "You turn a user's message into the best short English web-search queries to find the most CURRENT answers. Keep names/brands and add the current year for 'latest/this year/now' topics. IMPORTANT: if the message asks about SEVERAL different things, give ONE separate query for EACH thing (up to 10) so every part can be answered. If it asks one thing, give one query.",
-            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries":["<english query>", ...]} (one query per distinct thing asked, 1 to 10 queries, each 4-9 words)` }],
+            "Decide whether answering this message needs CURRENT information from the live web — today's facts, the latest versions/models, current people, prices, scores, news or events. It does NOT need the web for general knowledge, explanations, how-to, opinions, definitions, math, coding or creative writing. If it needs the web, also give the best English search queries: one per distinct thing asked (up to 10), keep names/brands, and add the current year for 'latest/this year/now' topics.",
+            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"web": true|false, "queries": ["<english query>", ...]} — queries empty when web is false.` }],
             { maxTokens: 600, think: "minimal", timeoutMs: 6000 },
           );
+          if (typeof q?.web === "boolean") needWeb = q.web;
           const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
           if (got.length) queries = got.slice(0, 10);
-        } catch { /* keep the fallback query */ }
+        } catch { /* fall back to the keyword decision */ }
+        if (needWeb && !queries.length) queries = [/\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`];
         // search every query in parallel, then merge and de-duplicate the results — so a message with many questions
         // gets fresh facts for every one of them, not just the first.
-        const lists = await Promise.all(queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 8000 }).catch(() => [])));
+        const lists = needWeb ? await Promise.all(queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 8000 }).catch(() => []))) : [];
         const seen = new Set();
         const results = [];
         for (const list of lists) for (const r of list) {
           const key = (r.url || r.content || "").slice(0, 80);
           if (key && !seen.has(key)) { seen.add(key); results.push(r); }
         }
-        searchBlockText = searchBlock(results.slice(0, 32), today);
-        const query = queries.join(" | ");
+        searchBlockText = results.length ? searchBlock(results.slice(0, 32), today) : "";
+        const query = needWeb ? queries.join(" | ") : "(no web needed)";
         // Owner-only diagnostic, kept available behind a flag: set SEARCH_DEBUG=1 in Vercel to show the query and the
         // top results under each current-events answer (only the owner ever sees it). Off by default so answers stay clean.
         if (isOwner(user) && serverEnv("SEARCH_DEBUG") === "1") {
