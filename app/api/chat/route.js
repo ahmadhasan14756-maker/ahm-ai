@@ -652,13 +652,13 @@ export async function POST(req) {
         }
         searchBlockText = results.length ? searchBlock(results.slice(0, 32), today) : "";
         const query = needWeb ? queries.join(" | ") : "(no web needed)";
-        // Owner-only diagnostic, kept available behind a flag: set SEARCH_DEBUG=1 in Vercel to show the query and the
-        // top results under each current-events answer (only the owner ever sees it). Off by default so answers stay clean.
-        if (isOwner(user) && serverEnv("SEARCH_DEBUG") === "1") {
+        // Owner-only diagnostic: shows the query used and the top results under each answer, so wrong answers can be
+        // diagnosed. Only the owner ever sees it; turn it off with SEARCH_DEBUG=0 in Vercel once everything is confirmed.
+        if (isOwner(user) && serverEnv("SEARCH_DEBUG") !== "0") {
           searchDebug = `\n\n———\n🔎 \`${query}\` — ${results.length} ئەنجام\n` +
             (results.length ? results.slice(0, 4).map((r, i) => `${i + 1}. ${r.title || "?"}: ${String(r.content || "").slice(0, 100)}`).join("\n") : "⚠️ هیچ ئەنجامێک نەگەڕایەوە");
         }
-      } catch (e) { searchBlockText = ""; if (isOwner(user) && serverEnv("SEARCH_DEBUG") === "1") searchDebug = `\n\n———\n🔎 ⚠️ هەڵەی گەڕان: ${String(e?.message || e).slice(0, 120)}`; }
+      } catch (e) { searchBlockText = ""; if (isOwner(user) && serverEnv("SEARCH_DEBUG") !== "0") searchDebug = `\n\n———\n🔎 ⚠️ هەڵەی گەڕان: ${String(e?.message || e).slice(0, 120)}`; }
       // Put the live results INTO the user's turn (the model trusts the user turn far more than the system prompt),
       // right before the question, so it answers from the fresh facts instead of its older training.
       if (searchBlockText) {
