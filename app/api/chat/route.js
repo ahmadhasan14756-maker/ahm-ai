@@ -619,6 +619,12 @@ export async function POST(req) {
         const query = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
         searchBlockText = searchBlock(await webSearch(query, { max: 6, timeoutMs: 7000 }), today);
       } catch { searchBlockText = ""; }
+      // Put the live results INTO the user's turn (the model trusts the user turn far more than the system prompt),
+      // right before the question, so it answers from the fresh facts instead of its older training.
+      if (searchBlockText) {
+        const lastPart = contents[contents.length - 1]?.parts?.find((p) => typeof p.text === "string");
+        if (lastPart) lastPart.text = `${searchBlockText}\n\nUsing the up-to-date results above, answer this: ${lastPart.text}`;
+      }
     }
     const TUTOR_PROMPT = tutor ? `
 
@@ -654,7 +660,7 @@ VOICE CONVERSATION MODE (most important rules)
 - CLEAR SPEECH: everyday words that everyone understands, short sentences, no rare or very formal words. In Kurdish: standard Central Kurdish (Sorani) as spoken in Sulaymaniyah and Erbil, correct Sorani spelling (ڕ ڵ ێ ۆ ە), Kurdish words instead of Arabic or English ones where a common Kurdish word exists, numbers written as words. In Arabic: simple Modern Standard Arabic. In English: plain everyday English.
 - Reply in the language the user spoke${tutor ? ", except in language teacher mode: speak mainly in the language being learned, keep it simple for their level, and give corrections in one short spoken sentence (\"Good! You can also say: ...\")" : ""}.` : "";
     const baseConfig = {
-      systemInstruction: SYSTEM_PROMPT(lang, voiceKind) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind, blueprintText(matchBlueprints(messages.filter((m) => m.role === "user").slice(-3).map((m) => m.content).join(" ")), buildKind)) + (cloudDb ? "\nThe project will have a cloud database: data is saved online and shared by every device — mention it in the plan in one short line." : "") : BUILD_PROMPT + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "")) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT + searchBlockText,
+      systemInstruction: SYSTEM_PROMPT(lang, voiceKind) + (file ? FILE_PROMPT : "") + (build ? (planOnly ? KIND_PROMPT[buildKind] + PLAN_PROMPT(buildKind, blueprintText(matchBlueprints(messages.filter((m) => m.role === "user").slice(-3).map((m) => m.content).join(" ")), buildKind)) + (cloudDb ? "\nThe project will have a cloud database: data is saved online and shared by every device — mention it in the plan in one short line." : "") : BUILD_PROMPT + KIND_PROMPT[buildKind] + (cloudDb ? CLOUD_PROMPT : "")) : "") + (construct ? CONSTRUCT_PROMPT : "") + TUTOR_PROMPT + NOTE_PROMPT + VOICE_PROMPT,
       maxOutputTokens: (file || build) && !planOnly ? 32768 : 8192,
       safetySettings: GEMINI_SAFETY,
     };
