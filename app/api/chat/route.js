@@ -613,7 +613,11 @@ export async function POST(req) {
     if (searchQ && !tutor && hasWebSearch() && serverEnv("ENABLE_SEARCH") !== "0") {
       try {
         const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Baghdad" });
-        searchBlockText = searchBlock(await webSearch(lastText, { max: 5, timeoutMs: 7000 }), today);
+        const yr = new Date().toLocaleDateString("en-GB", { year: "numeric", timeZone: "Asia/Baghdad" });
+        // "this year" questions often rank an older year's famous result first on Google, so pin the query to the
+        // current year unless the user already named one — this returns the actual current result, not a 2024 page.
+        const query = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
+        searchBlockText = searchBlock(await webSearch(query, { max: 6, timeoutMs: 7000 }), today);
       } catch { searchBlockText = ""; }
     }
     const TUTOR_PROMPT = tutor ? `
