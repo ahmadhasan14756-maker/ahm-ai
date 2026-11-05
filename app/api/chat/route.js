@@ -621,17 +621,28 @@ export async function POST(req) {
         const yr = new Date().toLocaleDateString("en-GB", { year: "numeric", timeZone: "Asia/Baghdad" });
         // A Kurdish/Arabic question makes Google return weak or old pages, so first turn it into a good ENGLISH web
         // query (with the current year) — this is what makes "latest iPhone" return iPhone 18, not an old model.
-        let query = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
+        let queries = [/\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`];
         try {
+          // One message can ask several separate current things at once, so ask for up to 3 English queries — one per
+          // distinct topic — and search them all, so a multi-part question gets fresh facts for every part.
           const q = await jsonCall(
-            "You turn a user's question into the single best short English web-search query to find the most CURRENT answer. Keep names/brands. Add the current year for 'this year / latest / now' questions.",
-            [{ text: `Question (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"q":"<english search query, 4-9 words>"}` }],
-            { maxTokens: 120, think: "minimal", timeoutMs: 5000 },
+            "You turn a user's message into the best short English web-search queries to find the most CURRENT answers. Keep names/brands and add the current year for 'latest/this year/now' topics. If the message asks about SEVERAL different things, give one query per thing (max 3). If it asks one thing, give one query.",
+            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries":["<english query>", ...]} (1 to 3 queries, each 4-9 words)` }],
+            { maxTokens: 220, think: "minimal", timeoutMs: 5000 },
           );
-          if (q?.q && typeof q.q === "string" && q.q.trim().length > 2) query = q.q.trim().slice(0, 200);
+          const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
+          if (got.length) queries = got.slice(0, 3);
         } catch { /* keep the fallback query */ }
-        const results = await webSearch(query, { max: 6, timeoutMs: 7000 });
-        searchBlockText = searchBlock(results, today);
+        // search every query in parallel, then merge and de-duplicate the results
+        const lists = await Promise.all(queries.map((qq) => webSearch(qq, { max: 5, timeoutMs: 7000 }).catch(() => [])));
+        const seen = new Set();
+        const results = [];
+        for (const list of lists) for (const r of list) {
+          const key = (r.url || r.content || "").slice(0, 80);
+          if (key && !seen.has(key)) { seen.add(key); results.push(r); }
+        }
+        searchBlockText = searchBlock(results.slice(0, 12), today);
+        const query = queries.join(" | ");
         // Owner-only diagnostic, kept available behind a flag: set SEARCH_DEBUG=1 in Vercel to show the query and the
         // top results under each current-events answer (only the owner ever sees it). Off by default so answers stay clean.
         if (isOwner(user) && serverEnv("SEARCH_DEBUG") === "1") {
