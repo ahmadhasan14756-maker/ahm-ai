@@ -633,7 +633,7 @@ export async function POST(req) {
         const needWeb = true;
         try {
           const q = await jsonCall(
-            "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
+            "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
             [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
             { maxTokens: 600, think: "minimal", timeoutMs: 9000 },
           );
