@@ -17,7 +17,7 @@ import { sendPush } from "../../../lib/push";
 import { extraWrite, extraCount } from "../../../lib/extraAI";
 import { mathForScreen } from "../../../lib/mathfmt";
 import { fixKurdishLetters, KURDISH_STYLE } from "../../../lib/kurdish";
-import { hasWebSearch, webSearch, searchBlock } from "../../../lib/webSearch";
+import { hasWebSearch, webSearch, searchBlock, rankResults } from "../../../lib/webSearch";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Big projects take more than a minute to write: allow up to 5 minutes (the answer keeps streaming the whole time).
@@ -631,27 +631,31 @@ export async function POST(req) {
         // turn the message into good English search queries (one per distinct thing asked, up to 10).
         let queries = [];
         const needWeb = true;
+        // "fresh" questions (latest / now / prices / people in office / news) also pull dated Google News, so the
+        // newest version of the fact can be found and cross-checked across outlets.
+        const fresh = isTimeSensitive(lastText);
+        const rawQuery = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
+        // SPEED: start searching the raw question right away, in parallel with the English rewrite below, so a slow
+        // rewrite never holds the answer up — the rewritten queries are then searched and merged on top.
+        const rawP = webSearch(rawQuery, { max: 4, timeoutMs: 6000, fresh }).catch(() => []);
         try {
           const q = await jsonCall(
             "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
             [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
-            { maxTokens: 600, think: "minimal", timeoutMs: 9000 },
+            { maxTokens: 400, think: "minimal", timeoutMs: 4500 },
           );
           const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
           if (got.length) queries = got.slice(0, 10);
-        } catch { /* fall back to the raw question below */ }
-        if (!queries.length) queries = [/\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`];
-        // search every query in parallel, then merge and de-duplicate the results — so a message with many questions
-        // gets fresh facts for every one of them, not just the first.
-        const lists = needWeb ? await Promise.all(queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 8000 }).catch(() => []))) : [];
-        const seen = new Set();
-        const results = [];
-        for (const list of lists) for (const r of list) {
-          const key = (r.url || r.content || "").slice(0, 80);
-          if (key && !seen.has(key)) { seen.add(key); results.push(r); }
-        }
-        searchBlockText = results.length ? searchBlock(results.slice(0, 32), today) : "";
-        const query = needWeb ? queries.join(" | ") : "(no web needed)";
+        } catch { /* the raw search already running covers it */ }
+        // search every rewritten query in parallel (the raw search is already in flight), then merge, de-duplicate
+        // and rank: live Google boxes first, then newest-dated first — so the answer is built on the latest facts.
+        const lists = needWeb ? await Promise.all([
+          ...queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 6000, fresh }).catch(() => [])),
+          rawP,
+        ]) : [];
+        const results = rankResults(lists.flat(), queries.length > 2 ? 22 : 16);
+        searchBlockText = results.length ? searchBlock(results, today) : "";
+        const query = needWeb ? [...queries, rawQuery].join(" | ") : "(no web needed)";
         // Owner-only diagnostic, hidden by default: set SEARCH_DEBUG=1 in Vercel to show the query and top results
         // under each answer (only the owner ever sees it) when something needs checking again.
         if (isOwner(user) && serverEnv("SEARCH_DEBUG") === "1") {
@@ -746,7 +750,9 @@ VOICE CONVERSATION MODE (most important rules)
     // Speed first: chat thinks the least so the answer comes fast. Only heavy maths/code reasoning (equations,
     // proofs, code) gets a small bump — the clear step-by-step format comes from the prompt, not from long thinking.
     const heavyMath = /\b(prove|سەلماند|أثبت|معادلة|هاوکێشە|integral|derivative|تەفاضل|تکامل)\b/i.test(lastText) || /```/.test(lastText);
-    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : 2) : START[kind];
+    // With live web results in hand, think a little deeper (low, not minimal) so the model cross-checks the sources,
+    // picks the newest well-supported fact and catches disagreements — still quick, never the slow "medium" level.
+    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : searchBlockText ? 1 : 2) : START[kind];
     // A current-events / "this year / latest / who won / now" question needs fresh facts, so search is turned on for it
     // by itself (training data is out of date). If grounding is not allowed on the key it degrades gracefully.
     const timeSensitive = (kind === "chat" || kind === "voice") && !tutor && isTimeSensitive(lastText);
