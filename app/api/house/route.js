@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const preferredRegion = "fra1";
 
-const LANG_NAME = { ckb: "Kurdish Sorani (Arabic script)", ar: "Arabic", en: "English" };
+const LANG_NAME = { ckb: "Kurdish Sorani (Arabic script)", kmr: "Kurdish Badini (Bahdini Kurmanji, Arabic script as written in Duhok — never Sorani)", ar: "Arabic", en: "English" };
 const B64 = /^[A-Za-z0-9+/=]+$/;
 const err = (error, status = 400, extra = {}) => Response.json({ error, ...extra }, { status });
 

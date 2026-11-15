@@ -109,7 +109,7 @@ function LangPicker() {
 }
 
 // Language button in the app's top bar: کوردی / العربية / English, one tap away.
-const LANG_SHORT = { ckb: "کوردی", ar: "عربي", en: "EN" };
+const LANG_SHORT = { ckb: "سۆرانی", kmr: "بادینی", ar: "عربي", en: "EN" };
 function LangSwitch() {
   const { lang, setLang, t } = useLang();
   const [open, setOpen] = useState(false);
@@ -1256,7 +1256,7 @@ function AboutDev({ me, onClose, onEdit }) {
   const { t, lang } = useLang();
   const [a, setA] = useState(null);
   useEffect(() => { fetch("/api/about").then((r) => r.json()).then(setA).catch(() => setA({ error: true })); }, []);
-  const L = (o) => o?.[lang] || o?.ckb || "";
+  const L = (o) => o?.[lang] || (lang === "kmr" ? o?.en : o?.ckb) || o?.ckb || "";
   const num = intlPhone(a?.phone);
   return (
     <Sheet label={t("aboutDev")} onClose={onClose}>
@@ -1298,7 +1298,7 @@ function AboutEditor({ data, token, onClose, onSaved }) {
     try {
       const go = async (txt) => { const r = await fetch("/api/admin/notice", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ translate: txt }) }); if (!r.ok) throw new Error(); return r.json(); };
       const [bio, role, name] = await Promise.all([go(f.bio.ckb), go(f.role.ckb), go(f.nameLocal.ckb)]);
-      setF((x) => ({ ...x, bio: { ...x.bio, ar: bio.ar, en: bio.en }, role: { ...x.role, ar: role.ar, en: role.en }, nameLocal: { ...x.nameLocal, ar: name.ar, en: name.en } }));
+      setF((x) => ({ ...x, bio: { ...x.bio, kmr: bio.kmr, ar: bio.ar, en: bio.en }, role: { ...x.role, kmr: role.kmr, ar: role.ar, en: role.en }, nameLocal: { ...x.nameLocal, kmr: name.kmr, ar: name.ar, en: name.en } }));
       setMsg("✅ " + t("aboutTranslated"));
     } catch { setMsg("⚠️ " + t("errGeneric")); }
     setBusy("");
@@ -1312,7 +1312,7 @@ function AboutEditor({ data, token, onClose, onSaved }) {
     } catch { setMsg("⚠️ " + t("errGeneric")); }
     setBusy("");
   }
-  const LANGS3 = [["ckb", "کوردی", "rtl"], ["ar", "العربية", "rtl"], ["en", "English", "ltr"]];
+  const LANGS3 = [["ckb", "کوردی", "rtl"], ["kmr", "بادینی", "rtl"], ["ar", "العربية", "rtl"], ["en", "English", "ltr"]];
   return (
     <Sheet label={t("aboutEdit")} onClose={onClose}>
       <h3>✏️ {t("aboutEdit")}</h3>
@@ -1451,7 +1451,7 @@ function NoticeComposer({ token, onClose, onSent }) {
     try { await call({ clear: true }); setCur(null); setMsg("✅ " + t("noticeCleared")); onSent?.(); } catch { setMsg("⚠️ " + t("errGeneric")); }
     setBusy("");
   }
-  const L = [["ckb", "کوردی"], ["ar", "العربية"], ["en", "English"]];
+  const L = [["ckb", "کوردی"], ["kmr", "بادینی"], ["ar", "العربية"], ["en", "English"]];
   return (
     <Sheet label={t("noticeBtn")} onClose={onClose}>
       <h3>📢 {t("noticeBtn")}</h3>
@@ -1493,7 +1493,7 @@ function NoticeBar({ notice }) {
   const [hidden, setHidden] = useState(true);
   useEffect(() => { try { setHidden(localStorage.getItem("ahm-notice-seen") === notice?.id); } catch { setHidden(false); } }, [notice?.id]);
   if (!notice?.id || hidden) return null;
-  const text = notice.text?.[lang] || notice.text?.ckb || "";
+  const text = notice.text?.[lang] || (lang === "kmr" ? notice.text?.en : notice.text?.ckb) || notice.text?.ckb || ""; // Badini: English before Sorani
   if (!text) return null;
   const close = () => { try { localStorage.setItem("ahm-notice-seen", notice.id); } catch {} setHidden(true); };
   return (
@@ -1522,7 +1522,7 @@ function Dashboard({ token, onClose, onPlans, onNotice, onRelease }) {
     })();
   }, []);
   const max = d ? Math.max(1, ...d.signups.map((x) => x.n)) : 1;
-  const fmtDay = (k) => new Date(k + "T12:00:00").toLocaleDateString(lang === "en" ? "en-GB" : lang === "ar" ? "ar-IQ" : "ckb-IQ", { day: "numeric", month: "short" });
+  const fmtDay = (k) => new Date(k + "T12:00:00").toLocaleDateString(lang === "en" ? "en-GB" : lang === "ar" ? "ar-IQ" : lang === "kmr" ? "en-GB" : "ckb-IQ", lang === "kmr" ? { day: "numeric", month: "numeric" } : { day: "numeric", month: "short" });
   const tiles = d ? [
     [t("dUsers"), d.users], [t("dNewToday"), d.newToday], [t("dNew7"), d.new7],
     [t("dPro"), d.pro], [t("dIncome"), "$" + d.income], [t("dQuestions"), d.questions.toLocaleString("en")],
@@ -2448,9 +2448,9 @@ function Main({ session }) {
     const hello = {
       en: "Hi! 👋 I'm your English teacher. Let's practise together. How are you today?",
       ar: "مرحباً! 👋 أنا معلمك للغة العربية. لنتدرب معاً. كيف حالك اليوم؟",
-      ckb: "سڵاو! 👋 من مامۆستای زمانی کوردییەکەتم. با پێکەوە ڕاهێنان بکەین. ئەمڕۆ چۆنی؟",
+      ckb: "سڵاو! 👋 من مامۆستای زمانی کوردییەکەتم. با پێکەوە ڕاهێنان بکەین. ئەمڕۆ چۆنی؟", kmr: "سلاڤ! 👋 ئەز مامۆستایێ تە یێ زمانێ کوردی مە. وەرە بلا پێکڤە ڕاهێنانێ بکەین. ئەڤرۆ تو چاوانی؟",
     }[target];
-    const names = { en: "English", ar: "العربية", ckb: "کوردی" };
+    const names = { en: "English", ar: "العربية", ckb: "کوردی", kmr: "کوردی" };
     setDraft({ ...blank("chat"), title: "🎓 " + names[target] + " · " + level, tutor: { target, level }, messages: [{ role: "assistant", content: hello }] });
     setActiveId(null);
     setView("chat");
@@ -2460,9 +2460,9 @@ function Main({ session }) {
     const hello = {
       en: "Hi! I'm your English teacher. Let's talk together. How are you today?",
       ar: "مرحباً! أنا معلمك للغة العربية. لنتحدث معاً. كيف حالك اليوم؟",
-      ckb: "سڵاو! من مامۆستای زمانی کوردییەکەتم. با پێکەوە قسە بکەین. ئەمڕۆ چۆنی؟",
+      ckb: "سڵاو! من مامۆستای زمانی کوردییەکەتم. با پێکەوە قسە بکەین. ئەمڕۆ چۆنی؟", kmr: "سلاڤ! ئەز مامۆستایێ تە یێ زمانێ کوردی مە. وەرە بلا پێکڤە باخڤین. ئەڤرۆ تو چاوانی؟",
     }[target];
-    const names = { en: "English", ar: "العربية", ckb: "کوردی" };
+    const names = { en: "English", ar: "العربية", ckb: "کوردی", kmr: "کوردی" };
     const d = { ...blank("chat"), title: "🎙️ " + names[target] + " · " + level, tutor: { target, level }, messages: [{ role: "assistant", content: hello }] };
     setDraft(d);
     setActiveId(null);
@@ -2616,7 +2616,7 @@ function Main({ session }) {
   function voiceTurn(heardText, answer) {
     if (!voice) return;
     // the app follows the language the user speaks
-    const dl = !voice.tutor && detectLang(heardText);
+    const dl = !voice.tutor && detectLang(heardText, lang);
     if (dl && dl !== lang) setLang(dl);
     patch(voice.chatId, (c) => ({
       ...c,
@@ -2642,7 +2642,7 @@ function Main({ session }) {
     const typed = (preset ?? input).trim();
     const hasAttach = images.length || file || extra.length;
     // the whole app follows the language the user writes in (Kurdish, Arabic or English)
-    const dl = preset === undefined && !opts.auto && !opts.cont && !active.tutor ? detectLang(typed) : null;
+    const dl = preset === undefined && !opts.auto && !opts.cont && !active.tutor ? detectLang(typed, lang) : null;
     if (dl && dl !== lang) setLang(dl);
     const reqLang = dl || lang;
     let target = forced || (mode === "image" || mode === "studio" ? "chat" : mode); // image/design section was removed

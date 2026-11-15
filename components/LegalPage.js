@@ -1,5 +1,5 @@
 // Shared layout for the privacy and terms pages (server-rendered, all three languages on one page).
-const NAMES = { ckb: "کوردی", ar: "العربية", en: "English" };
+const NAMES = { ckb: "کوردی سۆرانی", kmr: "کوردی بادینی", ar: "العربية", en: "English" };
 
 export default function LegalPage({ doc, updated }) {
   return (

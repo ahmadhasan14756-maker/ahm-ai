@@ -29,9 +29,9 @@ export async function POST(req) {
     if (!text) return Response.json({ error: "empty" }, { status: 400 });
     try {
       const out = await jsonCall(
-        `You translate short app announcements for AHM AI. Keep the meaning, tone, emojis, line breaks, numbers and links exactly. Kurdish must be Sorani in Arabic script (fix small spelling mistakes in the owner's Kurdish, but keep their words). Return JSON {"ckb": "...", "ar": "...", "en": "..."}.`,
+        `You translate short app announcements for AHM AI. Keep the meaning, tone, emojis, line breaks, numbers and links exactly. Kurdish "ckb" must be Sorani in Arabic script (fix small spelling mistakes in the owner's Kurdish, but keep their words). Kurdish "kmr" must be Badini (Bahdini Kurmanji, Arabic script, as written in Duhok: ئەز، ئەڤ، نوکە، چاوا، گەلەک، تشت، ژ، ل، دکەم) — natural Badini, never Sorani words or grammar. Return JSON {"ckb": "...", "kmr": "...", "ar": "...", "en": "..."}.`,
         [{ text }], { maxTokens: 3000 });
-      return Response.json({ ckb: clip(out.ckb) || text, ar: clip(out.ar), en: clip(out.en) });
+      return Response.json({ ckb: clip(out.ckb) || text, kmr: clip(out.kmr), ar: clip(out.ar), en: clip(out.en) });
     } catch (e) {
       return Response.json({ error: e?.message === "busy" ? "busy" : "ai" }, { status: 502 });
     }
@@ -40,7 +40,7 @@ export async function POST(req) {
   // 2) Send to everyone.
   if (body.publish) {
     const t = body.publish;
-    const text = { ckb: clip(t.ckb), ar: clip(t.ar) || clip(t.ckb), en: clip(t.en) || clip(t.ckb) };
+    const text = { ckb: clip(t.ckb), kmr: clip(t.kmr), ar: clip(t.ar) || clip(t.ckb), en: clip(t.en) || clip(t.ckb) };
     if (!text.ckb) return Response.json({ error: "empty" }, { status: 400 });
     try {
       const notice = { id: Date.now().toString(36), text, at: new Date().toISOString() };

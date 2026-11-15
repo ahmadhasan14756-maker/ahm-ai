@@ -10,6 +10,7 @@ export const preferredRegion = "fra1";
 
 const NAME = {
   ckb: "Kurdish Sorani (always Arabic script)",
+  kmr: "Kurdish Badini (Bahdini Kurmanji, Arabic script as written in Duhok — never Sorani)",
   ar: "Arabic (Modern Standard Arabic)",
   en: "English",
 };

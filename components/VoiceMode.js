@@ -3,21 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 
 const TX = {
-  start: { ckb: "دەست پێبکە", ar: "ابدأ", en: "Start" },
-  startSub: { ckb: "قسە بکە، و AHM AI بە دەنگ وەڵامت دەداتەوە. پێویست بە خوێندنەوە ناکات.", ar: "تحدّث وسيجيبك AHM AI بصوته. لا حاجة للقراءة.", en: "Talk, and AHM AI answers out loud. No reading needed." },
-  listening: { ckb: "گوێ دەگرم... قسە بکە", ar: "أستمع... تحدّث", en: "Listening... speak now" },
-  thinking: { ckb: "بیر دەکاتەوە...", ar: "يفكّر...", en: "Thinking..." },
-  speaking: { ckb: "قسە دەکات... دابگرە بۆ ڕاگرتن", ar: "يتحدث... اضغط للمقاطعة", en: "Speaking... tap to interrupt" },
-  idle: { ckb: "دابگرە بۆ قسەکردن", ar: "اضغط لتتحدث", en: "Tap to talk" },
-  you: { ckb: "تۆ", ar: "أنت", en: "You" },
-  showText: { ckb: "پیشاندانی نووسین", ar: "إظهار النص", en: "Show text" },
-  hideText: { ckb: "شاردنەوەی نووسین", ar: "إخفاء النص", en: "Hide text" },
-  end: { ckb: "کۆتایی", ar: "إنهاء", en: "End" },
-  mic: { ckb: "ڕێگە بە مایکرۆفۆن بدە لە ڕێکخستنەکانی مۆبایلەکەت، پاشان دووبارە هەوڵ بدەرەوە.", ar: "اسمح باستخدام الميكروفون من إعدادات الهاتف ثم حاول مجدداً.", en: "Allow the microphone in your phone settings, then try again." },
-  error: { ckb: "پەیوەندی نەکرا. دابگرە بۆ دووبارە هەوڵدان.", ar: "تعذّر الاتصال. اضغط للمحاولة مجدداً.", en: "Couldn't connect. Tap to try again." },
-  voiceLimit: { ckb: "کاتی دەنگی ئەمڕۆت تەواو بوو. بۆ کاتی زیاتر پلانێکی Pro هەڵبژێرە.", ar: "انتهت دقائق الصوت لليوم. اختر خطة Pro لوقت أطول.", en: "Today's voice minutes are used up. Choose a Pro plan for more." },
-  busy: { ckb: "ئێستا داواکاری زۆرە. کەمێکی تر هەوڵ بدەرەوە.", ar: "الضغط مرتفع الآن. حاول بعد قليل.", en: "Too many requests right now. Try again shortly." },
-  teacher: { ckb: "مامۆستای زمان", ar: "معلم اللغة", en: "Language teacher" },
+  start: { ckb: "دەست پێبکە", kmr: "دەست پێ بکە", ar: "ابدأ", en: "Start" },
+  startSub: { ckb: "قسە بکە، و AHM AI بە دەنگ وەڵامت دەداتەوە. پێویست بە خوێندنەوە ناکات.", kmr: "باخڤە، و AHM AI ب دەنگی بەرسڤا تە ددەت. پێدڤی ب خواندنێ ناکەت.", ar: "تحدّث وسيجيبك AHM AI بصوته. لا حاجة للقراءة.", en: "Talk, and AHM AI answers out loud. No reading needed." },
+  listening: { ckb: "گوێ دەگرم... قسە بکە", kmr: "گوهداریێ دکەم... باخڤە", ar: "أستمع... تحدّث", en: "Listening... speak now" },
+  thinking: { ckb: "بیر دەکاتەوە...", kmr: "هزر دکەت...", ar: "يفكّر...", en: "Thinking..." },
+  speaking: { ckb: "قسە دەکات... دابگرە بۆ ڕاگرتن", kmr: "دئاخڤیت... بۆ ڕاگرتنێ کلیک بکە", ar: "يتحدث... اضغط للمقاطعة", en: "Speaking... tap to interrupt" },
+  idle: { ckb: "دابگرە بۆ قسەکردن", kmr: "بۆ ئاخفتنێ کلیک بکە", ar: "اضغط لتتحدث", en: "Tap to talk" },
+  you: { ckb: "تۆ", kmr: "تو", ar: "أنت", en: "You" },
+  showText: { ckb: "پیشاندانی نووسین", kmr: "نیشاندانا نڤیسینێ", ar: "إظهار النص", en: "Show text" },
+  hideText: { ckb: "شاردنەوەی نووسین", kmr: "ڤەشارتنا نڤیسینێ", ar: "إخفاء النص", en: "Hide text" },
+  end: { ckb: "کۆتایی", kmr: "دوماهی", ar: "إنهاء", en: "End" },
+  mic: { ckb: "ڕێگە بە مایکرۆفۆن بدە لە ڕێکخستنەکانی مۆبایلەکەت، پاشان دووبارە هەوڵ بدەرەوە.", kmr: "د ڕێکخستنێن مۆبایلا خۆ دا دەستویریێ بدە مایکرۆفۆنێ، پاشان دووبارە هەول بدە.", ar: "اسمح باستخدام الميكروفون من إعدادات الهاتف ثم حاول مجدداً.", en: "Allow the microphone in your phone settings, then try again." },
+  error: { ckb: "پەیوەندی نەکرا. دابگرە بۆ دووبارە هەوڵدان.", kmr: "پەیوەندی چێنەبوو. بۆ دووبارە هەولدانێ کلیک بکە.", ar: "تعذّر الاتصال. اضغط للمحاولة مجدداً.", en: "Couldn't connect. Tap to try again." },
+  voiceLimit: { ckb: "کاتی دەنگی ئەمڕۆت تەواو بوو. بۆ کاتی زیاتر پلانێکی Pro هەڵبژێرە.", kmr: "دەمێ دەنگی یێ ئەڤرۆ ب دوماهی هات. بۆ دەمەکێ پتر پلانەکا Pro هەلبژێرە.", ar: "انتهت دقائق الصوت لليوم. اختر خطة Pro لوقت أطول.", en: "Today's voice minutes are used up. Choose a Pro plan for more." },
+  busy: { ckb: "ئێستا داواکاری زۆرە. کەمێکی تر هەوڵ بدەرەوە.", kmr: "نوکە داخوازی گەلەکن. پشتی کێمەکێ هەول بدە.", ar: "الضغط مرتفع الآن. حاول بعد قليل.", en: "Too many requests right now. Try again shortly." },
+  teacher: { ckb: "مامۆستای زمان", kmr: "مامۆستایێ زمانی", ar: "معلم اللغة", en: "Language teacher" },
 };
 
 // A tiny silent sound, played on the first tap so the phone allows audio later.

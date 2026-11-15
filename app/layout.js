@@ -31,7 +31,7 @@ const JSON_LD = {
   url: SITE,
   applicationCategory: "ProductivityApplication",
   operatingSystem: "iOS, Android, Windows, macOS, Web",
-  inLanguage: ["ckb", "ar", "en"],
+  inLanguage: ["ckb", "kmr", "ar", "en"],
   description: DESC,
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   image: SITE + "/og.png",
