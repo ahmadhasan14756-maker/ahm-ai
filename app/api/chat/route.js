@@ -607,8 +607,9 @@ export async function POST(req) {
     const searchQ = !build && !file && !construct && !trivialMsg && !creativeOrCalc && (isTimeSensitive(lastText) || maybeQuestion);
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
-      : searchQ
-        // Google Search grounding works best on the fullest flash model, so a current-events question leads with it.
+      : searchQ && isTimeSensitive(lastText)
+        // Fast-changing questions lead with the fullest flash model (best at weighing several dated sources);
+        // everyday questions keep the quick light model below, so they stay fast.
         ? [serverEnv("GEMINI_MODEL_SEARCH") || "gemini-3.8-flash", serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
         : voiceKind
           ? [serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
@@ -637,22 +638,26 @@ export async function POST(req) {
         const rawQuery = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
         // SPEED: start searching the raw question right away, in parallel with the English rewrite below, so a slow
         // rewrite never holds the answer up — the rewritten queries are then searched and merged on top.
-        const rawP = webSearch(rawQuery, { max: 4, timeoutMs: 6000, fresh }).catch(() => []);
-        try {
-          const q = await jsonCall(
-            "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
-            [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
-            { maxTokens: 400, think: "minimal", timeoutMs: 4500 },
-          );
-          const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
-          if (got.length) queries = got.slice(0, 10);
-        } catch { /* the raw search already running covers it */ }
+        const rawP = webSearch(rawQuery, { max: 4, timeoutMs: 4500, fresh }).catch(() => []);
+        // SPEED: jsonCall has no overall time limit of its own — when keys are busy it walks every model/key and can
+        // even fall back to other services for up to a minute. So the rewrite gets a HARD 2.5 s cap: if it isn't
+        // back by then we simply go on with the raw search that is already running.
+        const capped = (p, ms, fallback) => Promise.race([p.catch(() => fallback), new Promise((res) => setTimeout(() => res(fallback), ms))]);
+        const q = await capped(jsonCall(
+          "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
+          [{ text: `Message (often Kurdish Sorani or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
+          { maxTokens: 300, think: "minimal", timeoutMs: 2500, deadline: Date.now() + 2500 },
+        ), 2500, null);
+        const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
+        if (got.length) queries = got.slice(0, 10);
         // search every rewritten query in parallel (the raw search is already in flight), then merge, de-duplicate
         // and rank: live Google boxes first, then newest-dated first — so the answer is built on the latest facts.
-        const lists = needWeb ? await Promise.all([
-          ...queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 6000, fresh }).catch(() => [])),
+        // The whole search step is capped too, so a slow search site can never hold the answer up.
+        const lists = needWeb ? await capped(Promise.all([
+          ...queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 4000, fresh }).catch(() => [])),
           rawP,
-        ]) : [];
+        ]), 4500, []) : [];
+        if (!lists.length) lists.push(await capped(rawP, 500, []));
         const results = rankResults(lists.flat(), queries.length > 2 ? 22 : 16);
         searchBlockText = results.length ? searchBlock(results, today) : "";
         const query = needWeb ? [...queries, rawQuery].join(" | ") : "(no web needed)";
@@ -752,7 +757,8 @@ VOICE CONVERSATION MODE (most important rules)
     const heavyMath = /\b(prove|سەلماند|أثبت|معادلة|هاوکێشە|integral|derivative|تەفاضل|تکامل)\b/i.test(lastText) || /```/.test(lastText);
     // With live web results in hand, think a little deeper (low, not minimal) so the model cross-checks the sources,
     // picks the newest well-supported fact and catches disagreements — still quick, never the slow "medium" level.
-    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : searchBlockText ? 1 : 2) : START[kind];
+    // Only fast-changing questions (latest / now / prices / news) get this; everyday questions stay at "minimal" for speed.
+    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : searchBlockText && isTimeSensitive(lastText) ? 1 : 2) : START[kind];
     // A current-events / "this year / latest / who won / now" question needs fresh facts, so search is turned on for it
     // by itself (training data is out of date). If grounding is not allowed on the key it degrades gracefully.
     const timeSensitive = (kind === "chat" || kind === "voice") && !tutor && isTimeSensitive(lastText);
