@@ -415,7 +415,7 @@ async function proofreadKurdish(text, dialect = "ckb") {
   try {
     const r = await Promise.race([
       gemini().models.generateContent({
-        model: "gemini-3.8-flash",
+        model: serverEnv("GEMINI_MODEL_PROOF") || "gemini-3.6-flash",
         contents: [{ role: "user", parts: [{ text }] }],
         config: {
           systemInstruction: dialect === "kmr" ? BADINI_EDITOR : "You are a professional editor of Central Kurdish (Sorani). Correct ONLY spelling, grammar, wrong word forms and unnatural wording in the Kurdish text you get, using the standard written Sorani of Sulaymaniyah and Erbil (correct ڕ ڵ ێ ۆ ە ک ی, Kurdish digits). Also repair broken words that mix Latin letters into a Kurdish word (e.g. «سانتیstateۆ» → «سانتیاگۆ»), and replace any stray English word that slipped into the Kurdish with its Kurdish word (keep only real technical names in brackets like «(RAM)»). Keep the meaning, the order, the length, every Markdown sign (**, #, -, 1.), line breaks, emojis, numbers, names, English words in brackets, and every ⟦0⟧-style marker exactly as they are. Where a common native Kurdish word exists for an Arabic/Persian/English loanword, replace it (زانیاری not معلومات، بەکارهێنەر not مستخدم، کێشە not مشکلة، چارەسەر not حل، گرنگ not مهم، بەڵام not لکن، هەروەها not أيضا)، but keep names and normal tech words (ئینتەرنێت، ئیمەیڵ، ئەپ، فایل). Do not add or remove ideas. Return only the corrected text.",
@@ -456,7 +456,7 @@ const searchOff = new Set(); // models where Google search is not allowed
 */
 const noteDebug = (list, obj) => { if (hasRedis()) redis("LPUSH", "dbg:" + list, JSON.stringify({ t: new Date().toISOString(), ...obj })).then(() => redis("LTRIM", "dbg:" + list, 0, 19)).catch(() => {}); };
 const noteRefusal = (why) => { if (hasRedis()) redis("LPUSH", "dbg:refusals", JSON.stringify({ t: new Date().toISOString(), why: String(why).replace(/key=[^&\s]+/gi, "key=…").slice(0, 160) })).then(() => redis("LTRIM", "dbg:refusals", 0, 19)).catch(() => {}); };
-async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb, start = 1) {
+async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSAL.ckb, start = 1, retried = false) {
   let lastErr = null;
   let sentAny = false;
   // Google's filter often stops normal Kurdish answers by mistake. The first time, start again quietly
@@ -525,6 +525,19 @@ async function* answer(models, contents, baseConfig, useSearch, refusal = REFUSA
     }
   }
   if (safetyRetry && !sentAny) { noteRefusal(lastWhy + " | last: " + errText(lastErr)); yield refusal; return; }
+  // Every model said "full": that is usually Google's per-MINUTE free limit, which clears in seconds — not many
+  // users. Wait a moment and quietly try once more before giving up (the user only sees the answer arrive).
+  if (isRateLimit(lastErr) && !sentAny && !retried) {
+    await sleep(3500);
+    let got = false;
+    for await (const t of answer(models, contents, baseConfig, false, refusal, Math.max(start, 2), true)) {
+      if (!got && /^\u0000ERR:busy$/.test(t)) break; // still full: fall through to the other services below
+      got = true;
+      yield t;
+    }
+    if (got) return;
+    yield "\u0000ERR:busy"; return; // the second round already tried the other services too
+  }
   noteDebug("ai_errors", { models: models.join(","), error: errText(lastErr).replace(/key=[^&\s]+/gi, "key=…").slice(0, 200) });
   // every Gemini key is full: the other free services answer instead (Gemma first — on the same keys, with its own
   // free limit, and good with Kurdish), so chat, files and construction keep going when many people use the app
@@ -664,7 +677,7 @@ export async function POST(req) {
         const q = await capped(jsonCall(
           "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/last/this year/now/who won' topics. Kurdish hints: کۆتا/کۆتایی/دوایین/kota = last/latest, برد/بردی/brd = won, خەڵات = award, باڵندۆر/باڵۆن دۆر/balndor = Ballon d'Or, جام = cup, ئەنجام = result, یاری = match, هەڵبژاردن = election, نرخ = price. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
           [{ text: `Message (often Kurdish Sorani or Badini, or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
-          { maxTokens: 200, think: "minimal", timeoutMs: 1600, deadline: Date.now() + 1600 },
+          { maxTokens: 200, think: "minimal", timeoutMs: 1600, deadline: Date.now() + 1600, light: true },
         ), 1600, null);
         const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
         if (got.length) queries = got.slice(0, 10);

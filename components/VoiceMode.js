@@ -16,7 +16,7 @@ const TX = {
   mic: { ckb: "ڕێگە بە مایکرۆفۆن بدە لە ڕێکخستنەکانی مۆبایلەکەت، پاشان دووبارە هەوڵ بدەرەوە.", kmr: "د ڕێکخستنێن مۆبایلا خۆ دا دەستویریێ بدە مایکرۆفۆنێ، پاشان دووبارە هەول بدە.", ar: "اسمح باستخدام الميكروفون من إعدادات الهاتف ثم حاول مجدداً.", en: "Allow the microphone in your phone settings, then try again." },
   error: { ckb: "پەیوەندی نەکرا. دابگرە بۆ دووبارە هەوڵدان.", kmr: "پەیوەندی چێنەبوو. بۆ دووبارە هەولدانێ کلیک بکە.", ar: "تعذّر الاتصال. اضغط للمحاولة مجدداً.", en: "Couldn't connect. Tap to try again." },
   voiceLimit: { ckb: "کاتی دەنگی ئەمڕۆت تەواو بوو. بۆ کاتی زیاتر پلانێکی Pro هەڵبژێرە.", kmr: "دەمێ دەنگی یێ ئەڤرۆ ب دوماهی هات. بۆ دەمەکێ پتر پلانەکا Pro هەلبژێرە.", ar: "انتهت دقائق الصوت لليوم. اختر خطة Pro لوقت أطول.", en: "Today's voice minutes are used up. Choose a Pro plan for more." },
-  busy: { ckb: "ئێستا داواکاری زۆرە. کەمێکی تر هەوڵ بدەرەوە.", kmr: "نوکە داخوازی گەلەکن. پشتی کێمەکێ هەول بدە.", ar: "الضغط مرتفع الآن. حاول بعد قليل.", en: "Too many requests right now. Try again shortly." },
+  busy: { ckb: "AI بۆ چەند چرکەیەک سەرقاڵ بوو. دووبارە قسە بکە.", kmr: "AI بۆ چەند چرکەیان مژویل بوو. دووبارە باخڤە.", ar: "كان الذكاء الاصطناعي مشغولاً لثوانٍ. تحدث مرة أخرى.", en: "The AI was busy for a few seconds. Please speak again." },
   teacher: { ckb: "مامۆستای زمان", kmr: "مامۆستایێ زمانی", ar: "معلم اللغة", en: "Language teacher" },
 };
 
@@ -175,7 +175,7 @@ export default function VoiceMode({ lang, getToken, history, tutor, greeting, on
       } catch (e) {
         if (!alive.current || e?.name === "AbortError") return;
         if (attempt === 2) { setMsg(e.message === "busy" ? tl("busy") : tl("error")); setPhase("idle"); return; }
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, (e.message === "busy" ? 2500 : 1000) * (attempt + 1))); // a full minute-limit clears in seconds
       }
     }
     acc = acc.replace(/\n*\u0000ERR:\w+\s*$/, "");
