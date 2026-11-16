@@ -94,6 +94,14 @@ const TX = {
   t_yard: { ckb: "حەوشە", kmr: "حەوش", ar: "فناء", en: "Yard" }, t_hall: { ckb: "ڕاڕەو", kmr: "ڕاڕەو", ar: "ممر", en: "Hall" },
   t_stairs: { ckb: "پەیژە", kmr: "پەیسک", ar: "درج", en: "Stairs" }, t_storage: { ckb: "کۆگا", kmr: "کۆگەه", ar: "مخزن", en: "Storage" },
   t_office: { ckb: "ئۆفیس", kmr: "ئۆفیس", ar: "مكتب", en: "Office" }, t_laundry: { ckb: "جلشۆر", kmr: "جلشۆر", ar: "غسيل", en: "Laundry" },
+  notPlanInterior: { ckb: "ئەمە وێنەی ناوەوەی ژوورێکە، نەخشە نییە. ئەم بەشە تەنها نەخشە وەردەگرێت.", kmr: "ئەڤە وێنێ ناڤخۆیا ژوورەکێیە، نەخشە نینە. ئەڤ پشکە تنێ نەخشێ وەردگریت.", ar: "هذه صورة داخل غرفة وليست مخططاً. هذا القسم يقبل المخططات فقط.", en: "This is a photo of a room, not a plan. This section only takes floor plans." },
+  notPlanExterior: { ckb: "ئەمە وێنەی دەرەوەی خانوو یان باخچەیە، نەخشە نییە. ئەم بەشە تەنها نەخشە وەردەگرێت.", kmr: "ئەڤە وێنێ دەرڤەیێ خانیی یان باخچەیێیە، نەخشە نینە. ئەڤ پشکە تنێ نەخشێ وەردگریت.", ar: "هذه صورة خارجية لمنزل أو حديقة وليست مخططاً. هذا القسم يقبل المخططات فقط.", en: "This is a photo of the outside of a house or garden, not a plan. This section only takes floor plans." },
+  goInterior: { ckb: "🛋️ بیبە بۆ بەشی دیزاینی ناوەوە", kmr: "🛋️ ببە بۆ پشکا دیزاینا ناڤخۆ", ar: "🛋️ انقلها إلى قسم التصميم الداخلي", en: "🛋️ Take it to Interior design" },
+  goExterior: { ckb: "🏡 بیبە بۆ بەشی دیزاینی دەرەوە", kmr: "🏡 ببە بۆ پشکا دیزاینا دەرڤە", ar: "🏡 انقلها إلى قسم التصميم الخارجي", en: "🏡 Take it to Exterior design" },
+  hd: { ckb: "🖼️ کوالیتی 4K (هەر وێنەیەک بە ٢ حیساب دەکرێت)", kmr: "🖼️ کوالیتیا 4K (هەر وێنەک ب ٢ دهێتە هژمارتن)", ar: "🖼️ جودة 4K (كل صورة تُحسب كصورتين)", en: "🖼️ 4K quality (each picture counts as 2)" },
+  hdSub: { ckb: "وێنەکان بە وردییەکی بەرز دروست دەکرێن و بە قەبارەی 4K (3840px) دادەگیرێن.", kmr: "وێنە ب هوورگەهیەکا بلند دهێنە دروستکرن و ب قەبارێ 4K (3840px) دهێنە داگرتن.", ar: "تُصنع الصور بتفاصيل عالية وتُنزّل بحجم 4K (3840px).", en: "Pictures are made in high detail and saved at 4K size (3840px)." },
+  autoRead: { ckb: "نەخشەکەی ڕاوێژکاری گەیشت، دەخوێنرێتەوە…", kmr: "نەخشا ڕاوێژکاریێ گەهشت، دهێتە خواندن…", ar: "وصل مخطط المستشار، جارٍ قراءته…", en: "The plan from the assistant arrived, reading it…" },
+  fromChat: { ckb: "✅ ئەم نەخشەیە لە بەشی ڕاوێژکارییەوە هات. ڕووکار، 3D و 4K هەڵبژێردراون، ژوورەکان بپشکنە و دوگمەی دروستکردن دابگرە.", kmr: "✅ ئەڤ نەخشە ژ پشکا ڕاوێژکاریێ هات. ڕووکار، 3D و 4K هاتنە هەلبژارتن، ژووران بپشکنە و دوگمەیا دروستکرنێ بکە.", ar: "✅ هذا المخطط جاء من قسم المستشار. تم اختيار الواجهة و3D و4K، راجع الغرف واضغط زر الإنشاء.", en: "✅ This plan came from the assistant. Exterior, 3D and 4K are selected — check the rooms and tap Create." },
   t_balcony: { ckb: "بالکۆن", kmr: "بالکۆن", ar: "شرفة", en: "Balcony" }, t_other: { ckb: "هی تر", kmr: "یێن دی", ar: "أخرى", en: "Other" },
 };
 const TYPES = ["living", "guest", "bedroom", "kitchen", "dining", "bath", "garage", "garden", "yard", "hall", "stairs", "storage", "office", "laundry", "balcony", "other"];
@@ -127,6 +135,20 @@ function download(href, name) {
   const a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }
 
+// 4K: the high-detail picture enlarged to 3840px on the long side with smooth, sharp scaling (in two steps for a cleaner result).
+async function to4k(src) {
+  const im = await loadImg(src);
+  const long = Math.max(im.width, im.height);
+  if (long >= 3840) return src;
+  const k = 3840 / long, W = Math.round(im.width * k), H = Math.round(im.height * k);
+  const mid = document.createElement("canvas"); mid.width = Math.round((im.width + W) / 2); mid.height = Math.round((im.height + H) / 2);
+  const m = mid.getContext("2d"); m.imageSmoothingEnabled = true; m.imageSmoothingQuality = "high"; m.drawImage(im, 0, 0, mid.width, mid.height);
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.filter = "contrast(1.03) saturate(1.04)"; g.drawImage(mid, 0, 0, W, H);
+  return c.toDataURL("image/jpeg", 0.93);
+}
+
 // The top view of every floor, side by side in one picture (one floor = just that floor).
 function floorsTopView(plan, imgs, style, lang, tx) {
   const floors = [...new Set(plan.rooms.map((r) => r.floor || 1))].sort((a, b) => a - b);
@@ -153,7 +175,7 @@ function floorsTopView(plan, imgs, style, lang, tx) {
   return out.toDataURL("image/jpeg", 0.9);
 }
 
-export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initialPlan }) {
+export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initialPlan, autoRead, fromChat, onGoTool }) {
   const tx = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
   const rtl = lang !== "en";
   const fileRef = useRef(null);
@@ -168,6 +190,9 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
   const [styles, setStyles] = useState(["modern", "classic"]);
   const [views, setViews] = useState([]); // "exterior", "aerial", "r0", "r1", …
   const [pano, setPano] = useState(false);
+  const [hd, setHd] = useState(!!fromChat); // 4K: made at 1920px and saved at 3840px
+  const [wrong, setWrong] = useState(null); // { kind, preview }: a photo that belongs to another section
+  const autoRef = useRef(!!autoRead);
   const [viewer, setViewer] = useState(null); // src of a 360° picture being viewed
   const [tops, setTops] = useState({}); // style → top view of the user's own plan (drawn here, free)
   useEffect(() => {
@@ -201,7 +226,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
 
   // A plan sent straight from a construction answer: use it right away. Otherwise bring back the last project.
   useEffect(() => {
-    if (initialPlan) { takeFile(initialPlan); return; }
+    if (initialPlan) { setPlanImgs([]); setPlan(null); setStep("upload"); takeFile(initialPlan, true); return; }
     try {
       const d = JSON.parse(localStorage.getItem("ahm-house-v1") || "null");
       if (d?.planImgs?.length) { setPlanImgs(d.planImgs); setWish(d.wish || ""); if (d.plan?.rooms?.length) { setPlan(d.plan); setInfo(d.info || { notes: [], unclear: [], entrance: "" }); setViews(d.views || []); setStep("rooms"); } }
@@ -217,22 +242,27 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
     e.target.value = "";
     if (f) takeFile(f);
   }
-  async function takeFile(f) {
-    setError("");
+  async function takeFile(f, fresh) {
+    setError(""); setWrong(null);
     try {
       const [full, ref] = await Promise.all([shrink(f, 1400), shrink(f, 500, 0.8)]);
       const preview = "data:image/jpeg;base64," + full;
       const im = await loadImg(preview);
-      setPlanImgs((list) => [...list, { full, ref, preview, w: im.width, h: im.height }].slice(0, 4));
+      setPlanImgs((list) => [...(fresh ? [] : list), { full, ref, preview, w: im.width, h: im.height }].slice(0, 4));
     } catch { setError(tx("e_bad_image")); }
   }
+  // A plan sent from the construction assistant is read straight away.
+  useEffect(() => {
+    if (autoRef.current && planImgs.length === 1 && step === "upload" && !busy) { autoRef.current = false; analyze(); }
+  }, [planImgs]);
 
   async function analyze() {
     if (!planImgs.length || busy) return;
     setBusy(true); setError("");
     try {
       // Each picture is read on its own; with several pictures, picture 1 = floor 1, picture 2 = floor 2, …
-      const res = await Promise.all(planImgs.map((im, i) => api("POST", { action: "analyze", image: im.full, note: wish, lang, floor: planImgs.length > 1 ? i + 1 : undefined })));
+      const res = await Promise.all(planImgs.map((im, i) => api("POST", { action: "analyze", image: im.full, note: wish, lang, floor: planImgs.length > 1 ? i + 1 : undefined })
+        .catch((e) => { e.img = im; throw e; })));
       const rooms = res.flatMap((j, i) => j.plan.rooms.map((r) => ({ ...r, img: i, floor: planImgs.length > 1 ? i + 1 : r.floor || 1 })));
       const floors = Math.max(planImgs.length, ...rooms.map((r) => r.floor || 1), ...res.map((j) => j.plan.floors || 1));
       const area = res.every((j) => j.plan.area) ? Math.round(res.reduce((n, j) => n + j.plan.area, 0) * 10) / 10 : res[0].plan.area;
@@ -240,9 +270,13 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
       setPlan(merged);
       const all = (k) => res.flatMap((j) => j[k] || []);
       setInfo({ notes: all("notes").slice(0, 6), unclear: all("unclear").slice(0, 6), entrance: res[0].entrance || "" });
-      setViews(["exterior", ...rooms.map((_, i) => "r" + i)]);
+      setViews(["exterior", "aerial", ...rooms.map((_, i) => "r" + i)]);
       setStep("rooms");
-    } catch (e) { setError(errText(e.message)); }
+    } catch (e) {
+      const k = e.data?.kind;
+      if (e.message === "not_plan" && (k === "interior" || k === "exterior") && e.img) setWrong({ kind: k, preview: e.img.preview });
+      else setError(errText(e.message));
+    }
     setBusy(false);
   }
 
@@ -252,10 +286,10 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
   const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   const roomIds = views.filter((v) => v[0] === "r" && plan?.rooms[+v.slice(1)]);
-  const ids = [...views.filter((v) => v === "exterior"), ...roomIds,
+  const ids = [...views.filter((v) => v === "exterior" || v === "aerial"), ...roomIds,
     ...(pano ? roomIds.filter((v) => !NO_PANO.has(plan.rooms[+v.slice(1)].type)).map((v) => "p" + v.slice(1)) : [])];
   const jobs = styles.flatMap((s) => ids.map((v) => `${s}:${v}`));
-  const cost = (k) => (k.split(":")[1][0] === "p" ? 2 : 1);
+  const cost = (k) => (k.split(":")[1][0] === "p" || hd ? 2 : 1);
   const total = jobs.reduce((n, k) => n + cost(k), 0);
   const left = quota?.left; // null = no limit
   const over = left != null && total > left;
@@ -273,7 +307,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
     try {
       const r = await fetch("/api/house", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
-        body: JSON.stringify({ action: "render", style, view, room: isRoom ? +id.slice(1) : undefined, pano: id[0] === "p", plan,
+        body: JSON.stringify({ action: "render", style, view, room: isRoom ? +id.slice(1) : undefined, pano: id[0] === "p", plan, hd: hd && id[0] !== "p",
           ref: view === "exterior" || view === "aerial" ? planImg.ref : undefined, wish, seed, lang }),
       });
       if (!r.ok || !(r.headers.get("content-type") || "").startsWith("image/")) {
@@ -281,7 +315,8 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
         const e = new Error(j.error || "net"); e.data = j; throw e;
       }
       const blob = await r.blob();
-      const src = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(blob); });
+      let src = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(blob); });
+      if (hd && id[0] !== "p") src = await to4k(src).catch(() => src);
       setPics((p) => ({ ...p, [key]: { state: "ok", src, seed: +r.headers.get("x-seed") || undefined } }));
       setBoards((b) => ({ ...b, [style]: undefined }));
       const l = r.headers.get("x-left");
@@ -453,6 +488,20 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
         {step === "upload" && <p className="muted house-sub">{tx("sub")}</p>}
         {quotaLine && <p className="house-quota">{quotaLine}</p>}
         {error && <p className="learn-err" role="alert">{error}</p>}
+        {wrong && (
+          <div className="house-wrong" role="alert">
+            <img src={wrong.preview} alt="" />
+            <div>
+              <b>{tx(wrong.kind === "interior" ? "notPlanInterior" : "notPlanExterior")}</b>
+              {onGoTool && <button className="gold-btn small" onClick={async () => {
+                const b = await (await fetch(wrong.preview)).blob();
+                onGoTool(wrong.kind, new File([b], "photo.jpg", { type: "image/jpeg" }));
+              }}>{tx(wrong.kind === "interior" ? "goInterior" : "goExterior")}</button>}
+              <button className="ghost-btn" onClick={() => { setWrong(null); setPlanImgs((l) => l.filter((x) => x.preview !== wrong.preview)); }}>✕ {tx("remove")}</button>
+            </div>
+          </div>
+        )}
+        {fromChat && step === "rooms" && <p className="house-ok">{tx("fromChat")}</p>}
 
         {step === "upload" && (
           <div className="house-card">
@@ -478,7 +527,7 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
               <textarea value={wish} onChange={(e) => setWish(e.target.value.slice(0, 300))} placeholder={tx("wishPh")} rows={2} />
             </label>
             <button className="gold-btn" disabled={!planImgs.length || busy} onClick={analyze}>
-              {busy ? <><span className="mini-spin" /> {tx("reading")}</> : tx("read")}
+              {busy ? <><span className="mini-spin" /> {tx(fromChat ? "autoRead" : "reading")}</> : tx("read")}
             </button>
             <p className="cs-note">{tx("disclaimer")}</p>
           </div>
@@ -541,13 +590,17 @@ export default function HouseStudio({ lang, getToken, onBack, onUpgrade, initial
             </div>
             <h3>{tx("views")}</h3>
             <div className="house-chips">
-              {["exterior", ...plan.rooms.map((_, i) => "r" + i)].map((v) => (
+              {["exterior", "aerial", ...plan.rooms.map((_, i) => "r" + i)].map((v) => (
                 <button key={v} className={views.includes(v) ? "on" : ""} aria-pressed={views.includes(v)} onClick={() => toggle(views, setViews, v)}>{viewName(v)}</button>
               ))}
             </div>
             <label className="house-check">
               <input type="checkbox" checked={pano} onChange={(e) => setPano(e.target.checked)} />
               <span><b>{tx("pano")}</b><small>{tx("panoSub")}</small></span>
+            </label>
+            <label className="house-check">
+              <input type="checkbox" checked={hd} onChange={(e) => setHd(e.target.checked)} />
+              <span><b>{tx("hd")}</b><small>{tx("hdSub")}</small></span>
             </label>
             {over && (
               <div className="house-warn">

@@ -1980,8 +1980,11 @@ function Main({ session }) {
   const recRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
   const [housePlan, setHousePlan] = useState(null); // a plan picture sent from a construction answer
+  const [houseFrom, setHouseFrom] = useState("studio"); // where "back" goes from the plan section
+  const [planNotice, setPlanNotice] = useState(false); // "your plan is going to the plan section…"
+  const [studioJump, setStudioJump] = useState(null); // { tool, file, at }: open a studio section with this photo
   useEffect(() => {
-    const open = (e) => { setHousePlan(e.detail); setView("house"); setSideOpen(false); };
+    const open = (e) => { setHouseFrom("chat"); setHousePlan(e.detail); setView("house"); setSideOpen(false); };
     window.addEventListener("ahm-house-plan", open);
     return () => window.removeEventListener("ahm-house-plan", open);
   }, []);
@@ -2852,7 +2855,7 @@ function Main({ session }) {
       return ERR.test(acc) && !acc.replace(ERR, "").trim() ? "retry" : "ok";
     };
 
-    let autoNext = null, prog = null, moreTok = null, reviewMe = false, chainWait = false, stalled = false;
+    let autoNext = null, prog = null, moreTok = null, reviewMe = false, chainWait = false, stalled = false, planToStudio = null;
     try {
       // When the AI is busy (many people at once), wait in line instead of failing:
       // free AI limits refill every minute, so keep trying quietly for about a minute.
@@ -2899,6 +2902,11 @@ function Main({ session }) {
           setAutoVoice(`${id}:${replyIndex}`);
         }
         if (ERR.test(acc)) { const sp = split(acc); put([...sp.msgs, { role: "assistant", content: clean(sp.body), failed: true }]); }
+        // Construction assistant drew a floor plan: it goes straight to the plan section (3D / 4K) by itself.
+        if (m === "construct" && !isVoice && !ERR.test(acc)) {
+          const sv = acc.match(/```svg\s*\n([\s\S]*?<\/svg>)/i);
+          if (sv) planToStudio = sv[1];
+        }
       }
     } catch (e) {
       if (e?.name === "AbortError") {
@@ -2918,6 +2926,14 @@ function Main({ session }) {
       loadMe();
       if (autoNext && !ctrl.signal.aborted) setTimeout(() => autoRef.current?.(autoNext.text, autoNext.auto, { cont: autoNext.cont, rounds: autoNext.rounds, checks: opts.checks }), autoNext.cont ? 1200 : 600);
       else if (reviewMe && !ctrl.signal.aborted) { reviewing.current = true; setTimeout(() => runReview(id, opts), 700); }
+      if (planToStudio && !ctrl.signal.aborted) {
+        const svg = planToStudio;
+        setPlanNotice(true);
+        setTimeout(async () => {
+          try { window.dispatchEvent(new CustomEvent("ahm-house-plan", { detail: await svgToPng(await svgWithFonts(svg)) })); } catch {}
+          setPlanNotice(false);
+        }, 2600);
+      }
     }
   }
 
@@ -3234,16 +3250,20 @@ function Main({ session }) {
           </div>
         )}
 
+        {planNotice && <div className="plan-going" role="status"><span className="mini-spin" /> {t("planGoing")}</div>}
         {view === "learn" ? (
           <Learn lang={lang} uid={uid} getToken={token} onTutor={startTutor} onVoiceTutor={startVoiceTutor}
             onLimit={() => showLimit()} />
         ) : view === "studio" ? (
-          <DesignStudio lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })}
-            onOpenPlan={() => { setHousePlan(null); setView("house"); }} onChat={() => { setView("chat"); chooseTool("construct"); }} />
+          <DesignStudio key={studioJump ? studioJump.at : 0} lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })}
+            initialTool={studioJump?.tool} initialFile={studioJump?.file}
+            onOpenPlan={(file) => { setStudioJump(null); setHouseFrom("studio"); setHousePlan(file || null); setView("house"); }} onChat={() => { setStudioJump(null); setView("chat"); chooseTool("construct"); }} />
         ) : view === "slides" ? (
           <SlidesStudio lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : view === "house" ? (
-          <HouseStudio key={housePlan ? housePlan.size : 0} lang={lang} getToken={token} initialPlan={housePlan} onBack={() => setView("studio")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
+          <HouseStudio key={housePlan ? housePlan.size + ":" + houseFrom : 0} lang={lang} getToken={token} initialPlan={housePlan} autoRead={!!housePlan}
+            fromChat={houseFrom === "chat"} onBack={() => { setStudioJump(null); setView(houseFrom === "chat" ? "chat" : "studio"); }}
+            onGoTool={(tool, file) => { setStudioJump({ tool, file, at: Date.now() }); setView("studio"); }} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : (
         <div className="body" ref={bodyRef}>
           <div className="chat-col">
@@ -3313,7 +3333,7 @@ function Main({ session }) {
                       <h2 className="greet">{mode === "build" ? (KIND_IC[active.buildKind] || "") + " " + t("kind" + KindK(active.buildKind)) : mode === "construct" ? t("constructQ") : t("helpQ")}</h2>
                       <p className="muted">{mode === "build" ? t("kind" + KindK(active.buildKind) + "Intro") : mode === "construct" ? t("constructSub") : t("helpSub")}</p>
                       {mode === "construct" && (
-                        <button className="house-cta" onClick={() => { setView("house"); setSideOpen(false); }}>
+                        <button className="house-cta" onClick={() => { setHouseFrom("chat"); setHousePlan(null); setView("house"); setSideOpen(false); }}>
                           <span className="hc-ic" aria-hidden="true">🏡</span>
                           <span><b>{t("houseCta")} <em className="new-badge">{t("updateNew")}</em></b><small>{t("houseCtaSub")}</small></span>
                         </button>
@@ -3322,10 +3342,15 @@ function Main({ session }) {
                         <div className="cs-tools">
                           {[["🏠", "csIdeas"], ["📐", "csPlan"], ["🧱", "csCost"], ["📖", "csTerms"]].map(([ic, k]) => (
                             <button key={k} onClick={() => { setInput(t(k + "Tpl")); setTimeout(() => { ta.current?.focus(); if (ta.current) { ta.current.style.height = "auto"; ta.current.style.height = Math.min(ta.current.scrollHeight, 160) + "px"; } }, 30); }}>
-                              <span className="cs-ic">{ic}</span><b>{t(k)}</b><small>{t(k + "Sub")}</small>
+                              <span className={"cs-ic " + k}>{ic}</span><b>{t(k)}</b><small>{t(k + "Sub")}</small>
                             </button>
                           ))}
                         </div>
+                      )}
+                      {mode === "construct" && (
+                        <ol className="cs-flow" aria-label={t("csPlan")}>
+                          {[["💬", "csFlow1"], ["📐", "csFlow2"], ["🧊", "csFlow3"]].map(([ic, k], i) => <li key={k}><span>{ic}</span><small>{i + 1}</small>{t(k)}</li>)}
+                        </ol>
                       )}
                       {mode === "construct" && <p className="cs-note">⚠️ {t("csDisclaimer")}</p>}
                       <div className="chips">

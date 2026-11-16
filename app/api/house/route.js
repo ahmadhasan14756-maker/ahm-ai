@@ -31,7 +31,7 @@ Rules:
 - "floors" = how many floors are drawn in this picture (1 if only one). If several floor plans are drawn side by side, give each room its "floor" (1 = ground floor). Otherwise "floor" is 1.
 - "box" = where the room is drawn in the picture, as [ymin, xmin, ymax, xmax] from 0 to 1000 (0,0 = top-left of the picture). Follow the drawn walls exactly; neighbouring rooms share their wall line.
 - "name", "entrance", "notes" and "unclear" must be written in ${lang}. Keep notes short (max 4), e.g. where the entrance and garage are, which rooms are next to each other.
-- If the picture is not a floor plan, return {"isPlan": false}.`;
+- If the picture is not a floor plan, return {"isPlan": false, "kind": "interior" | "exterior" | "other"} ("interior" = a photo of the inside of a room, "exterior" = the outside of a building, a garden or a plot of land).`;
 
 async function context(req) {
   const user = await getUser(req);
@@ -68,7 +68,7 @@ export async function POST(req) {
         { inlineData: { mimeType: "image/jpeg", data: img } },
         { text: "Read this floor plan." + (Number(body.floor) > 1 ? ` This picture is floor number ${Number(body.floor)} of the house (1 = ground floor); set "floors" to 1 and every room's "floor" to 1.` : "") + (note ? ` The owner says: ${note}` : "") },
       ], { maxTokens: 4000, think: "low" });
-      if (!out?.isPlan) return err("not_plan");
+      if (!out?.isPlan) return err("not_plan", 400, { kind: ["interior", "exterior"].includes(out?.kind) ? out.kind : "other" });
       await chargeUsage(profile, usage);
       const plan = cleanPlan(out);
       const list = (a) => (Array.isArray(a) ? a.slice(0, 6).map((x) => String(x).slice(0, 200)) : []);
@@ -89,13 +89,14 @@ export async function POST(req) {
       const plan = cleanPlan(body.plan);
       const room = Number.isInteger(body.room) ? body.room : -1;
       const pano = view === "room" && body.pano === true;
-      const cost = pano ? 2 : 1; // a 360° picture is twice as big
+      const hd = !pano && body.hd === true; // 4K: made in high detail (1920px), enlarged to 3840px in the app
+      const cost = pano || hd ? 2 : 1; // a 360° or 4K picture is twice as big
       if (left.left !== null && left.left < cost) return err("limit", 402, left);
       const ref = usesPlan(view) && typeof body.ref === "string" && body.ref.length < 400_000 && B64.test(body.ref) ? { data: body.ref } : null;
       const seed = Number.isInteger(body.seed) ? body.seed % 2_147_483_647 : Math.floor(Math.random() * 1e9);
       const prompt = housePrompt({ view, style, plan, wish: body.wish, room, pano });
       if (!prompt) return err("bad_request");
-      const pic = await makeImage({ prompt, ref, seed, width: pano ? 1920 : 1280, height: pano ? 960 : 768 });
+      const pic = await makeImage({ prompt, ref, seed, width: pano || hd ? 1920 : 1280, height: pano ? 960 : hd ? 1152 : 768 });
       await houseSpend(user.id, usage, cost);
       const after = left.left === null ? null : left.left - cost;
       // Sent as the picture itself (not text), so big 360° pictures stay small enough to send.

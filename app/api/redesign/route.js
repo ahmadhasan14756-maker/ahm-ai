@@ -74,7 +74,10 @@ async function buildPrompt(o) {
   }
   const prompt = [
     `Redesign the ${subject} in image 0 as a photorealistic professional ${o.tool === "exterior" ? "architectural exterior" : "interior design"} photograph.`,
-    keep, facts, wish ? `Owner's wishes: ${wish}.` : "",
+    keep,
+    o.tool === "interior" ? "Furnish and decorate the whole room completely, as a professional interior designer would: every piece sized for this room's real dimensions and ceiling height, arranged around the existing windows, doors and walls, with clear walkways, a natural focal point, rugs, curtains, lighting, plants and finishing touches. Nothing floating, nothing out of scale." :
+    o.tool === "exterior" ? "Design the whole outside as a professional architect and landscape designer would: facade finishes, entrance, windows and roof details matched to this building's real shape and size, plus landscaping, paving, planting, outdoor lighting and fences that fit the plot. Everything at true scale for this building." : "",
+    facts, wish ? `Owner's wishes: ${wish}.` : "",
     "High-end architectural visualization, realistic materials and reflections, sharp details, balanced composition. No text, no watermark, no people.",
   ].filter(Boolean).join(" ");
   return { prompt, title };
@@ -256,6 +259,28 @@ export async function POST(req) {
       const buf = Buffer.from(await r.arrayBuffer());
       if (buf.length > 4_000_000) return err("bad_image");
       return new Response(buf, { headers: { "Content-Type": type.split(";")[0], "Cache-Control": "private, max-age=3600" } });
+    }
+    if (body.action === "check") {
+      // Which section does this photo belong to? interior room / outside of a building or garden / floor plan / something else.
+      if (!(await allow("ds-c:" + user.id, 30, 60000))) return tooMany();
+      const ref = String(body.ref || "");
+      if (!JPEG.test(ref) || ref.length > 400_000) return err("bad_image");
+      try {
+        const j = await Promise.race([
+          jsonCall('Look at this picture and say what it shows. Return JSON {"kind": "interior" | "exterior" | "plan" | "other", "empty": true|false}. ' +
+            '"interior" = a photo or render of the inside of a room or indoor space (living room, bedroom, kitchen, bathroom, office, shop, hall…), furnished or empty. ' +
+            '"exterior" = the outside of a house or building, a facade, roof, garden, yard, balcony, terrace, pool, garage from outside, or an empty plot of land. ' +
+            '"plan" = a floor plan, architectural drawing, blueprint, sketch of rooms from above or a technical drawing. ' +
+            '"other" = anything else (people, animals, food, documents, screenshots of chats, products…). "empty" = true when an interior has little or no furniture.',
+          [{ inlineData: { mimeType: "image/jpeg", data: ref } }, { text: "What is it? If you cannot see any picture, return {\"kind\": \"unknown\"}." }], { maxTokens: 120, think: "minimal", timeoutMs: 7000, deadline: Date.now() + 6000 }),
+          new Promise((ok) => setTimeout(() => ok(null), 7500)),
+        ]);
+        const kind = ["interior", "exterior", "plan", "other"].includes(j?.kind) ? j.kind : "unknown";
+        return Response.json({ kind, empty: j?.empty === true });
+      } catch (e) {
+        if (e.message === "unsafe") return err("unsafe");
+        return Response.json({ kind: "unknown" }); // never block the user when the check itself fails
+      }
     }
     if (body.action === "rename") return Response.json({ ok: await renameProject(user.id, String(body.id || ""), body.name) });
     if (body.action === "delete") return Response.json({ ok: await deleteProject(user.id, String(body.id || "")) });

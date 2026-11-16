@@ -24,6 +24,22 @@ const TX = {
   noProjects: L("هێشتا هیچ پرۆژەیەک نییە. ئامرازێک هەڵبژێرە و یەکەم دیزاینەکەت دروست بکە ✨", "لا مشاريع بعد. اختر أداة وأنشئ أول تصميم ✨", "No projects yet. Pick a tool and make your first design ✨", "هێشتا چو پرۆژە نینن. ئامرازەکێ هەلبژێرە و دیزاینا خۆ یا ئێکێ دروست بکە ✨"),
   upload: L("📷 وێنەکە ڕابکێشە ئێرە یان دایبگرە بۆ هەڵبژاردن", "📷 اسحب الصورة هنا أو اضغط للاختيار", "📷 Drop a photo here or tap to choose", "📷 وێنەی ڕاکێشە ڤێرە یان کلیک بکە بۆ هەلبژارتنێ"),
   uploadHint: L("JPG، PNG یان HEIC · وێنەیەکی ڕوون و پڕ ڕووناکی باشترین ئەنجام دەدات", "JPG أو PNG أو HEIC · الصورة الواضحة تعطي أفضل نتيجة", "JPG, PNG or HEIC · a clear, bright photo gives the best result", "JPG، PNG یان HEIC · وێنەکێ ڕوون و پڕ ڕووناهی باشترین ئەنجامی ددەت"),
+  checking: L("وێنەکە دەپشکنرێت…", "جارٍ فحص الصورة…", "Checking the photo…", "وێنە دهێتە پشکنین…"),
+  wayQ: L("دەتەوێت چۆن دیزاین بکرێت؟", "كيف تريد التصميم؟", "How would you like to design it?", "تە دڤێت چاوا دیزاین ببیت؟"),
+  wayAi: L("✨ با AI خۆی دیزاینی بکات", "✨ دع الذكاء الاصطناعي يصممها", "✨ Let the AI design it", "✨ بلا AI ب خۆ دیزاین بکەت"),
+  wayAiSub: L("AI شێواز، کەلوپەل و ڕەنگەکان بە گونجاوی لەگەڵ قەبارە و شێوەی ژوورەکە دادەنێت", "يضع الذكاء الاصطناعي الأسلوب والأثاث والألوان بما يناسب حجم الغرفة وشكلها", "The AI picks the style, furniture and colours to fit the room's real size and shape", "AI شێواز، کەلوپەل و ڕەنگان ب گونجاوی دگەل قەبارە و شێوێ ژوورێ دادنیت"),
+  wayAiExtSub: L("AI ڕووکار، باخچە و ڕووناکی بە گونجاوی لەگەڵ شێوەی خانووەکە و زەوییەکە دیزاین دەکات", "يصمم الذكاء الاصطناعي الواجهة والحديقة والإضاءة بما يناسب شكل المنزل والأرض", "The AI designs the facade, garden and lights to fit the building and the plot", "AI ڕووکار، باخچە و ڕووناهیێ ب گونجاوی دگەل شێوێ خانیی و ئەردی دیزاین دکەت"),
+  waySelf: L("🪄 خۆم دایدەنێم", "🪄 سأضعها بنفسي", "🪄 I'll place things myself", "🪄 ئەز ب خۆ دادنێم"),
+  waySelfSub: L("خۆت کەلوپەل هەڵدەبژێریت و لە شوێنی دڵخوازت دایدەنێیت، پاشان AI دەیکاتە وێنەیەکی ڕاستەقینە", "تختار الأثاث وتضعه حيث تريد، ثم يحوله الذكاء الاصطناعي إلى صورة حقيقية", "Pick furniture and put it where you want, then the AI turns it into a real photo", "تو ب خۆ کەلوپەلان هەلدبژێری و ل جهێ دلێ خۆ دادنێی، پاشان AI دکەتە وێنەکێ ڕاستەقینە"),
+  changeWay: L("↺ گۆڕینی ڕێگا", "↺ تغيير الطريقة", "↺ Change the way", "↺ گوهۆڕینا ڕێکێ"),
+  wrong_interior_exterior: L("ئەمە وێنەی دەرەوەیە. ئەم بەشە تەنها وێنەی ناوەوەی ژوور وەردەگرێت.", "هذه صورة خارجية. هذا القسم يقبل صور داخل الغرف فقط.", "This is an outside photo. This section only takes photos of the inside of rooms.", "ئەڤە وێنێ دەرڤەیە. ئەڤ پشکە تنێ وێنێن ناڤخۆیا ژووران وەردگریت."),
+  wrong_exterior_interior: L("ئەمە وێنەی ناوەوەی ژوورێکە. ئەم بەشە تەنها وێنەی دەرەوەی خانوو، باخچە یان زەوی وەردەگرێت.", "هذه صورة داخل غرفة. هذا القسم يقبل فقط صور الواجهات والحدائق والأراضي.", "This is a photo of a room. This section only takes the outside of a house, a garden or a plot.", "ئەڤە وێنێ ناڤخۆیا ژوورەکێیە. ئەڤ پشکە تنێ وێنێن دەرڤەیێ خانیی، باخچێ یان ئەردی وەردگریت."),
+  wrong_plan: L("ئەمە نەخشەیە. نەخشە دەچێتە بەشی «نەخشە و ئەندازیاری».", "هذا مخطط. المخططات تذهب إلى قسم «المخططات والعمارة».", "This is a floor plan. Plans go to the «Floor plan & architecture» section.", "ئەڤە نەخشەیە. نەخشە دچیتە پشکا «نەخشە و ئەندازیاری»."),
+  wrong_interior_other: L("ئەم وێنەیە ژوور نییە. تکایە وێنەی ناوەوەی ژوورێک بنێرە.", "هذه الصورة ليست غرفة. أرسل صورة من داخل غرفة.", "This photo is not a room. Please send a photo of the inside of a room.", "ئەڤ وێنە ژوور نینە. هیڤیە وێنێ ناڤخۆیا ژوورەکێ بهنێرە."),
+  wrong_exterior_other: L("ئەم وێنەیە خانوو یان باخچە نییە. تکایە وێنەی دەرەوەی خانوو، باخچە یان زەوی بنێرە.", "هذه الصورة ليست منزلاً أو حديقة. أرسل صورة واجهة أو حديقة أو أرض.", "This photo is not a house or garden. Please send the outside of a house, a garden or a plot.", "ئەڤ وێنە خانی یان باخچە نینە. هیڤیە وێنێ دەرڤەیێ خانیی، باخچێ یان ئەردی بهنێرە."),
+  goInterior: L("🛋️ بیبە بۆ بەشی دیزاینی ناوەوە", "🛋️ انقلها إلى التصميم الداخلي", "🛋️ Take it to Interior design", "🛋️ ببە بۆ پشکا دیزاینا ناڤخۆ"),
+  goExterior: L("🏡 بیبە بۆ بەشی دیزاینی دەرەوە", "🏡 انقلها إلى التصميم الخارجي", "🏡 Take it to Exterior design", "🏡 ببە بۆ پشکا دیزاینا دەرڤە"),
+  goPlan: L("📐 بیبە بۆ بەشی نەخشە و ئەندازیاری", "📐 انقلها إلى المخططات والعمارة", "📐 Take it to Floor plan & architecture", "📐 ببە بۆ پشکا نەخشە و ئەندازیاری"),
   change: L("گۆڕینی وێنە", "تغيير الصورة", "Change photo", "گوهۆڕینا وێنەی"),
   category: L("جۆر", "النوع", "Category", "جۆر"),
   style: L("شێواز", "الأسلوب", "Style", "شێواز"),
@@ -194,11 +210,12 @@ async function saveFile(src, name) {
   } catch { window.open(src, "_blank"); }
 }
 
-export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpenPlan, onChat }) {
+export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpenPlan, onChat, initialTool, initialFile }) {
   const tx = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
   const T = (o) => o?.[lang] ?? o?.ckb;
   const rtl = lang !== "en";
-  const [screen, setScreen] = useState("home");
+  const [screen, setScreen] = useState(["interior", "exterior", "redesign"].includes(initialTool) ? initialTool : "home");
+  const [jumpFile, setJumpFile] = useState(initialFile || null); // a photo moved here from another section
   const [quota, setQuota] = useState(null);
   const [projects, setProjects] = useState(null);
 
@@ -226,8 +243,9 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
   const tools = [["interior", "t_interior"], ["exterior", "t_exterior"], ["plan", "t_plan"], ["redesign", "t_redesign"]];
 
   if (screen !== "home") {
-    return <ToolView key={screen + (open?.id || "")} tool={screen} lang={lang} tx={tx} T={T} rtl={rtl} api={api} quota={quota} setQuota={setQuota}
-      project={open} onUpgrade={onUpgrade} onBack={() => { setScreen("home"); setOpen(null); loadProjects(); }} />;
+    return <ToolView key={screen + (open?.id || "") + (jumpFile ? jumpFile.size : "")} tool={screen} lang={lang} tx={tx} T={T} rtl={rtl} api={api} quota={quota} setQuota={setQuota}
+      project={open} onUpgrade={onUpgrade} onBack={() => { setScreen("home"); setOpen(null); setJumpFile(null); loadProjects(); }}
+      initialFile={jumpFile} onMove={(tool, file) => { if (tool === "plan") { onOpenPlan(file); return; } setOpen(null); setJumpFile(file); setScreen(tool); }} />;
   }
 
   return (
@@ -288,7 +306,7 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
   );
 }
 
-function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpgrade, onBack }) {
+function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpgrade, onBack, initialFile, onMove }) {
   const fileRef = useRef(null);
   const [photo, setPhoto] = useState(null); // { ref, original, preview, ratio }
   const [cat, setCat] = useState(0);
@@ -308,6 +326,10 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
   const [drag, setDrag] = useState(false);
   const [editing, setEditing] = useState(null); // { src, ratio } while placing furniture
   const [pano, setPano] = useState(null); // picture shown in the 360° viewer
+  const [way, setWay] = useState(project ? "ai" : null); // "ai" = the AI designs it, null = not chosen yet
+  const [wrong, setWrong] = useState(null); // { kind, file, preview }: this photo belongs to another section
+  const [checking, setChecking] = useState(false);
+  const checked = tool === "interior" || tool === "exterior"; // these two only take their own kind of photo
   const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const errText = (c) => (TX["e_" + c] ? tx("e_" + c) : tx("e_net"));
 
@@ -316,12 +338,25 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
     setError("");
     if (!/^image\//.test(f.type || "image/")) { setError(tx("e_bad_image")); return; }
     if (f.size > 25_000_000) { setError(tx("e_bad_image")); return; }
+    setWrong(null);
     try {
       const [small, big] = await Promise.all([shrink(f, 496, 0.82), shrink(f, 1280, 0.85)]);
-      setPhoto({ ref: small.data, original: big.data, preview: "data:image/jpeg;base64," + big.data, ratio: big.w / big.h });
-      if (!project) { setResults([]); setProjectId(""); }
-    } catch { setError(tx("e_bad_image")); }
+      const preview = "data:image/jpeg;base64," + big.data;
+      if (checked && !project) {
+        // make sure the photo belongs to this section (a room for interior, the outside for exterior)
+        setChecking(true);
+        const j = await api({ action: "check", ref: small.data }).catch(() => ({ kind: "unknown" }));
+        setChecking(false);
+        const k = j?.kind;
+        if (k === "plan" || k === "other" || (tool === "interior" && k === "exterior") || (tool === "exterior" && k === "interior")) {
+          setPhoto(null); setWrong({ kind: k, file: f, preview }); return;
+        }
+      }
+      setPhoto({ ref: small.data, original: big.data, preview, ratio: big.w / big.h });
+      if (!project) { setResults([]); setProjectId(""); setWay(checked ? null : "ai"); }
+    } catch { setChecking(false); setError(tx("e_bad_image")); }
   }
+  useEffect(() => { if (initialFile) takeFile(initialFile); }, []);
   // reopening a saved project: bring back its original photo so new versions can be made
   useEffect(() => {
     if (!project?.originalUrl) return;
@@ -396,6 +431,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
   }
 
   const result = results[sel];
+  const panelShown = !checked || way === "ai" || results.length > 0 || (!photo && !wrong && !checking);
   if (editing) {
     return (
       <div className="house ds" dir={rtl ? "rtl" : "ltr"}>
@@ -426,7 +462,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
         {quota && quota.left != null && <p className="house-quota">{(quota.pro ? tx("leftPro") : tx("left")).replace("{n}", quota.left)}</p>}
         {error && <p className="learn-err" role="alert">{error}</p>}
 
-        <div className="ds-work">
+        <div className={"ds-work" + (panelShown ? "" : " solo")}>
           <div className="ds-stage">
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; takeFile(f); }} />
             {result?.pano ? (
@@ -438,6 +474,21 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
                 <img src={photo.preview} alt="" />
                 {busy && <div className="ds-progress"><span className="mini-spin" /> {tx(busy)}<i /></div>}
               </div>
+            ) : wrong ? (
+              <div className="house-wrong" role="alert">
+                <img src={wrong.preview} alt="" />
+                <div>
+                  <b>{tx(wrong.kind === "plan" ? "wrong_plan" : `wrong_${tool}_${wrong.kind}`)}</b>
+                  {wrong.kind !== "other" && (
+                    <button className="gold-btn small" onClick={() => onMove(wrong.kind, wrong.file)}>
+                      {tx(wrong.kind === "plan" ? "goPlan" : wrong.kind === "interior" ? "goInterior" : "goExterior")}
+                    </button>
+                  )}
+                  <button className="ghost-btn" onClick={() => { setWrong(null); fileRef.current?.click(); }}>{tx("change")}</button>
+                </div>
+              </div>
+            ) : checking ? (
+              <div className="house-drop ds-drop"><b><span className="mini-spin" /> {tx("checking")}</b></div>
             ) : (
               <button className={"house-drop ds-drop" + (drag ? " drag" : "")} onClick={() => fileRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
@@ -467,9 +518,21 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
                 )}
               </>
             )}
-            {photo && !results.length && (
+            {photo && !results.length && checked && !way && !busy && (
+              <div className="ds-ways">
+                <p className="sl-label">{tx("wayQ")}</p>
+                <button className="ds-way ai" onClick={() => setWay("ai")}>
+                  <b>{tx("wayAi")}</b><small>{tx(tool === "exterior" ? "wayAiExtSub" : "wayAiSub")}</small>
+                </button>
+                <button className="ds-way self" onClick={openEditor}>
+                  <b>{tx("waySelf")}</b><small>{tx("waySelfSub")}</small>
+                </button>
+              </div>
+            )}
+            {photo && !results.length && (!checked || way) && (
               <div className="ds-actions ds-more">
                 <button className="ghost-btn" disabled={!!busy} onClick={() => fileRef.current?.click()}>{tx("change")}</button>
+                {checked && <button className="ghost-btn" disabled={!!busy} onClick={() => setWay(null)}>{tx("changeWay")}</button>}
                 <button className="ghost-btn" disabled={!!busy} onClick={openEditor}>{tx("furnish")}</button>
                 <button className="ghost-btn" disabled={!!busy || (quota && quota.left != null && quota.left < 2)} onClick={() => makeFrom("pano")} title={tx("panoNote")}>{tx("panoMake")}</button>
               </div>
@@ -477,7 +540,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
             {pano && <Pano360 src={pano} title="360°" hint={tx("drag360")} closeText={tx("close")} onClose={() => setPano(null)} />}
           </div>
 
-          <div className="ds-panel house-card">
+          {panelShown && <div className="ds-panel house-card">
             <p className="sl-label">{tx("category")}</p>
             <div className="house-chips">
               {CATS[tool].map((c, i) => <button key={i} className={cat === i ? "on" : ""} aria-pressed={cat === i} onClick={() => setCat(i)}>{T(c)}</button>)}
@@ -517,7 +580,7 @@ function ToolView({ tool, lang, tx, T, rtl, api, quota, setQuota, project, onUpg
               </button>
             )}
             <p className="cs-note">{tx("note")}</p>
-          </div>
+          </div>}
         </div>
       </div>
     </div>
