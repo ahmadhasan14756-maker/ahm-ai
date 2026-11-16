@@ -16,7 +16,7 @@ import { randomUUID, createHmac, timingSafeEqual, createHash } from "crypto";
 import { sendPush } from "../../../lib/push";
 import { extraWrite, extraCount } from "../../../lib/extraAI";
 import { mathForScreen } from "../../../lib/mathfmt";
-import { fixKurdishLetters, KURDISH_STYLE, BADINI_STYLE } from "../../../lib/kurdish";
+import { fixKurdishLetters, fixDialectWords, KURDISH_STYLE, BADINI_STYLE } from "../../../lib/kurdish";
 import { hasWebSearch, webSearch, searchBlock, rankResults } from "../../../lib/webSearch";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1073,6 +1073,12 @@ VOICE CONVERSATION MODE (most important rules)
           // the app can't show LaTeX, and RTL text flips equations: clean any $…$/\frac and make equations read
           // left-to-right. Only re-sends when it actually changed, so plain answers are untouched.
           if (/[$\\]|[\u2080-\u209c\u2070-\u2079]|=/.test(full)) { const clean = mathForScreen(full); if (clean !== full) { full = clean; send("\u0000RESET\n" + full); } }
+          // instant dialect clean-up of the finished answer (no AI call, no wait): common Sorani slips, and Sorani
+          // words that slipped into a Badini answer. Code / cards (``` blocks) are left untouched.
+          if ((lang === "ckb" || (lang === "kmr" && !/سۆرانی|سورانی|sorani/i.test(lastText))) && full && !/\u0000/.test(full)) {
+            const clean = full.split(/(```[\s\S]*?```)/).map((part, i) => (i % 2 ? part : fixDialectWords(part, lang))).join("");
+            if (clean !== full) { full = clean; send("\u0000RESET\n" + full); }
+          }
           // skip proofreading a maths-heavy answer: the editor could change numbers or break the working
           const mathy = (full.match(/[=×÷]|[₀-₉]/g) || []).length > 8;
           if ((lang === "ckb" || lang === "kmr") && kind === "chat" && !crowded && !mathy && full.length > 60 && full.length < 8000 && !/\u0000|\]\(http/.test(full) && serverEnv("PROOFREAD") !== "0") {
