@@ -624,7 +624,7 @@ export async function POST(req) {
     const searchQ = !build && !file && !construct && !trivialMsg && !creativeOrCalc && (isTimeSensitive(lastText) || maybeQuestion);
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
-      : searchQ
+      : searchQ && isTimeSensitive(lastText)
         // Fast-changing questions lead with the fullest flash model (best at weighing several dated sources);
         // everyday questions keep the quick light model below, so they stay fast.
         ? [serverEnv("GEMINI_MODEL_SEARCH") || "gemini-3.8-flash", serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
@@ -655,7 +655,8 @@ export async function POST(req) {
         const rawQuery = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
         // SPEED: start searching the raw question right away, in parallel with the English rewrite below, so a slow
         // rewrite never holds the answer up — the rewritten queries are then searched and merged on top.
-        const rawP = webSearch(rawQuery, { max: 4, timeoutMs: 4500, fresh }).catch(() => []);
+        const t0 = Date.now();
+        const rawP = webSearch(rawQuery, { max: 4, timeoutMs: 3000, fresh }).catch(() => []);
         // SPEED: jsonCall has no overall time limit of its own — when keys are busy it walks every model/key and can
         // even fall back to other services for up to a minute. So the rewrite gets a HARD 2.5 s cap: if it isn't
         // back by then we simply go on with the raw search that is already running.
@@ -663,19 +664,20 @@ export async function POST(req) {
         const q = await capped(jsonCall(
           "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/last/this year/now/who won' topics. Kurdish hints: کۆتا/کۆتایی/دوایین/kota = last/latest, برد/بردی/brd = won, خەڵات = award, باڵندۆر/باڵۆن دۆر/balndor = Ballon d'Or, جام = cup, ئەنجام = result, یاری = match, هەڵبژاردن = election, نرخ = price. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
           [{ text: `Message (often Kurdish Sorani or Badini, or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
-          { maxTokens: 300, think: "minimal", timeoutMs: fresh ? 4000 : 2500, deadline: Date.now() + (fresh ? 4000 : 2500) },
-        ), fresh ? 4000 : 2500, null);
+          { maxTokens: 200, think: "minimal", timeoutMs: 1600, deadline: Date.now() + 1600 },
+        ), 1600, null);
         const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
         if (got.length) queries = got.slice(0, 10);
         // search every rewritten query in parallel (the raw search is already in flight), then merge, de-duplicate
         // and rank: live Google boxes first, then newest-dated first — so the answer is built on the latest facts.
         // The whole search step is capped too, so a slow search site can never hold the answer up.
-        const lists = needWeb ? await capped(Promise.all([
-          ...queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 4000, fresh }).catch(() => [])),
-          rawP,
-        ]), fresh ? 5500 : 4500, []) : [];
-        if (!lists.length) lists.push(await capped(rawP, 500, []));
-        const results = rankResults(lists.flat(), queries.length > 2 ? 22 : 16);
+        // SPEED: each search gets only the time left (the whole step stays under ~3.6 s); whatever came back is used.
+        const left = Math.max(900, 3600 - (Date.now() - t0));
+        const lists = needWeb ? await Promise.all([
+          ...queries.map((qq) => capped(webSearch(qq, { max: 4, timeoutMs: 2500, fresh }), left, [])),
+          capped(rawP, left, []),
+        ]) : [];
+        const results = rankResults(lists.flat(), queries.length > 2 ? 16 : 10);
         searchBlockText = results.length ? searchBlock(results, today) : "";
         const query = needWeb ? [...queries, rawQuery].join(" | ") : "(no web needed)";
         // Owner-only diagnostic, hidden by default: set SEARCH_DEBUG=1 in Vercel to show the query and top results
@@ -775,7 +777,7 @@ VOICE CONVERSATION MODE (most important rules)
     // With live web results in hand, think a little deeper (low, not minimal) so the model cross-checks the sources,
     // picks the newest well-supported fact and catches disagreements — still quick, never the slow "medium" level.
     // Only fast-changing questions (latest / now / prices / news) get this; everyday questions stay at "minimal" for speed.
-    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : searchBlockText ? 1 : 2) : START[kind];
+    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : searchBlockText && isTimeSensitive(lastText) && proUser ? 1 : 2) : START[kind];
     // A current-events / "this year / latest / who won / now" question needs fresh facts, so search is turned on for it
     // by itself (training data is out of date). If grounding is not allowed on the key it degrades gracefully.
     const timeSensitive = (kind === "chat" || kind === "voice") && !tutor && isTimeSensitive(lastText);
