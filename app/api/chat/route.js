@@ -620,11 +620,11 @@ export async function POST(req) {
     // optimizer below makes the final call on whether to actually search (so we don't waste searches on general knowledge).
     const trivialMsg = lastText.trim().length < 5 || /^(\s*(سڵاو|بەیانی باش|سوپاس|باشە|اوکەی|تەواو|ئۆکەی|ok(ay)?|h(i|ey)+|hello|thx|thanks?|slaw|supas|basha|kra(yawa)?|tawaw|esa ch\w*)\s*[.!؟?,]*\s*)+$/i.test(lastText);
     const creativeOrCalc = /\b(بنووسە|بنوسه|هۆنراوە|شیعر|چیرۆک|نامە|گۆرانی|write|poem|story|essay|letter|email|code|کۆد|پرۆگرام|program|function|وەرگێڕە|ترجم|translate)\b/i.test(lastText) || /^[\d\s+\-*/=().,^×÷%]+\s*[=؟?]?\s*$/.test(lastText.trim());
-    const maybeQuestion = /[?؟]/.test(lastText) || /(چی|چییە|چیە|کێ|کوا|کام|چەند|چۆن|کەی|بۆچی|لەکوێ|what|who|where|when|how|why|which|\bkya\b|\bkiya\b|\bchi\w*|\bchend\b|\bkam\b|\bkey\b)/i.test(lastText);
+    const maybeQuestion = /[?؟]/.test(lastText) || /(چی|چییە|چیە|کێ|کوا|کام|چەند|چۆن|کەی|بۆچی|لەکوێ|کیە|کییە|ئایا|هەیە|زانیاری|دەربارەی|باسی|ڕوونی بکەرەوە|پێم بڵێ|چ |کی |چاوا|کەنگی|بۆچ|ل کیڤە|ما |ماذا|من هو|من هي|متى|أين|كيف|لماذا|هل |كم |ما هو|ما هي|what|who|where|when|how|why|which|tell me|about|explain|is there|\bkya\b|\bkiya\b|\bchi\w*|\bchend\b|\bchand\b|\bchon\b|\bbochi\b|\bkam\b|\bkey\b|\bki\b|\bkê\b|\bkwe\b|\bzanyar\w*|\bbas\b|\bpim bl\w*)/i.test(lastText);
     const searchQ = !build && !file && !construct && !trivialMsg && !creativeOrCalc && (isTimeSensitive(lastText) || maybeQuestion);
     const preferred = proUser
       ? (deep ? [serverEnv("GEMINI_MODEL_PRO"), serverEnv("GEMINI_MODEL")] : [serverEnv("GEMINI_MODEL_FAST") || "gemini-3.8-flash"])
-      : searchQ && isTimeSensitive(lastText)
+      : searchQ
         // Fast-changing questions lead with the fullest flash model (best at weighing several dated sources);
         // everyday questions keep the quick light model below, so they stay fast.
         ? [serverEnv("GEMINI_MODEL_SEARCH") || "gemini-3.8-flash", serverEnv("GEMINI_MODEL_VOICE") || "gemini-3.6-flash", serverEnv("GEMINI_MODEL_FREE") || "gemini-3.5-flash-lite"]
@@ -651,7 +651,7 @@ export async function POST(req) {
         const needWeb = true;
         // "fresh" questions (latest / now / prices / people in office / news) also pull dated Google News, so the
         // newest version of the fact can be found and cross-checked across outlets.
-        const fresh = isTimeSensitive(lastText);
+        const fresh = true; // owner: EVERY question gets the newest Google + Google News facts, cross-checked
         const rawQuery = /\b20\d\d\b/.test(lastText) ? lastText : `${lastText} ${yr}`;
         // SPEED: start searching the raw question right away, in parallel with the English rewrite below, so a slow
         // rewrite never holds the answer up — the rewritten queries are then searched and merged on top.
@@ -775,7 +775,7 @@ VOICE CONVERSATION MODE (most important rules)
     // With live web results in hand, think a little deeper (low, not minimal) so the model cross-checks the sources,
     // picks the newest well-supported fact and catches disagreements — still quick, never the slow "medium" level.
     // Only fast-changing questions (latest / now / prices / news) get this; everyday questions stay at "minimal" for speed.
-    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : searchBlockText && isTimeSensitive(lastText) ? 1 : 2) : START[kind];
+    const startLevel = planOnly ? 2 : kind === "chat" ? (hard && heavyMath ? 1 : searchBlockText ? 1 : 2) : START[kind];
     // A current-events / "this year / latest / who won / now" question needs fresh facts, so search is turned on for it
     // by itself (training data is out of date). If grounding is not allowed on the key it degrades gracefully.
     const timeSensitive = (kind === "chat" || kind === "voice") && !tutor && isTimeSensitive(lastText);
