@@ -390,8 +390,8 @@ const MAX_ATTACH_CHARS = 4_200_000; // Vercel accepts ~4.5 MB per request
 const FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
 // A "this year / latest / who won / now" question needs fresh web facts. \b word boundaries only work for Latin
 // text in JS, so Kurdish/Arabic terms are matched WITHOUT \b. Used both to pick a stronger model and to turn search on.
-const TIME_RE_LATIN = /\b(20(2[5-9]|3\d)|latest|newest|current(ly)?|right now|this (year|week|month|season)|today|yesterday|who won|winner|most recent|breaking|just announced)\b/i;
-const TIME_RE_OTHER = /(نوێترین|ئەمساڵ|ئەمڕۆ|ئێستا|دوایین|کێ ?(بردی|بردیەوە|براوە)|ئەم ?(ساڵ|مانگ|هەفتە)|تازەترین|أحدث|الآن|هذا ?(العام|الأسبوع|الشهر)|من فاز|الفائز|اليوم|براوەی|سەرۆک|وەزیر|پاڵەوان|حکومەت|پەرلەمان|نرخ|دۆلار|زێڕ|نەوت|هەواڵ|رئيس|وزير|سعر|دولار|أخبار)/;
+const TIME_RE_LATIN = /\b(20(2[5-9]|3\d)|latest|newest|last|current(ly)?|right now|this (year|week|month|season)|today|yesterday|who won|won|wins|winner|award|champions?|ballon|result|score|final|election|most recent|breaking|just announced)\b/i;
+const TIME_RE_OTHER = /(نوێترین|ئەمساڵ|ئەمڕۆ|ئێستا|دوایین|کێ ?(بردی|بردیەوە|براوە)|ئەم ?(ساڵ|مانگ|هەفتە)|تازەترین|أحدث|الآن|هذا ?(العام|الأسبوع|الشهر)|من فاز|الفائز|اليوم|براوەی|سەرۆک|وەزیر|پاڵەوان|حکومەت|پەرلەمان|نرخ|دۆلار|زێڕ|نەوت|هەواڵ|رئيس|وزير|سعر|دولار|أخبار|کۆتا|کۆتایی|دوا ?(یاری|جار|ساڵ)|برد(ی|یەوە|ەوە)?(\s|$|؟|\?)|بردنەوە|براوە|خەڵات|باڵ?ۆن ?د?ۆر|باڵندۆر|بالندۆر|بالۆن|جامی|کۆپا|شامپیۆن|مۆندیال|ئەنجامی|یاریی?ەکە|هەڵبژاردن|آخر|الأخير|فاز|بطل|جائزة|الكرة الذهبية|نتيجة|مباراة|انتخابات)/;
 // Many users type Kurdish in Latin letters, so match the "latest / newest / this year / today / who won" words there
 // too (kota=last, nwe/nwetrin=new/newest, taza=fresh, dwayin=latest, emsal=this year, emro=today, ki brd=who won),
 // plus current-entity words that are almost always asked about in the present (president, minister, price, news…).
@@ -661,10 +661,10 @@ export async function POST(req) {
         // back by then we simply go on with the raw search that is already running.
         const capped = (p, ms, fallback) => Promise.race([p.catch(() => fallback), new Promise((res) => setTimeout(() => res(fallback), ms))]);
         const q = await capped(jsonCall(
-          "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/this year/now' topics. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
+          "You turn a user's message into the best short English web-search queries to find the most CURRENT, accurate answer. Keep names/brands and add the current year for 'latest/last/this year/now/who won' topics. Kurdish hints: کۆتا/کۆتایی/دوایین/kota = last/latest, برد/بردی/brd = won, خەڵات = award, باڵندۆر/باڵۆن دۆر/balndor = Ballon d'Or, جام = cup, ئەنجام = result, یاری = match, هەڵبژاردن = election, نرخ = price. For a sports club's match/result, assume FOOTBALL (soccer) and say so in the query (e.g. 'Real Madrid CF football last match result'), unless the user clearly names another sport. If the message asks about SEVERAL different things, give ONE query per thing (up to 10); otherwise give one query.",
           [{ text: `Message (often Kurdish Sorani or Badini, or Arabic): "${lastText}"\nToday's year: ${yr}.\nReply ONLY as JSON: {"queries": ["<english query>", ...]} (1 to 10 queries, each 4-9 words)` }],
-          { maxTokens: 300, think: "minimal", timeoutMs: 2500, deadline: Date.now() + 2500 },
-        ), 2500, null);
+          { maxTokens: 300, think: "minimal", timeoutMs: fresh ? 4000 : 2500, deadline: Date.now() + (fresh ? 4000 : 2500) },
+        ), fresh ? 4000 : 2500, null);
         const got = Array.isArray(q?.queries) ? q.queries.filter((x) => typeof x === "string" && x.trim().length > 2).map((x) => x.trim().slice(0, 200)) : [];
         if (got.length) queries = got.slice(0, 10);
         // search every rewritten query in parallel (the raw search is already in flight), then merge, de-duplicate
@@ -673,7 +673,7 @@ export async function POST(req) {
         const lists = needWeb ? await capped(Promise.all([
           ...queries.map((qq) => webSearch(qq, { max: 4, timeoutMs: 4000, fresh }).catch(() => [])),
           rawP,
-        ]), 4500, []) : [];
+        ]), fresh ? 5500 : 4500, []) : [];
         if (!lists.length) lists.push(await capped(rawP, 500, []));
         const results = rankResults(lists.flat(), queries.length > 2 ? 22 : 16);
         searchBlockText = results.length ? searchBlock(results, today) : "";
