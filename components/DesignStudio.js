@@ -245,6 +245,7 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
   const tools = [["interior", "t_interior"], ["exterior", "t_exterior"], ["plan", "t_plan"], ["redesign", "t_redesign"]];
 
   if (screen === "3d" && owner) return <Studio3DView lang={lang} getToken={getToken} onBack={() => setScreen("home")} />;
+  if (screen === "real" && owner) return <Studio3DView key="real" mode="real" lang={lang} getToken={getToken} onBack={() => setScreen("home")} />;
   if (screen !== "home") {
     return <ToolView key={screen + (open?.id || "") + (jumpFile ? jumpFile.size : "")} tool={screen} lang={lang} tx={tx} T={T} rtl={rtl} api={api} quota={quota} setQuota={setQuota}
       project={open} onUpgrade={onUpgrade} onBack={() => { setScreen("home"); setOpen(null); setJumpFile(null); loadProjects(); }}
@@ -272,6 +273,17 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
               <i aria-hidden="true">{rtl ? "←" : "→"}</i>
             </button>
           ))}
+          {owner && (
+            <button className="ds-tool ds-3d ds-real" onClick={() => setScreen("real")}>
+              <span className="ds-ic" aria-hidden="true">🏗️</span>
+              <b>{{ en: "Realistic", ar: "واقعي", kmr: "ڕاستەقینە" }[lang] || "ڕاستەقینە"} <em className="new-badge">{{ en: "New", ar: "جديد", kmr: "نوو" }[lang] || "نوێ"}</em></b>
+              <small>{{ en: "Start from an empty plot and build everything yourself: rooms, blocks, doors, fence, furniture, a car from Google, then walk inside.",
+                ar: "ابدأ من أرض فارغة وابنِ كل شيء بنفسك: غرف، بلوك، أبواب، سور، أثاث، سيارة من Google، ثم تجوّل داخله.",
+                kmr: "ژ ئەردەکێ ڤالا دەست پێ بکە و هەمی تشتان ب خۆ ئاڤا بکە: ژوور، بلۆک، دەرگەه، سوور، کەلوپەل، ترومبێل ژ Google، پاشان بچە د ناڤدا." }[lang]
+                || "لە زەوییەکی بەتاڵەوە دەست پێبکە و هەموو شتێک خۆت دروست بکە: ژوور، بلۆک، دەرگا، سوورە، کەلوپەل، ئۆتۆمبێل لە Google، پاشان بچۆ ناوی."}</small>
+              <i aria-hidden="true">{rtl ? "←" : "→"}</i>
+            </button>
+          )}
           {owner && (
             <button className="ds-tool ds-3d" onClick={() => setScreen("3d")}>
               <span className="ds-ic" aria-hidden="true">🧊</span>

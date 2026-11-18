@@ -2340,3 +2340,4 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .s3d-seg.small { align-self: flex-start; }
 .s3d-seg.small button.on { background: #e8b44a; color: #1b1300; }
 .s3d-stage:has(.s3d-steps) .s3d-hint:not(.static) { top: 52px; }
+.ds-tool.ds-real { border-color: rgb(52 168 83 / .7); background: linear-gradient(135deg, rgb(52 168 83 / .16), rgb(var(--gold-rgb) / .1)); }

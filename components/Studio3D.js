@@ -87,6 +87,8 @@ const T = {
   models3d: ["🧊 مۆدێلی 3D", "🧊 3D models", "🧊 مۆدێلێن 3D", "🧊 نماذج 3D"],
   picH: ["بەرزی (م)", "Height (m)", "بلندی (م)", "الارتفاع (م)"],
   m_block: ["بلۆک", "Block", "بلۆک", "بلوك"],
+  gQuick: ["🚗 ئۆتۆمبێل|🛋️ قەنەفە|🛏️ جێگا|🍽️ مێزی نانخواردن|🌳 دار|🌷 گوڵ|💡 گڵۆپ|📺 تەلەفزیۆن|🚿 حەمام|🏊 مەلەوانگە", "🚗 car|🛋️ sofa|🛏️ bed|🍽️ dining table|🌳 tree|🌷 flowers|💡 lamp|📺 TV|🚿 bathroom|🏊 pool",
+    "🚗 ترومبێل|🛋️ قەنەفە|🛏️ جهێ نڤستنێ|🍽️ مێزا خوارنێ|🌳 دار|🌷 گول|💡 گلۆپ|📺 تەلەفزیۆن|🚿 حەمام|🏊 مەلەڤانگە", "🚗 سيارة|🛋️ كنبة|🛏️ سرير|🍽️ طاولة طعام|🌳 شجرة|🌷 زهور|💡 مصباح|📺 تلفاز|🚿 حمام|🏊 مسبح"],
   ofPlot: ["ی زەوی", "of plot", "یێ ئەردی", "من الأرض"]
 };
 const MAT_WALL = ["paint", "brick", "stone", "tile", "wood", "marble", "concrete"], MAT_FLOOR = ["tile", "wood", "marble", "carpet", "stone", "concrete"];
@@ -100,7 +102,7 @@ const CATS = [["all", "all"], ["sofa", "قەنەفە|Sofas|قەنەفە|كنب",
 const TYPE_NAMES = { living: ["هۆڵ", "Living", "هۆل", "الصالة"], guest: ["دیوەخان", "Guest", "دیوەخان", "الضيوف"], bedroom: ["ژووری نوستن", "Bedroom", "ژوورا نڤستنێ", "غرفة نوم"], kitchen: ["چێشتخانە", "Kitchen", "مەتبەخ", "مطبخ"], dining: ["نانخواردن", "Dining", "خوارن", "طعام"],
   bath: ["حەمام / ئاودەست", "Bath", "حەمام / ئاڤدەست", "حمام"], hall: ["ڕاڕەو", "Hall", "ڕێڕەو", "ممر"], stairs: ["پەیژە", "Stairs", "پەیژە", "درج"], garage: ["گەراج", "Garage", "گەراج", "كراج"], office: ["ئۆفیس", "Office", "ئۆفیس", "مكتب"], storage: ["کۆگا", "Storage", "کۆگەه", "مخزن"], balcony: ["باڵکۆن", "Balcony", "بالکۆن", "بلكونة"], other: ["تر", "Other", "دی", "أخرى"] };
 
-const KEY = "ahm3d:v1", PKEY = "ahm3d:prices";
+const KEY3D = "ahm3d:v1", PKEY = "ahm3d:prices";
 const fa = (s) => String(s).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[٫,]/g, ".");
 const fmt = (n) => Math.round(n).toLocaleString("en-US");
 
@@ -138,7 +140,9 @@ async function shrinkImage(file, max = 1400) {
 
 function download(href, name) { const a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 
-export default function Studio3DView({ lang, getToken, onBack }) {
+export default function Studio3DView({ lang, getToken, onBack, mode }) {
+  const REAL = mode === "real"; // the separate "Realistic" section: its own project, starts from an empty plot
+  const KEY = REAL ? "ahm3d:real" : KEY3D;
   const L = { ckb: 0, en: 1, kmr: 2, ar: 3 }[lang] ?? 0, EN = lang === "en";
   const tx = (k) => T[k]?.[L] ?? T[k]?.[0] ?? k;
   const canvasRef = useRef(null), eng = useRef(null), fileRef = useRef(null), jsonRef = useRef(null);
@@ -175,11 +179,11 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   const [ceil, setCeil] = useState(false);
   const [rendered, setRendered] = useState(null);
   const drag = useRef(null);
-  const [setup, setSetup] = useState(false);
+  const [setup, setSetup] = useState(() => REAL && !model.plot);
   const [plotW, setPlotW] = useState("10");
   const [plotD, setPlotD] = useState("20");
   const [buildMat, setBuildMat] = useState("block");
-  const [libTab, setLibTab] = useState("3d");
+  const [libTab, setLibTab] = useState(REAL ? "google" : "3d");
   const [gFound, setGFound] = useState(null);
 
   const say = (s) => { setToast(s); clearTimeout(say.t); say.t = setTimeout(() => setToast(""), 4200); };
@@ -419,8 +423,8 @@ export default function Studio3DView({ lang, getToken, onBack }) {
     edit([{ op: "fence", mat: "stone", color: "#c8b89a", h: 2 }]);
     setView("3d"); setTimeout(() => eng.current?.fit(), 60); say(tx("fenceDone"));
   }
-  async function searchGoogle(e) {
-    e?.preventDefault(); const q = libQ.trim(); if (!q || busy) return;
+  async function searchGoogle(e, over) {
+    e?.preventDefault(); const q = (over ?? libQ).trim(); if (!q || busy) return;
     setBusy("search");
     try {
       const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "search", q, google: true }) });
@@ -432,7 +436,7 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   }
   function addPic(pic) {
     const p = where();
-    const big = /sofa|bed|table|wardrobe|cabinet|tree|car|کەنەفە|قەنەفە|جێگا|دۆڵاب|دار/i.test(libQ) ? 1.1 : /lamp|plant|vase|گڵۆپ|گوڵ/i.test(libQ) ? 0.9 : 1;
+    const big = /car|ئۆتۆمبێل|ترومبێل|سيارة/i.test(libQ) ? 1.5 : /tree|دار|شجرة/i.test(libQ) ? 3 : /sofa|bed|table|wardrobe|cabinet|قەنەفە|جێگا|دۆڵاب|كنبة|سرير/i.test(libQ) ? 1.1 : /lamp|plant|vase|گڵۆپ|گوڵ/i.test(libQ) ? 0.9 : 1; // real height in metres
     const next = applyOps(modelRef.current, [{ op: "addPic", pic: pic.thumb, name: pic.title || libQ, x: p.x, z: p.z, h: big }]);
     commit(next); setSel(next.items[next.items.length - 1].id); setTool("select"); setPanel("props"); say(tx("added"));
   }
@@ -499,7 +503,7 @@ export default function Studio3DView({ lang, getToken, onBack }) {
     <div className="s3d" dir={EN ? "ltr" : "rtl"}>
       <header className="s3d-top">
         <button className="s3d-btn" onClick={onBack} aria-label={tx("back")}>{EN ? "←" : "→"}</button>
-        <div className="s3d-title"><b>{tx("title")}</b><small>{tx("beta")}</small></div>
+        <div className="s3d-title"><b>{REAL ? tx("real") : tx("title")}</b><small>{tx("beta")}</small></div>
         <div className="s3d-seg" role="tablist">
           {[["plan", "vplan"], ["3d", "v3d"], ["walk", "vwalk"]].map(([v, k]) => (
             <button key={v} role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{tx(k)}</button>
@@ -658,11 +662,13 @@ export default function Studio3DView({ lang, getToken, onBack }) {
               </div>
               {libTab === "google" ? (
                 <>
-                  <form className="s3d-search" onSubmit={searchGoogle}>
+                  <form id="s3d-gform" className="s3d-search" onSubmit={searchGoogle}>
                     <input value={libQ} onChange={(e) => setLibQ(e.target.value.slice(0, 80))} placeholder={tx("searchPh")} enterKeyHint="search" />
                     <button className="s3d-btn gold" disabled={!libQ.trim() || !!busy}>{busy === "search" ? <span className="mini-spin" /> : "🔍"}</button>
                   </form>
                   <p className="s3d-sub">{tx("gHint")}</p>
+                  <div className="s3d-chips">{(tx("gQuick") || "").split("|").map((q2) => (
+                    <button key={q2} disabled={!!busy} onClick={() => { const w = q2.replace(/^\S+\s/, ""); setLibQ(w); searchGoogle(null, w); }}>{q2}</button>))}</div>
                   {gFound && (
                     <div className="s3d-lib">
                       {gFound.map((g2) => <button key={g2.thumb} onClick={() => addPic(g2)} title={g2.title}><img src={g2.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /><small>{g2.credit || g2.title}</small></button>)}
@@ -737,7 +743,7 @@ export default function Studio3DView({ lang, getToken, onBack }) {
                 <button className="s3d-btn" onClick={async () => { const b = await eng.current.exportGLB(); const u = URL.createObjectURL(b); download(u, "ahm-3d.glb"); setTimeout(() => URL.revokeObjectURL(u), 4000); }}>{tx("glb")}</button>
                 <button className="s3d-btn" onClick={() => { const u = URL.createObjectURL(new Blob([JSON.stringify(modelRef.current)], { type: "application/json" })); download(u, "ahm-3d.json"); setTimeout(() => URL.revokeObjectURL(u), 4000); say(tx("saved")); }}>{tx("saveJ")}</button>
                 <button className="s3d-btn" onClick={() => jsonRef.current?.click()}>{tx("openJ")}</button>
-                <button className="s3d-btn danger" onClick={() => { if (confirm(tx("confirmNew"))) { commit(emptyModel()); setSel(null); setPlanFloors(null); } }}>{tx("newM")}</button>
+                <button className="s3d-btn danger" onClick={() => { if (confirm(tx("confirmNew"))) { commit(emptyModel()); setSel(null); setPlanFloors(null); if (REAL) setSetup(true); } }}>{tx("newM")}</button>
               </div>
               <label className="s3d-sun">{tx("sunT")} · {hour}:00 <input type="range" min={7} max={19} value={hour} onChange={(e) => setHour(+e.target.value)} /></label>
             </div>
