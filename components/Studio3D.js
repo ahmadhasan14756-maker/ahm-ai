@@ -2,7 +2,7 @@
 // AHM 3D Studio — draw a building in 2D/3D with the finger, or tell the AI in Kurdish what to change.
 // Preview for the owner only (the button shows only for the owner; the AI route checks it too).
 import { useEffect, useRef, useState } from "react";
-import { Studio3D, emptyModel, applyOps, addRoom, planToModel, boq, wallLen, uid, ROOM_TYPES, WALL_COLORS, DEFAULT_PRICES } from "../lib/studio3d";
+import { Studio3D, emptyModel, applyOps, addRoom, planToModel, boq, wallLen, uid, ROOM_TYPES, WALL_COLORS, DEFAULT_PRICES, MATERIALS } from "../lib/studio3d";
 
 const T = {
   title: ["AHM 3D Studio", "AHM 3D Studio"],
@@ -45,7 +45,29 @@ const T = {
   confirmNew: ["مۆدێلەکە بسڕدرێتەوە و لە سەرەتاوە دەست پێبکەیت؟", "Clear the model and start again?"],
   aiFail: ["AI وەڵامی نەدایەوە. دووبارە هەوڵ بدەرەوە.", "The AI didn't answer. Try again."], saved: ["پاشەکەوت کرا", "Saved"],
   floorN: ["نهۆمی", "Floor"], measured: ["دووری", "Distance"],
+  paint: ["ڕەنگ", "Paint"], items: ["🛋️ کەلوپەل", "🛋️ Furniture"],
+  h_paint: ["ڕەنگ و کەرەستە هەڵبژێرە، پاشان لەسەر هەر لایەکی دیوار یان زەویی ژوورێک دابگرە.", "Pick a colour and material, then tap any side of a wall or a room's floor."],
+  pickColor: ["هەموو ڕەنگەکان", "All colours"], wallMat: ["کەرەستەی دیوار", "Wall material"], floorMat: ["کەرەستەی زەوی", "Floor material"],
+  bothSides: ["هەردوو لای دیوار", "Both sides of the wall"], allWalls: ["🖌️ هەموو دیوارەکان", "🖌️ All walls"],
+  m_paint: ["بۆیە", "Paint"], m_brick: ["خشت", "Brick"], m_stone: ["بەرد", "Stone"], m_tile: ["کاشی", "Tile"], m_wood: ["دار", "Wood"], m_marble: ["مەڕمەڕ", "Marble"], m_concrete: ["کۆنکرێت", "Concrete"], m_carpet: ["فەرش", "Carpet"],
+  searchPh: ["بگەڕێ: قەنەفە، جێگا، مێز، گڵۆپ، دار…", "Search: sofa, bed, table, lamp, tree…"], all: ["هەموو", "All"],
+  libOff: ["کتێبخانەی 3D ئێستا ناگات. دواتر هەوڵ بدەرەوە.", "The 3D library isn't reachable now. Try later."],
+  added: ["زیاد کرا ✅ بە پەنجە ڕایبکێشە بۆ شوێنی خۆی.", "Added ✅ Drag it into place with your finger."],
+  rotate: ["سووڕاندن", "Rotate"], sizeL: ["قەبارە", "Size"], lift: ["بەرزی لە زەوی", "Height from floor"], dup: ["📄 دووبارەکردنەوە", "📄 Duplicate"],
+  libNote: ["مۆدێلی 3D ی ڕاستەقینە لە Poly Haven (بەخۆڕایی، CC0)، بە قەبارەی ڕاستی.", "Real 3D models from Poly Haven (free, CC0), real size."],
+  more: ["📁 زیاتر", "📁 More"], realism: ["ڕاستەقینەیی", "Realism"], roofT: ["🏠 سەقفی خانوو", "🏠 Roof"], ceilT: ["💡 سەقفی ناوەوە", "💡 Ceilings"],
+  render: ["✨ وێنەی ڕاستەقینە بە AI", "✨ Photo-real picture (AI)"], renderSub: ["ئەم دیمەنە دەکاتە وێنەیەکی وەک فۆتۆی ڕاستەقینە (١ وێنە حیساب دەکرێت).", "Turns this exact view into a real-looking photo (counts as 1 picture)."],
+  rendering: ["AI وێنەی ڕاستەقینە دروست دەکات… (١٠–٤٠ چرکە)", "The AI is making the photo… (10–40 s)"], renderFail: ["وێنەکە دروست نەبوو. دووبارە هەوڵ بدەرەوە.", "The picture failed. Try again."],
+  dl: ["⬇️ داگرتن", "⬇️ Download"], close: ["داخستن", "Close"],
 };
+const MAT_WALL = ["paint", "brick", "stone", "tile", "wood", "marble", "concrete"], MAT_FLOOR = ["tile", "wood", "marble", "carpet", "stone", "concrete"];
+const PALETTE = ["#ffffff", "#f4efe6", "#ebe4d6", "#e2d5bf", "#d6c3a3", "#c9a77c", "#a8865c", "#7b5b3a", "#4b3621", "#f3e1dc", "#e8c3b7", "#d39c8a", "#b5654f", "#8e3b2e",
+  "#f6e7b5", "#ead27a", "#d8b23f", "#e3eadf", "#bfd3b6", "#8fae86", "#5a7d55", "#2f4a32", "#dbe8ef", "#a9c6d8", "#6d9ab8", "#2f5f86", "#1d3550",
+  "#e6e0ef", "#bfb1d6", "#7f6aa6", "#f0f0f0", "#cfcfcf", "#9e9e9e", "#6b6b6b", "#3d3d3d", "#1e1e1e"];
+const CATS = [["all", "all"], ["sofa", "قەنەفە|Sofas", "sofa couch armchair ottoman pouf"], ["chair", "کورسی|Chairs", "chair stool bench"], ["table", "مێز|Tables", "table desk"],
+  ["bed", "نوستن و حەمام|Bed & bath", "bed bathtub toilet sink basin"], ["storage", "دۆڵاب|Storage", "shelf cabinet drawer wardrobe dresser bookcase"],
+  ["light", "گڵۆپ|Lights", "lamp chandelier lantern light"], ["plant", "ڕووەک|Plants", "plant potted flower fern cactus"],
+  ["decor", "ڕازاندنەوە|Decor", "vase frame painting mirror rug clock"], ["outdoor", "دەرەوە|Outdoor", "tree bush shrub outdoor garden fence barrel"]];
 const TYPE_NAMES = { living: ["هۆڵ", "Living"], guest: ["دیوەخان", "Guest"], bedroom: ["ژووری نوستن", "Bedroom"], kitchen: ["چێشتخانە", "Kitchen"], dining: ["نانخواردن", "Dining"],
   bath: ["حەمام / ئاودەست", "Bath"], hall: ["ڕاڕەو", "Hall"], stairs: ["پەیژە", "Stairs"], garage: ["گەراج", "Garage"], office: ["ئۆفیس", "Office"], storage: ["کۆگا", "Storage"], balcony: ["باڵکۆن", "Balcony"], other: ["تر", "Other"] };
 
@@ -112,6 +134,18 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   const [hour, setHour] = useState(15);
   const [prices, setPrices] = useState(() => { try { return { ...DEFAULT_PRICES, ...JSON.parse(localStorage.getItem(PKEY) || "{}") }; } catch { return DEFAULT_PRICES; } });
   const down = useRef(null);
+  const [paintC, setPaintC] = useState("#e2d5bf");
+  const [paintM, setPaintM] = useState("paint");
+  const [floorM, setFloorM] = useState("wood");
+  const [both, setBoth] = useState(false);
+  const [lib, setLib] = useState(null);
+  const [cat, setCat] = useState("all");
+  const [libQ, setLibQ] = useState("");
+  const [found, setFound] = useState(null);
+  const [roof, setRoof] = useState(false);
+  const [ceil, setCeil] = useState(false);
+  const [rendered, setRendered] = useState(null);
+  const drag = useRef(null);
 
   const say = (s) => { setToast(s); clearTimeout(say.t); say.t = setTimeout(() => setToast(""), 4200); };
   function commit(next, keepFuture) {
@@ -128,6 +162,11 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   useEffect(() => {
     const e = new Studio3D(canvasRef.current);
     eng.current = e;
+    e.resolve = async (ph) => {
+      const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "model", id: ph }) });
+      if (!r.ok) throw new Error("model");
+      return r.json();
+    };
     e.setModel(modelRef.current); e.fit();
     const ro = new ResizeObserver(() => e.resize());
     ro.observe(canvasRef.current);
@@ -140,6 +179,19 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   useEffect(() => { eng.current?.setSelected(sel); }, [sel]);
   useEffect(() => { eng.current?.setView(view); }, [view]);
   useEffect(() => { eng.current?.placeSun(hour); }, [hour]);
+  useEffect(() => { const e = eng.current; if (!e) return; e.roof = roof; e.ceiling = ceil; e.build(); }, [roof, ceil]);
+  useEffect(() => { if (tool === "paint") setPanel("paint"); }, [tool]);
+  // the 3D furniture library (loaded once when the furniture panel opens)
+  useEffect(() => {
+    if (panel !== "items" || lib) return;
+    (async () => {
+      try {
+        const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "models" }) });
+        const j = await r.json(); if (!r.ok) throw new Error();
+        setLib(j.models || []);
+      } catch { setLib("off"); }
+    })();
+  }, [panel, lib]);
   useEffect(() => { try { localStorage.setItem(PKEY, JSON.stringify(prices)); } catch {} }, [prices]);
   useEffect(() => { setDraft(null); eng.current?.setPreview([]); }, [tool]);
   // keyboard (computer): Esc stops drawing, Delete removes the selection, Ctrl+Z / Ctrl+Y
@@ -184,6 +236,13 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   }
   function tap(cx, cy) {
     const e = eng.current; if (!e) return;
+    if (tool === "paint") {
+      const hit = e.pick(cx, cy);
+      if (hit?.type === "wall") edit([{ op: "paintWall", id: hit.id, side: both || !hit.side ? "both" : hit.side, color: paintC, mat: paintM }]);
+      else if (hit?.type === "room") edit([{ op: "setRoom", id: hit.id, floor: paintC, fmat: floorM }]);
+      else say(tx("h_paint"));
+      return;
+    }
     if (tool === "select" || tool === "erase" || tool === "door" || tool === "window") {
       const hit = e.pick(cx, cy);
       if (tool === "select") { setSel(hit?.id || null); if (hit) setPanel("props"); return; }
@@ -214,8 +273,34 @@ export default function Studio3DView({ lang, getToken, onBack }) {
       say(`${tx("measured")}: ${dist.toFixed(2)} م`); setDraft(null);
     }
   }
-  const onDown = (ev) => { down.current = { x: ev.clientX, y: ev.clientY, n: (down.current?.n || 0) + 1, lx: ev.clientX, ly: ev.clientY }; };
+  const onDown = (ev) => {
+    down.current = { x: ev.clientX, y: ev.clientY, n: (down.current?.n || 0) + 1, lx: ev.clientX, ly: ev.clientY };
+    // a piece of furniture that is already selected: drag it along the floor
+    const it = (modelRef.current.items || []).find((i) => i.id === sel);
+    if (tool === "select" && it && view !== "walk") {
+      const hit = eng.current.pick(ev.clientX, ev.clientY);
+      const p = eng.current.toFloor(ev.clientX, ev.clientY);
+      if (hit?.id === sel && p) {
+        drag.current = { id: sel, dx: it.x - p.x, dz: it.z - p.z, x: it.x, z: it.z };
+        eng.current.controls.enabled = false; eng.current.plan.enabled = false;
+        canvasRef.current.setPointerCapture?.(ev.pointerId);
+      }
+    }
+  };
+  const endDrag = () => {
+    const d = drag.current; if (!d) return false;
+    drag.current = null;
+    eng.current.controls.enabled = view === "3d"; eng.current.plan.enabled = view === "plan";
+    edit([{ op: "setItem", id: d.id, x: Math.round(d.x * 100) / 100, z: Math.round(d.z * 100) / 100 }]);
+    return true;
+  };
   const onMove = (ev) => {
+    if (drag.current) {
+      const p = eng.current.toFloor(ev.clientX, ev.clientY); if (!p) return;
+      drag.current.x = p.x + drag.current.dx; drag.current.z = p.z + drag.current.dz;
+      eng.current.moveItem(drag.current.id, drag.current.x, drag.current.z);
+      return;
+    }
     if (view === "walk" && down.current && ev.buttons) { eng.current.look(ev.clientX - down.current.lx, ev.clientY - down.current.ly); down.current.lx = ev.clientX; down.current.ly = ev.clientY; return; }
     if (ev.pointerType === "mouse" && !ev.buttons && (draft?.start || draft?.c1 || draft?.m1)) {
       const raw = eng.current.toFloor(ev.clientX, ev.clientY); if (!raw) return;
@@ -224,6 +309,8 @@ export default function Studio3DView({ lang, getToken, onBack }) {
     }
   };
   const onUp = (ev) => {
+    const moved = drag.current && Math.hypot(ev.clientX - (down.current?.x || 0), ev.clientY - (down.current?.y || 0)) >= 8;
+    if (drag.current) { const dd = drag.current; if (moved) { endDrag(); down.current = null; return; } drag.current = null; eng.current.controls.enabled = view === "3d"; eng.current.plan.enabled = view === "plan"; void dd; }
     const d = down.current; down.current = null;
     if (!d || view === "walk") return;
     if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) < 8 && d.n === 1) tap(ev.clientX, ev.clientY);
@@ -267,11 +354,58 @@ export default function Studio3DView({ lang, getToken, onBack }) {
     setBusy("");
   }
 
+  function where() { // centre of the selected room, or the middle of the view
+    const r = modelRef.current.rooms.find((x) => x.id === sel);
+    if (r) return { x: r.x + r.w / 2, z: r.z + r.d / 2 };
+    const t = view === "plan" ? eng.current.plan.target : eng.current.controls.target;
+    return { x: Math.round(t.x * 100) / 100, z: Math.round(t.z * 100) / 100 };
+  }
+  function addItem(md) {
+    const p = where(), id = uid("i");
+    const next = applyOps(modelRef.current, [{ op: "addItem", ph: md.id, name: md.name, x: p.x, z: p.z }]);
+    const last = next.items[next.items.length - 1];
+    if (last) last.id = id;
+    commit(next); setSel(id); setTool("select"); setPanel("props"); say(tx("added"));
+  }
+  async function searchLib(e) {
+    e?.preventDefault(); const q = libQ.trim(); if (!q || busy) return;
+    setBusy("search");
+    try {
+      const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "search", q }) });
+      const j = await r.json(); setFound(j.models || []);
+    } catch { setFound([]); }
+    setBusy("");
+  }
+  async function aiRender() {
+    if (busy) return;
+    setBusy("render"); setRendered(null);
+    try {
+      const shot = (long, q) => new Promise((ok) => {
+        const im = new Image();
+        im.onload = () => { const k = long / Math.max(im.width, im.height), c = document.createElement("canvas"); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); ok(c.toDataURL("image/jpeg", q).split(",")[1]); };
+        im.src = eng.current.snapshot(1600);
+      });
+      const [ref, original] = await Promise.all([shot(496, 0.85), shot(1280, 0.88)]);
+      const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) },
+        body: JSON.stringify({ action: "make", tool: "redesign", style: "modern", keep: true, ref, original,
+          ask: "Turn this simple 3D model view into a photorealistic architectural photograph. Keep EXACTLY the same geometry, camera angle, walls, openings, wall colours and materials, floor materials and every piece of furniture in the same place. Add realistic textures, soft natural light, believable shadows" + (view === "walk" ? ", interior details like skirting, light fixtures and curtains" : ", a real sky, landscaping, paving and surroundings") + "." }) });
+      if (!r.ok) throw new Error();
+      setRendered(URL.createObjectURL(await r.blob()));
+    } catch { say(tx("renderFail")); }
+    setBusy("");
+  }
+
   const m = model;
+  const selItem = (m.items || []).find((i) => i.id === sel);
   const selWall = m.walls.find((w) => w.id === sel), selOpen = m.openings.find((o) => o.id === sel), selRoom = m.rooms.find((r) => r.id === sel);
   const q = boq(m, prices);
   const isEmpty = !m.walls.length && !m.rooms.length;
-  const TOOLS = [["select", "👆"], ["wall", "🧱"], ["room", "⬜"], ["door", "🚪"], ["window", "🪟"], ["measure", "📏"], ["erase", "🗑️"]];
+  const TOOLS = [["select", "👆"], ["wall", "🧱"], ["room", "⬜"], ["door", "🚪"], ["window", "🪟"], ["paint", "🎨"], ["measure", "📏"], ["erase", "🗑️"]];
+  const catLabel = (c) => (c[0] === "all" ? tx("all") : c[1].split("|")[L]);
+  const libShown = Array.isArray(lib) ? (cat === "all" ? lib : lib.filter((md) => {
+    const w = (md.id.replace(/_/g, " ") + " " + md.name + " " + (md.tags || []).join(" ") + " " + (md.cats || []).join(" ")).toLowerCase();
+    return CATS.find((c) => c[0] === cat)[2].split(" ").some((k) => new RegExp("(^|[^a-z])" + k + "(s|es)?([^a-z]|$)").test(w));
+  })).slice(0, 90) : [];
   const num = (v, on, step = 0.05) => (
     <input type="number" inputMode="decimal" step={step} defaultValue={v} key={sel + ":" + v}
       onBlur={(e) => { const x = parseFloat(fa(e.target.value)); if (isFinite(x) && x !== v) on(x); }}
@@ -328,7 +462,17 @@ export default function Studio3DView({ lang, getToken, onBack }) {
             </div>
           </div>
         )}
-        {busy && <div className="s3d-busy"><span className="mini-spin" /> {tx(busy === "ai" ? "thinking" : "reading")}</div>}
+        {busy && busy !== "search" && <div className="s3d-busy"><span className="mini-spin" /> {tx(busy === "ai" ? "thinking" : busy === "render" ? "rendering" : "reading")}</div>}
+        {rendered && (
+          <div className="s3d-render">
+            <img src={rendered} alt="" />
+            <div className="s3d-row">
+              <button className="s3d-btn gold" onClick={() => download(rendered, "ahm-3d-ai.jpg")}>{tx("dl")}</button>
+              <button className="s3d-btn" onClick={aiRender}>🔄</button>
+              <button className="s3d-btn" onClick={() => { URL.revokeObjectURL(rendered); setRendered(null); }}>{tx("close")}</button>
+            </div>
+          </div>
+        )}
         {toast && <div className="s3d-toast" role="status">{toast}</div>}
       </div>
 
@@ -336,7 +480,21 @@ export default function Studio3DView({ lang, getToken, onBack }) {
         <section className="s3d-panel">
           <button className="s3d-x" onClick={() => setPanel(null)} aria-label="close">✕</button>
           {panel === "props" && (
-            selWall ? (
+            selItem ? (
+              <div className="s3d-form">
+                <h4>🛋️ {selItem.name}</h4>
+                <label>{tx("rotate")} <span className="s3d-row">
+                  {[-90, -15, 15, 90].map((d) => <button key={d} className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, rot: ((selItem.rot || 0) + d) % 360 }])}>{d > 0 ? "⟳" : "⟲"} {Math.abs(d)}°</button>)}</span></label>
+                <label>{tx("sizeL")} · {Math.round((selItem.s || 1) * 100)}% <span className="s3d-row">
+                  <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, s: Math.round((selItem.s || 1) * 0.9 * 100) / 100 }])}>−</button>
+                  <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, s: Math.round((selItem.s || 1) * 1.1 * 100) / 100 }])}>+</button></span></label>
+                <label>{tx("lift")} {num(selItem.y || 0, (v) => edit([{ op: "setItem", id: sel, y: v }]))}</label>
+                <div className="s3d-row">
+                  <button className="s3d-btn" onClick={() => { const n = applyOps(modelRef.current, [{ op: "addItem", ph: selItem.ph, name: selItem.name, x: selItem.x + 0.6, z: selItem.z + 0.6, rot: selItem.rot, s: selItem.s, y: selItem.y }]); commit(n); setSel(n.items[n.items.length - 1].id); }}>{tx("dup")}</button>
+                  <button className="s3d-btn danger" onClick={() => { edit([{ op: "delete", id: sel }]); setSel(null); }}>{tx("del")}</button>
+                </div>
+              </div>
+            ) : selWall ? (
               <div className="s3d-form">
                 <h4>🧱 {tx("wall")} · {tx("length")} {wallLen(selWall).toFixed(2)} م</h4>
                 <label>{tx("thick")} {num(selWall.t, (v) => edit([{ op: "setWall", id: sel, t: v }]), 0.01)}</label>
@@ -367,6 +525,39 @@ export default function Studio3DView({ lang, getToken, onBack }) {
               </div>
             ) : <p className="muted">{tx("nothingSel")}</p>
           )}
+          {panel === "paint" && (
+            <div className="s3d-form">
+              <div className="s3d-sw big">{PALETTE.map((c) => <button key={c} style={{ background: c }} className={paintC === c ? "on" : ""} onClick={() => setPaintC(c)} aria-label={c} />)}
+                <label className="s3d-pick" title={tx("pickColor")}><input type="color" value={paintC} onChange={(e) => setPaintC(e.target.value)} />🌈</label></div>
+              <p className="s3d-sub">{tx("wallMat")}</p>
+              <div className="s3d-chips">{MAT_WALL.map((k) => <button key={k} className={paintM === k ? "on" : ""} onClick={() => setPaintM(k)}>{tx("m_" + k)}</button>)}</div>
+              <p className="s3d-sub">{tx("floorMat")}</p>
+              <div className="s3d-chips">{MAT_FLOOR.map((k) => <button key={k} className={floorM === k ? "on" : ""} onClick={() => setFloorM(k)}>{tx("m_" + k)}</button>)}</div>
+              <label className="s3d-check"><input type="checkbox" checked={both} onChange={(e) => setBoth(e.target.checked)} /> {tx("bothSides")}</label>
+              <button className="s3d-btn" onClick={() => edit([{ op: "paintWall", id: "*", side: "both", color: paintC, mat: paintM }])}>{tx("allWalls")}</button>
+            </div>
+          )}
+          {panel === "items" && (
+            <div className="s3d-form">
+              <form className="s3d-search" onSubmit={searchLib}>
+                <input value={libQ} onChange={(e) => setLibQ(e.target.value.slice(0, 80))} placeholder={tx("searchPh")} enterKeyHint="search" />
+                <button className="s3d-btn gold" disabled={!libQ.trim() || !!busy}>{busy === "search" ? <span className="mini-spin" /> : "🔍"}</button>
+              </form>
+              {!found && <div className="s3d-chips">{CATS.map((c) => <button key={c[0]} className={cat === c[0] ? "on" : ""} onClick={() => setCat(c[0])}>{catLabel(c)}</button>)}</div>}
+              {found && <button className="s3d-btn" onClick={() => { setFound(null); setLibQ(""); }}>✕ {tx("all")}</button>}
+              {lib === "off" ? <p className="muted">{tx("libOff")}</p> : !lib ? <p className="muted"><span className="mini-spin" /></p> : (
+                <div className="s3d-lib">
+                  {(found || libShown).map((md) => (
+                    <button key={md.id} onClick={() => addItem(md)} title={md.name}>
+                      <img src={md.thumb} alt="" loading="lazy" /><small>{md.name}</small>
+                    </button>
+                  ))}
+                  {found && !found.length && <p className="muted">—</p>}
+                </div>
+              )}
+              <p className="cs-note">{tx("libNote")}</p>
+            </div>
+          )}
           {panel === "ai" && (
             <div className="s3d-form">
               <textarea rows={2} value={aiText} placeholder={tx("aiPh")} onChange={(e) => setAiText(e.target.value)}
@@ -393,6 +584,12 @@ export default function Studio3DView({ lang, getToken, onBack }) {
           )}
           {panel === "file" && (
             <div className="s3d-form">
+              <button className="s3d-btn gold s3d-wide" disabled={!!busy || isEmpty} onClick={aiRender}>{tx("render")}<small>{tx("renderSub")}</small></button>
+              <p className="s3d-sub">{tx("realism")}</p>
+              <div className="s3d-row start">
+                <label className="s3d-check"><input type="checkbox" checked={roof} onChange={(e) => setRoof(e.target.checked)} /> {tx("roofT")}</label>
+                <label className="s3d-check"><input type="checkbox" checked={ceil} onChange={(e) => setCeil(e.target.checked)} /> {tx("ceilT")}</label>
+              </div>
               <div className="s3d-grid">
                 <button className="s3d-btn" onClick={() => fileRef.current?.click()}>{tx("fromPlan")}</button>
                 <button className="s3d-btn" onClick={() => { commit(sampleHouse()); setTimeout(() => eng.current?.fit(), 50); }}>{tx("sample")}</button>
@@ -419,7 +616,7 @@ export default function Studio3DView({ lang, getToken, onBack }) {
           <button onClick={redo} disabled={!hist.current.future.length}><span aria-hidden="true">↷</span><small>{tx("redo")}</small></button>
         </div>
         <div className="s3d-tabs">
-          {[["props", "props"], ["ai", "ai"], ["cost", "cost"], ["file", "file"]].map(([p, k]) => (
+          {[["props", "props"], ["items", "items"], ["ai", "ai"], ["cost", "cost"], ["file", "more"]].map(([p, k]) => (
             <button key={p} className={panel === p ? "on" : ""} onClick={() => setPanel(panel === p ? null : p)}>{tx(k)}</button>
           ))}
         </div>
