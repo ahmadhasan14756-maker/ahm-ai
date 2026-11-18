@@ -3256,7 +3256,7 @@ function Main({ session }) {
             onLimit={() => showLimit()} />
         ) : view === "studio" ? (
           <DesignStudio key={studioJump ? studioJump.at : 0} lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })}
-            initialTool={studioJump?.tool} initialFile={studioJump?.file}
+            initialTool={studioJump?.tool} initialFile={studioJump?.file} owner={!!me?.owner}
             onOpenPlan={(file) => { setStudioJump(null); setHouseFrom("studio"); setHousePlan(file || null); setView("house"); }} onChat={() => { setStudioJump(null); setView("chat"); chooseTool("construct"); }} />
         ) : view === "slides" ? (
           <SlidesStudio lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />

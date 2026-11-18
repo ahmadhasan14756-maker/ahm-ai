@@ -4,6 +4,8 @@
 // Photos are redesigned by a real image AI (server: /api/redesign). Projects are saved privately per user.
 import { useEffect, useRef, useState } from "react";
 import { Pano360 } from "./HouseStudio";
+import dynamic from "next/dynamic";
+const Studio3DView = dynamic(() => import("./Studio3D"), { ssr: false }); // 3D studio: loaded only when opened
 
 const L = (ckb, ar, en, kmr) => ({ ckb, ar, en, kmr });
 const TX = {
@@ -210,7 +212,7 @@ async function saveFile(src, name) {
   } catch { window.open(src, "_blank"); }
 }
 
-export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpenPlan, onChat, initialTool, initialFile }) {
+export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpenPlan, onChat, initialTool, initialFile, owner }) {
   const tx = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
   const T = (o) => o?.[lang] ?? o?.ckb;
   const rtl = lang !== "en";
@@ -242,6 +244,7 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
   const [open, setOpen] = useState(null); // a saved project to reopen
   const tools = [["interior", "t_interior"], ["exterior", "t_exterior"], ["plan", "t_plan"], ["redesign", "t_redesign"]];
 
+  if (screen === "3d" && owner) return <Studio3DView lang={lang} getToken={getToken} onBack={() => setScreen("home")} />;
   if (screen !== "home") {
     return <ToolView key={screen + (open?.id || "") + (jumpFile ? jumpFile.size : "")} tool={screen} lang={lang} tx={tx} T={T} rtl={rtl} api={api} quota={quota} setQuota={setQuota}
       project={open} onUpgrade={onUpgrade} onBack={() => { setScreen("home"); setOpen(null); setJumpFile(null); loadProjects(); }}
@@ -269,6 +272,14 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
               <i aria-hidden="true">{rtl ? "←" : "→"}</i>
             </button>
           ))}
+          {owner && (
+            <button className="ds-tool ds-3d" onClick={() => setScreen("3d")}>
+              <span className="ds-ic" aria-hidden="true">🧊</span>
+              <b>AHM 3D Studio <em className="new-badge">{lang === "en" ? "Preview" : "تاقیکردنەوە"}</em></b>
+              <small>{lang === "en" ? "Draw a building in 2D/3D, plan → 3D, live cost, Kurdish AI commands. Only you can see this." : "دروستکردنی بینا بە 2D/3D، نەخشە ← 3D، تێچوونی زیندوو، فەرمانی AI بە کوردی. تەنها تۆ دەیبینیت."}</small>
+              <i aria-hidden="true">{rtl ? "←" : "→"}</i>
+            </button>
+          )}
           <button className="ds-tool ds-chat" onClick={onChat}>
             <span className="ds-ic" aria-hidden="true"><Glyph k="chat" /></span><b>{tx("t_chat")}</b><small>{tx("t_chatSub")}</small><i aria-hidden="true">{rtl ? "←" : "→"}</i>
           </button>
