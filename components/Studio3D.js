@@ -2,6 +2,7 @@
 // AHM 3D Studio — draw a building in 2D/3D with the finger, or tell the AI in Kurdish what to change.
 // Preview for the owner only (the button shows only for the owner; the AI route checks it too).
 import { useEffect, useRef, useState } from "react";
+import { PROPS, CAR_COLORS } from "../lib/props3d";
 import { Studio3D, emptyModel, applyOps, addRoom, planToModel, boq, wallLen, uid, ROOM_TYPES, WALL_COLORS, DEFAULT_PRICES, MATERIALS } from "../lib/studio3d";
 
 const T = {
@@ -130,6 +131,14 @@ const T = {
   projN: ["پرۆژەی", "Project", "پرۆژەیا", "مشروع"],
   photoFail: ["نەتوانرا وێنەکە بخوێنرێتەوە.", "Couldn't read the photo.", "نەشیا وێنە بهێتە خواندن.", "تعذّرت قراءة الصورة."],
   autoSave: ["هەموو گۆڕانکارییەک خۆکارانە پاشەکەوت دەبێت.", "Every change is saved automatically.", "هەر گوهۆڕینەک ب خۆکاری پاشەکەفت دبیت.", "يُحفظ كل تغيير تلقائياً."],
+  propsTab: ["🚗 3D ی ڕاستەقینە", "🚗 Real 3D", "🚗 3D یێ ڕاستەقینە", "🚗 3D حقيقي"],
+  propsNote: ["ئەمانە مۆدێلی 3D ی تەواون: لە هەموو لایەکەوە دەبینرێن، بە قەبارەی ڕاستی.", "These are full 3D models: seen from every side, at real size.", "ئەڤە مۆدێلێن 3D یێن تەمامن: ژ هەمی لایان دهێنە دیتن، ب قەبارێ ڕاستی.", "هذه نماذج ثلاثية الأبعاد كاملة: تُرى من كل الجهات وبالحجم الحقيقي."],
+  carColor: ["ڕەنگی ئۆتۆمبێل", "Car colour", "ڕەنگێ ترومبێلێ", "لون السيارة"],
+  moveT: ["جووڵاندن", "Move", "لڤاندن", "تحريك"],
+  builtQ: ["خانووەکەت ئێستا چەندی دروستکراوە؟", "How much of your house is built now?", "خانیێ تە نوکە چەند هاتیە ئاڤاکرن؟", "كم بُني من منزلك الآن؟"],
+  builtHint: ["ئەگەر خانووەکەت نیوەی دروستکراوە، ڕێژەکەی هەڵبژێرە، پاشان خۆت تەواوی بکە.", "If your house is half built, pick how much — then finish it yourself.", "ئەگەر خانیێ تە نیڤەکا وی هاتیە ئاڤاکرن، ڕێژەیێ هەلبژێرە، پاشان ب خۆ تەمام بکە.", "إذا كان منزلك نصف مبني، اختر النسبة ثم أكمله بنفسك."],
+  g_pool: ["🏊 مەلەوانگە", "🏊 Pool", "🏊 مەلەڤانگە", "🏊 مسبح"],
+  picNote: ["ئەمە وێنەیە (2D). بۆ شتی 3D ی تەواو «🚗 3D ی ڕاستەقینە» بەکاربهێنە.", "This is a picture (2D). For full 3D use «🚗 Real 3D».", "ئەڤە وێنەیە (2D). بۆ تشتێن 3D یێن تەمام «🚗 3D یێ ڕاستەقینە» بکاربینە.", "هذه صورة (2D). للأجسام ثلاثية الأبعاد استخدم «🚗 3D حقيقي»."],
   ofPlot: ["ی زەوی", "of plot", "یێ ئەردی", "من الأرض"]
 };
 const MAT_WALL = ["paint", "brick", "stone", "tile", "wood", "marble", "concrete"], MAT_FLOOR = ["tile", "wood", "marble", "carpet", "stone", "concrete"];
@@ -225,10 +234,11 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
   const [plotW, setPlotW] = useState("10");
   const [plotD, setPlotD] = useState("20");
   const [buildMat, setBuildMat] = useState("block");
-  const [libTab, setLibTab] = useState(REAL ? "google" : "3d");
+  const [libTab, setLibTab] = useState(REAL ? "props" : "3d");
   const [gFound, setGFound] = useState(null);
   const [layMat, setLayMat] = useState("block");
   const [gardenK, setGardenK] = useState("grass");
+  const [carCol, setCarCol] = useState(CAR_COLORS[0]);
 
   const toastT = useRef(0);
   const say = (s) => { setToast(s); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(""), 4200); };
@@ -483,6 +493,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
           walls: m.walls.map((w) => ({ ...w, x1: mv(w.x1 + ox), x2: mv(w.x2 + ox), z1: mv(w.z1 + oz), z2: mv(w.z2 + oz) })),
           rooms: m.rooms.map((r) => ({ ...r, x: mv(r.x + ox), z: mv(r.z + oz) })) };
         m = unbuilt(m); setSetup(false); setPlotW(String(pw)); setPlotD(String(pd)); setTool("lay"); setView("3d");
+        setTimeout(() => say(tx("builtHint")), 1500);
       }
       commit(m); setSel(null); setTimeout(() => eng.current?.fit(), 50);
       setPlanFloors(floors.length > 1 ? { plan: j.plan, floors, cur: floors[0] } : null);
@@ -551,6 +562,11 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
     if (REAL) setSetup(true);
   }
 
+  function addProp(kind) {
+    const p = where();
+    const next = applyOps(modelRef.current, [{ op: "addProp", prop: kind, name: PROPS[kind].n[L] || PROPS[kind].n[0], color: kind.startsWith("car_") ? carCol : undefined, x: p.x, z: p.z }]);
+    commit(next); setSel(next.items[next.items.length - 1].id); setTool("select"); setPanel("props"); say(tx("added"));
+  }
   function addPic(pic) {
     const p = where();
     const big = /car|ئۆتۆمبێل|ترومبێل|سيارة/i.test(libQ) ? 1.5 : /tree|دار|شجرة/i.test(libQ) ? 3 : /sofa|bed|table|wardrobe|cabinet|قەنەفە|جێگا|دۆڵاب|كنبة|سرير/i.test(libQ) ? 1.1 : /lamp|plant|vase|گڵۆپ|گوڵ/i.test(libQ) ? 0.9 : 1; // real height in metres
@@ -690,7 +706,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
               ["s6", (m.items || []).some((i) => i.ph), () => { setLibTab("3d"); setPanel("items"); }],
               ["r7", (m.patches || []).length > 0, () => { setTool("garden"); setView("3d"); }],
               ["s5", m.walls.some((w) => w.fence), makeFence],
-              ["r9", (m.items || []).some((i) => i.pic), () => { setLibTab("google"); setPanel("items"); setLibQ(tx("carQ")); searchGoogle(null, tx("carQ")); }],
+              ["r9", (m.items || []).some((i) => i.prop?.startsWith("car_") || i.pic), () => { setLibTab("props"); setPanel("items"); }],
               ["s7", false, () => setView("walk")]].map(([k, ok, go], i) => (
               <button key={k} className={ok ? "ok" : ""} onClick={go}><em>{ok ? "✓" : i + 1}</em>{tx(k)}</button>
             ))}
@@ -740,14 +756,21 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
           {panel === "props" && (
             selItem ? (
               <div className="s3d-form">
-                <h4>🛋️ {selItem.name}</h4>
+                <h4>{selItem.prop ? PROPS[selItem.prop]?.e : "🛋️"} {selItem.name}</h4>
+                {selItem.pic && <p className="s3d-sub">{tx("picNote")}</p>}
+                {selItem.prop?.startsWith("car_") && <div className="s3d-sw big">{CAR_COLORS.map((c) => <button key={c} style={{ background: c }} className={(selItem.color || PROPS[selItem.prop].color) === c ? "on" : ""} onClick={() => edit([{ op: "setItem", id: sel, color: c }])} aria-label={c} />)}</div>}
+                <label>{tx("moveT")} <span className="s3d-row">
+                  {[["→", 0.25, 0], ["←", -0.25, 0], ["↑", 0, -0.25], ["↓", 0, 0.25]].map(([a, dx, dz]) => <button key={a} className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, x: Math.round((selItem.x + dx) * 100) / 100, z: Math.round((selItem.z + dz) * 100) / 100 }])}>{a}</button>)}</span></label>
                 <label>{tx("rotate")} <span className="s3d-row">
                   {[-90, -15, 15, 90].map((d) => <button key={d} className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, rot: ((selItem.rot || 0) + d) % 360 }])}>{d > 0 ? "⟳" : "⟲"} {Math.abs(d)}°</button>)}</span></label>
                 <label>{tx("sizeL")} · {Math.round((selItem.s || 1) * 100)}% <span className="s3d-row">
                   <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, s: Math.round((selItem.s || 1) * 0.9 * 100) / 100 }])}>−</button>
                   <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, s: Math.round((selItem.s || 1) * 1.1 * 100) / 100 }])}>+</button></span></label>
                 {selItem.pic && <label>{tx("picH")} {num(Math.round((selItem.h || 1) * (selItem.s || 1) * 100) / 100, (v) => edit([{ op: "setItem", id: sel, s: Math.round((v / (selItem.h || 1)) * 100) / 100 }]))}</label>}
-                <label>{tx("lift")} {num(selItem.y || 0, (v) => edit([{ op: "setItem", id: sel, y: v }]))}</label>
+                <label>{tx("lift")} <span className="s3d-row">
+                  <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, y: Math.max(0, Math.round(((selItem.y || 0) - 0.1) * 100) / 100) }])}>▼</button>
+                  {num(selItem.y || 0, (v) => edit([{ op: "setItem", id: sel, y: v }]))}
+                  <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, y: Math.round(((selItem.y || 0) + 0.1) * 100) / 100 }])}>▲</button></span></label>
                 <div className="s3d-row">
                   <button className="s3d-btn" onClick={() => { const n = applyOps(modelRef.current, [{ op: "addItem", ph: selItem.ph, name: selItem.name, x: selItem.x + 0.6, z: selItem.z + 0.6, rot: selItem.rot, s: selItem.s, y: selItem.y }]); commit(n); setSel(n.items[n.items.length - 1].id); }}>{tx("dup")}</button>
                   <button className="s3d-btn danger" onClick={() => { edit([{ op: "delete", id: sel }]); setSel(null); }}>{tx("del")}</button>
@@ -800,12 +823,24 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
             <div className="s3d-form">
               <div className="s3d-row start">
                 <div className="s3d-seg small">
+                  <button className={libTab === "props" ? "on" : ""} onClick={() => setLibTab("props")}>{tx("propsTab")}</button>
                   <button className={libTab === "3d" ? "on" : ""} onClick={() => setLibTab("3d")}>{tx("models3d")}</button>
                   <button className={libTab === "google" ? "on" : ""} onClick={() => setLibTab("google")}>{tx("google")}</button>
                 </div>
                 <button className="s3d-btn gold" onClick={() => photoRef.current?.click()} title={tx("myPhotoSub")}>{tx("myPhoto")}</button>
               </div>
-              {libTab === "google" ? (
+              {libTab === "props" ? (
+                <>
+                  <p className="s3d-sub">{tx("carColor")}</p>
+                  <div className="s3d-sw big">{CAR_COLORS.map((c) => <button key={c} style={{ background: c }} className={carCol === c ? "on" : ""} onClick={() => setCarCol(c)} aria-label={c} />)}</div>
+                  <div className="s3d-lib props">
+                    {Object.entries(PROPS).map(([k, v]) => (
+                      <button key={k} onClick={() => addProp(k)}><span className="s3d-emo" style={k.startsWith("car_") ? { background: carCol } : undefined}>{v.e}</span><small>{v.n[L] || v.n[0]}</small></button>
+                    ))}
+                  </div>
+                  <p className="cs-note">{tx("propsNote")}</p>
+                </>
+              ) : libTab === "google" ? (
                 <>
                   <form id="s3d-gform" className="s3d-search" onSubmit={searchGoogle}>
                     <input value={libQ} onChange={(e) => setLibQ(e.target.value.slice(0, 80))} placeholder={tx("searchPh")} enterKeyHint="search" />
@@ -848,6 +883,8 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
               <div className="s3d-form">
                 <p className="s3d-sub">{tx("h_lay")}</p>
                 <div className="s3d-chips">{["block", "brick", "stone"].map((k) => <button key={k} className={layMat === k ? "on" : ""} onClick={() => setLayMat(k)}>{tx("m_" + k)}</button>)}</div>
+                <p className="s3d-sub">{tx("builtQ")}</p>
+                <div className="s3d-chips">{[0, 0.25, 0.5, 0.75, 1].map((f) => <button key={f} onClick={() => edit([{ op: "lay", id: "*", frac: f, mat: layMat }])}>{Math.round(f * 100)}%</button>)}</div>
                 <div className="s3d-progress"><i style={{ width: (all ? Math.round((done / all) * 100) : 0) + "%" }} /><b>{all ? Math.round((done / all) * 100) : 0}% {tx("laid")}</b></div>
                 <div className="s3d-row start">
                   <button className="s3d-btn" disabled={!hw.length} onClick={() => edit([{ op: "lay", id: "*", n: 1, mat: layMat }])}>{tx("rowAll")}</button>
@@ -870,7 +907,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
           {panel === "garden" && (
             <div className="s3d-form">
               <p className="s3d-sub">{tx("h_garden")}</p>
-              <div className="s3d-chips">{["grass", "paving", "gravel", "soil"].map((k) => <button key={k} className={gardenK === k ? "on" : ""} onClick={() => setGardenK(k)}>{tx("g_" + k)}</button>)}</div>
+              <div className="s3d-chips">{["grass", "paving", "gravel", "soil", "pool"].map((k) => <button key={k} className={gardenK === k ? "on" : ""} onClick={() => setGardenK(k)}>{tx("g_" + k)}</button>)}</div>
             </div>
           )}
           {panel === "build" && (

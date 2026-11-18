@@ -2349,3 +2349,5 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .s3d-saves li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #2c3445; border-radius: 12px; background: #1c2230; }
 .s3d-saves li span { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s3d-saves .s3d-btn { padding: 6px 9px; font-size: 12.5px; }
+.s3d-lib.props { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
+.s3d-emo { display: grid; place-items: center; width: 100%; aspect-ratio: 1; font-size: 34px; border-radius: 10px; background: #2a3140; }
