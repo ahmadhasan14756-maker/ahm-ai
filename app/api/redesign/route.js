@@ -6,6 +6,7 @@
 // Picture service: Cloudflare Workers AI (FLUX.2 klein) with the user's photo as reference — free daily quota.
 import { getUser, getProfile, usageOf, getSettings, isOwner } from "../../../lib/server";
 import { jsonCall } from "../../../lib/gemini";
+import { serverEnv } from "../../../lib/env";
 import { makeImage } from "../../../lib/imagegen";
 import { quota } from "../../../lib/quota";
 import { allow, tooMany } from "../../../lib/ratelimit";
@@ -187,10 +188,25 @@ async function englishQuery(q) {
 }
 
 // Search: real 3D models first, then free, legal pictures (Openverse + Wikimedia Commons). No key needed.
-async function searchPictures(q) {
+// Google Images (through Serper): pictures of real products for the 3D studio. Only Google's own small preview
+// pictures (gstatic) are used, so the app never fetches from unknown websites.
+async function googlePictures(query) {
+  const key = serverEnv("SERPER_API_KEY");
+  if (!key) return [];
+  try {
+    const r = await fetch("https://google.serper.dev/images", { method: "POST", headers: { "X-API-KEY": key, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: query, num: 30 }), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.images || []).filter((x) => /^https:\/\/encrypted-tbn\d\.gstatic\.com\//.test(x.thumbnailUrl || ""))
+      .map((x) => ({ thumb: x.thumbnailUrl, title: clean(x.title, 80), credit: clean(x.source || x.domain, 60), license: "google" })).slice(0, 30);
+  } catch { return []; }
+}
+
+async function searchPictures(q, google) {
   const { q: query, alt } = await englishQuery(q);
   const words = [...new Set([query, ...alt].join(" ").toLowerCase().split(/[^a-z]+/).map((w) => w.replace(/(ies)$/, "y").replace(/([^s])s$/, "$1")).filter((w) => w.length > 2))];
-  const [found3d, ov, wm] = await Promise.all([
+  const [found3d, ov, wm, gg] = await Promise.all([
     models().then((all) => all.map((m) => [score(m, words), m]).filter(([n]) => n > 0).sort((a, b) => b[0] - a[0]).slice(0, 18).map(([, m]) => m)).catch(() => []),
     fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&page_size=40&mature=false`, { signal: AbortSignal.timeout(9000), headers: UA })
       .then((r) => r.json()).then((j) => (j.results || []).filter((x) => x.thumbnail).map((x) => ({ thumb: x.thumbnail, title: clean(x.title, 80), credit: clean(x.creator, 60), license: clean(x.license, 20), source: "Openverse" })))
@@ -201,13 +217,14 @@ async function searchPictures(q) {
         return ii?.thumburl ? { thumb: ii.thumburl, title: clean(String(pg.title || "").replace(/^File:|\.[a-z]+$/gi, ""), 80), credit: clean(ii.extmetadata?.Artist?.value?.replace(/<[^>]+>/g, ""), 60), license: clean(ii.extmetadata?.LicenseShortName?.value, 20), source: "Wikimedia" } : null;
       }).filter(Boolean))
       .catch((e) => { console.error("wikimedia", String(e.message).slice(0, 80)); return []; }),
+    google ? googlePictures(query + " product white background") : Promise.resolve([]),
   ]);
   // mix the two picture sources, best first, no repeats
   const pics = [], seen = new Set();
   for (let i = 0; i < Math.max(ov.length, wm.length); i++) for (const x of [ov[i], wm[i]]) if (x && !seen.has(x.thumb)) { seen.add(x.thumb); pics.push(x); }
-  return { q: query, models: found3d, results: pics.slice(0, 48) };
+  return { q: query, models: found3d, results: pics.slice(0, 48), google: gg };
 }
-const GRAB_HOSTS = /^https:\/\/(api\.openverse\.org|upload\.wikimedia\.org)\//;
+const GRAB_HOSTS = /^https:\/\/(api\.openverse\.org|upload\.wikimedia\.org|encrypted-tbn\d\.gstatic\.com)\//;
 
 function size(ratio, hd) {
   const r = Math.min(2.2, Math.max(0.45, Number(ratio) || 1.5));
@@ -238,7 +255,7 @@ export async function POST(req) {
     if (body.action === "search") {
       if (!(await allow("ds-s:" + user.id, 20, 60000))) return tooMany();
       if (!clean(body.q, 80)) return err("bad_request");
-      return Response.json(await searchPictures(body.q));
+      return Response.json(await searchPictures(body.q, body.google === true));
     }
     if (body.action === "models") {
       try { return Response.json({ models: await models() }, { headers: { "Cache-Control": "private, max-age=3600" } }); }

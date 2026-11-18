@@ -275,8 +275,11 @@ export default function DesignStudio({ lang, getToken, onBack, onUpgrade, onOpen
           {owner && (
             <button className="ds-tool ds-3d" onClick={() => setScreen("3d")}>
               <span className="ds-ic" aria-hidden="true">🧊</span>
-              <b>AHM 3D Studio <em className="new-badge">{lang === "en" ? "Preview" : "تاقیکردنەوە"}</em></b>
-              <small>{lang === "en" ? "Draw a building in 2D/3D, plan → 3D, live cost, Kurdish AI commands. Only you can see this." : "دروستکردنی بینا بە 2D/3D، نەخشە ← 3D، تێچوونی زیندوو، فەرمانی AI بە کوردی. تەنها تۆ دەیبینیت."}</small>
+              <b>AHM 3D Studio <em className="new-badge">{{ en: "Preview", ar: "تجريبي", kmr: "تاقیکرن" }[lang] || "تاقیکردنەوە"}</em></b>
+              <small>{{ en: "Build your house on a real plot block by block, furniture, any colour, walk inside, Google search. Only you can see this.",
+                ar: "ابنِ منزلك على أرض حقيقية بلوكاً بلوكاً، أثاث، أي لون، تجوّل داخله، بحث Google. أنت فقط تراه.",
+                kmr: "خانیێ خۆ ل سەر ئەردەکێ ڕاستەقینە بلۆک ب بلۆک ئاڤا بکە، کەلوپەل، هەر ڕەنگەک، بچە د ناڤدا، لێگەڕیانا Google. تنێ تو دبینی." }[lang]
+                || "خانووەکەت لەسەر زەوییەکی ڕاستەقینە بلۆک بە بلۆک دروست بکە، کەلوپەل، هەر ڕەنگێک، بچۆ ناوی، گەڕان لە Google. تەنها تۆ دەیبینیت."}</small>
               <i aria-hidden="true">{rtl ? "←" : "→"}</i>
             </button>
           )}

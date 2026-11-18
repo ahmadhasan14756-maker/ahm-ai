@@ -2325,3 +2325,18 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .s3d-tabs { margin-top: 4px; }
 .s3d-tabs button { padding: 6px 2px !important; }
 @media (min-width: 900px) { .s3d-panel { max-height: 38vh; } .s3d-sw.big, .s3d-chips { flex-wrap: wrap; } }
+/* 3D Studio — realistic mode */
+.s3d-real { width: 100%; margin-bottom: 10px; font-size: 16px; padding: 12px; }
+.s3d-setup { inset: 50% 12px auto !important; transform: translateY(-50%); z-index: 6; }
+.s3d-setup .s3d-in { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad4; }
+.s3d-setup .s3d-in input { width: 110px; background: #0c0f15; color: #fff; border: 1px solid #e8b44a; border-radius: 10px; padding: 8px 10px; font: inherit; text-align: center; }
+.s3d-chips.center { justify-content: center; flex-wrap: wrap; margin: 10px 0; }
+.s3d-steps { position: absolute; top: 8px; inset-inline: 8px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; z-index: 3; }
+.s3d-steps button { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px; border-radius: 999px; border: 1px solid #343c4c;
+  background: rgb(21 25 34 / .92); color: #e3e7ee; font: inherit; font-size: 12.5px; cursor: pointer; backdrop-filter: blur(6px); }
+.s3d-steps button em { font-style: normal; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #2a3140; font-size: 11px; font-weight: 800; }
+.s3d-steps button.ok em { background: #34a853; color: #fff; }
+.s3d-steps ~ .s3d-hint { top: 52px; }
+.s3d-seg.small { align-self: flex-start; }
+.s3d-seg.small button.on { background: #e8b44a; color: #1b1300; }
+.s3d-stage:has(.s3d-steps) .s3d-hint:not(.static) { top: 52px; }

@@ -5,71 +5,100 @@ import { useEffect, useRef, useState } from "react";
 import { Studio3D, emptyModel, applyOps, addRoom, planToModel, boq, wallLen, uid, ROOM_TYPES, WALL_COLORS, DEFAULT_PRICES, MATERIALS } from "../lib/studio3d";
 
 const T = {
-  title: ["AHM 3D Studio", "AHM 3D Studio"],
-  beta: ["تاقیکردنەوە · تەنها تۆ دەیبینیت", "Preview · only you can see it"],
-  back: ["گەڕانەوە", "Back"],
-  v3d: ["3D", "3D"], vplan: ["نەخشە", "Plan"], vwalk: ["🚶 پیاسە", "🚶 Walk"],
-  select: ["دیاریکردن", "Select"], wall: ["دیوار", "Wall"], room: ["ژوور", "Room"], door: ["دەرگا", "Door"], window: ["پەنجەرە", "Window"],
-  measure: ["پێوانە", "Measure"], erase: ["سڕینەوە", "Erase"], undo: ["گەڕانەوە", "Undo"], redo: ["دووبارە", "Redo"],
-  ai: ["🤖 AI", "🤖 AI"], cost: ["💰 تێچوون", "💰 Cost"], file: ["📁 فایل", "📁 File"], props: ["⚙️ تایبەتمەندی", "⚙️ Properties"],
-  h_wall: ["خاڵی یەکەم دابگرە، پاشان خاڵی دووەم. بۆ وەستان هەمان خاڵ دووبارە دابگرە یان «✓ تەواو».", "Tap the first point, then the next. Tap the same point again or «✓ Done» to stop."],
-  h_room: ["دوو گۆشەی بەرامبەر دابگرە، یان قەبارە بنووسە (وەک 4×5) و یەک جار دابگرە.", "Tap two opposite corners, or type a size (like 4×5) and tap once."],
-  h_door: ["لەسەر دیوارێک دابگرە بۆ دانانی دەرگا.", "Tap a wall to put a door."],
-  h_window: ["لەسەر دیوارێک دابگرە بۆ دانانی پەنجەرە.", "Tap a wall to put a window."],
-  h_measure: ["دوو خاڵ دابگرە بۆ پێوانە.", "Tap two points to measure."],
-  h_erase: ["لەسەر هەر شتێک دابگرە بۆ سڕینەوەی.", "Tap anything to delete it."],
-  h_select: ["لەسەر دیوار، دەرگا، پەنجەرە یان ژوور دابگرە بۆ گۆڕینی.", "Tap a wall, door, window or room to edit it."],
-  h_walk: ["پەنجە ڕابکێشە بۆ سەیرکردن، دوگمەکان بۆ ڕۆیشتن.", "Drag to look around, buttons to move."],
-  done: ["✓ تەواو", "✓ Done"], len: ["درێژی (م)", "Length (m)"], size: ["قەبارە (وەک 4×5)", "Size (like 4×5)"],
-  empty1: ["دەست پێبکە", "Get started"],
-  empty2: ["بە پەنجە بیکێشە، نەخشەیەک بنێرە، یان بە کوردی بە AI بڵێ چی دروست بکات.", "Draw with your finger, send a floor plan, or tell the AI in Kurdish what to build."],
-  sample: ["🏠 خانوویەکی نموونە", "🏠 Sample house"], fromPlan: ["📐 نەخشە ← 3D", "📐 Plan → 3D"], askAi: ["🤖 بە AI بڵێ", "🤖 Ask the AI"],
-  aiPh: ["بۆ نموونە: ژوورێکی نوستنی ٤×٤ لە لای ڕاستی هۆڵەکە زیاد بکە", "e.g. add a 4×4 bedroom to the right of the living room"],
-  send: ["ناردن", "Send"], thinking: ["AI بیر دەکاتەوە…", "The AI is thinking…"],
-  sug1: ["دیوارە دەرەکییەکان ٣٠ سم ئەستوور بکە", "Make the outside walls 30 cm thick"],
-  sug2: ["پەنجەرە بخەرە سەر هەموو دیوارە دەرەکییەکان", "Put windows on all outside walls"],
-  sug3: ["چێشتخانەیەکی ٣×٤ لە خوارەوەی هۆڵەکە زیاد بکە", "Add a 3×4 kitchen below the living room"],
-  sug4: ["بەرزی هەموو دیوارەکان بکە ٣.٢ م", "Make all walls 3.2 m high"],
-  thick: ["ئەستووری (م)", "Thickness (m)"], height: ["بەرزی (م)", "Height (m)"], length: ["درێژی", "Length"], color: ["ڕەنگ", "Colour"],
-  width: ["پانی (م)", "Width (m)"], sill: ["بەرزی لە زەوی (م)", "Sill (m)"], name: ["ناو", "Name"], type: ["جۆر", "Type"],
-  addDoor: ["+ دەرگا", "+ Door"], addWin: ["+ پەنجەرە", "+ Window"], del: ["🗑️ سڕینەوە", "🗑️ Delete"],
-  nothingSel: ["هیچ شتێک دیاری نەکراوە. ئامرازی «دیاریکردن» بەکاربهێنە.", "Nothing selected. Use the Select tool."],
-  costNote: ["خەمڵاندنێکی سەرەتاییە. نرخەکان نموونەن بە دینار، بیانگۆڕە بۆ نرخی بازاڕی ناوچەکەت.", "A rough estimate. Prices are examples in IQD — change them to your local prices."],
-  total: ["کۆی گشتی", "Total"], floorA: ["ڕووبەری زەوی", "Floor area"], wallA: ["ڕووبەری دیوار", "Wall area"],
-  c_block: ["بلۆک", "Blocks"], c_plaster: ["گەچ و سمنت", "Plaster"], c_paint: ["بۆیە", "Paint"], c_tile: ["کاشی", "Floor tiles"],
-  c_concrete: ["کۆنکرێتی سەقف", "Roof concrete"], c_door: ["دەرگا", "Doors"], c_window: ["پەنجەرە", "Windows"],
-  newM: ["🆕 نوێ", "🆕 New"], saveJ: ["💾 پاشەکەوت (فایل)", "💾 Save (file)"], openJ: ["📂 کردنەوەی فایل", "📂 Open file"],
-  png: ["🖼️ وێنەی 4K", "🖼️ 4K picture"], glb: ["🧊 مۆدێلی 3D (GLB)", "🧊 3D model (GLB)"], sunT: ["☀️ کاتی خۆر", "☀️ Sun time"],
-  reading: ["نەخشەکە دەخوێنرێتەوە…", "Reading the plan…"], planDone: ["نەخشەکە کرا بە 3D ✅ ئێستا دەتوانیت دەستکاری بکەیت.", "The plan is now 3D ✅ You can edit it."],
-  planFail: ["نەتوانرا نەخشەکە بخوێنرێتەوە. وێنەیەکی ڕوونتر تاقی بکەرەوە.", "Couldn't read the plan. Try a clearer picture."],
-  confirmNew: ["مۆدێلەکە بسڕدرێتەوە و لە سەرەتاوە دەست پێبکەیت؟", "Clear the model and start again?"],
-  aiFail: ["AI وەڵامی نەدایەوە. دووبارە هەوڵ بدەرەوە.", "The AI didn't answer. Try again."], saved: ["پاشەکەوت کرا", "Saved"],
-  floorN: ["نهۆمی", "Floor"], measured: ["دووری", "Distance"],
-  paint: ["ڕەنگ", "Paint"], items: ["🛋️ کەلوپەل", "🛋️ Furniture"],
-  h_paint: ["ڕەنگ و کەرەستە هەڵبژێرە، پاشان لەسەر هەر لایەکی دیوار یان زەویی ژوورێک دابگرە.", "Pick a colour and material, then tap any side of a wall or a room's floor."],
-  pickColor: ["هەموو ڕەنگەکان", "All colours"], wallMat: ["کەرەستەی دیوار", "Wall material"], floorMat: ["کەرەستەی زەوی", "Floor material"],
-  bothSides: ["هەردوو لای دیوار", "Both sides of the wall"], allWalls: ["🖌️ هەموو دیوارەکان", "🖌️ All walls"],
-  m_paint: ["بۆیە", "Paint"], m_brick: ["خشت", "Brick"], m_stone: ["بەرد", "Stone"], m_tile: ["کاشی", "Tile"], m_wood: ["دار", "Wood"], m_marble: ["مەڕمەڕ", "Marble"], m_concrete: ["کۆنکرێت", "Concrete"], m_carpet: ["فەرش", "Carpet"],
-  searchPh: ["بگەڕێ: قەنەفە، جێگا، مێز، گڵۆپ، دار…", "Search: sofa, bed, table, lamp, tree…"], all: ["هەموو", "All"],
-  libOff: ["کتێبخانەی 3D ئێستا ناگات. دواتر هەوڵ بدەرەوە.", "The 3D library isn't reachable now. Try later."],
-  added: ["زیاد کرا ✅ بە پەنجە ڕایبکێشە بۆ شوێنی خۆی.", "Added ✅ Drag it into place with your finger."],
-  rotate: ["سووڕاندن", "Rotate"], sizeL: ["قەبارە", "Size"], lift: ["بەرزی لە زەوی", "Height from floor"], dup: ["📄 دووبارەکردنەوە", "📄 Duplicate"],
-  libNote: ["مۆدێلی 3D ی ڕاستەقینە لە Poly Haven (بەخۆڕایی، CC0)، بە قەبارەی ڕاستی.", "Real 3D models from Poly Haven (free, CC0), real size."],
-  more: ["📁 زیاتر", "📁 More"], realism: ["ڕاستەقینەیی", "Realism"], roofT: ["🏠 سەقفی خانوو", "🏠 Roof"], ceilT: ["💡 سەقفی ناوەوە", "💡 Ceilings"],
-  render: ["✨ وێنەی ڕاستەقینە بە AI", "✨ Photo-real picture (AI)"], renderSub: ["ئەم دیمەنە دەکاتە وێنەیەکی وەک فۆتۆی ڕاستەقینە (١ وێنە حیساب دەکرێت).", "Turns this exact view into a real-looking photo (counts as 1 picture)."],
-  rendering: ["AI وێنەی ڕاستەقینە دروست دەکات… (١٠–٤٠ چرکە)", "The AI is making the photo… (10–40 s)"], renderFail: ["وێنەکە دروست نەبوو. دووبارە هەوڵ بدەرەوە.", "The picture failed. Try again."],
-  dl: ["⬇️ داگرتن", "⬇️ Download"], close: ["داخستن", "Close"],
+  title: ["AHM 3D Studio", "AHM 3D Studio", "AHM 3D Studio", "AHM 3D Studio"],
+  beta: ["تاقیکردنەوە · تەنها تۆ دەیبینیت", "Preview · only you can see it", "تاقیکرن · تنێ تو دبینی", "تجريبي · أنت فقط تراه"],
+  back: ["گەڕانەوە", "Back", "زڤڕین", "رجوع"],
+  v3d: ["3D", "3D", "3D", "3D"], vplan: ["نەخشە", "Plan", "نەخشە", "مخطط"], vwalk: ["🚶 پیاسە", "🚶 Walk", "🚶 گەڕیان", "🚶 تجوّل"],
+  select: ["دیاریکردن", "Select", "هەلبژارتن", "تحديد"], wall: ["دیوار", "Wall", "دیوار", "جدار"], room: ["ژوور", "Room", "ژوور", "غرفة"], door: ["دەرگا", "Door", "دەرگەه", "باب"], window: ["پەنجەرە", "Window", "پەنجەرە", "نافذة"],
+  measure: ["پێوانە", "Measure", "پیڤان", "قياس"], erase: ["سڕینەوە", "Erase", "ژێبرن", "حذف"], undo: ["گەڕانەوە", "Undo", "زڤڕین", "تراجع"], redo: ["دووبارە", "Redo", "دووبارە", "إعادة"],
+  ai: ["🤖 AI", "🤖 AI", "🤖 AI", "🤖 AI"], cost: ["💰 تێچوون", "💰 Cost", "💰 تێچوون", "💰 التكلفة"], file: ["📁 فایل", "📁 File", "📁 فایل", "📁 ملف"], props: ["⚙️ تایبەتمەندی", "⚙️ Properties", "⚙️ تایبەتمەندی", "⚙️ الخصائص"],
+  h_wall: ["خاڵی یەکەم دابگرە، پاشان خاڵی دووەم. بۆ وەستان هەمان خاڵ دووبارە دابگرە یان «✓ تەواو».", "Tap the first point, then the next. Tap the same point again or «✓ Done» to stop.", "خالا ئێکێ بکە، پاشان خالا دووێ. بۆ ڕاوەستانێ هەمان خالێ دووبارە بکە یان «✓ تەمام».", "اضغط النقطة الأولى ثم التالية. اضغط النقطة نفسها مرة أخرى أو «✓ تم» للتوقف."],
+  h_room: ["دوو گۆشەی بەرامبەر دابگرە، یان قەبارە بنووسە (وەک 4×5) و یەک جار دابگرە.", "Tap two opposite corners, or type a size (like 4×5) and tap once.", "دوو گۆشێن بەرامبەر بکە، یان قەبارەی بنڤیسە (وەک 4×5) و ئێک جار بکە.", "اضغط زاويتين متقابلتين، أو اكتب المقاس (مثل 4×5) واضغط مرة واحدة."],
+  h_door: ["لەسەر دیوارێک دابگرە بۆ دانانی دەرگا.", "Tap a wall to put a door.", "ل سەر دیوارەکی بکە بۆ دانانا دەرگەهی.", "اضغط على جدار لوضع باب."],
+  h_window: ["لەسەر دیوارێک دابگرە بۆ دانانی پەنجەرە.", "Tap a wall to put a window.", "ل سەر دیوارەکی بکە بۆ دانانا پەنجەرێ.", "اضغط على جدار لوضع نافذة."],
+  h_measure: ["دوو خاڵ دابگرە بۆ پێوانە.", "Tap two points to measure.", "دوو خالان بکە بۆ پیڤانێ.", "اضغط نقطتين للقياس."],
+  h_erase: ["لەسەر هەر شتێک دابگرە بۆ سڕینەوەی.", "Tap anything to delete it.", "ل سەر هەر تشتەکی بکە بۆ ژێبرنێ.", "اضغط على أي شيء لحذفه."],
+  h_select: ["لەسەر دیوار، دەرگا، پەنجەرە یان ژوور دابگرە بۆ گۆڕینی.", "Tap a wall, door, window or room to edit it.", "ل سەر دیوار، دەرگەه، پەنجەرە یان ژوورێ بکە بۆ گوهۆڕینێ.", "اضغط على جدار أو باب أو نافذة أو غرفة لتعديلها."],
+  h_walk: ["پەنجە ڕابکێشە بۆ سەیرکردن، دوگمەکان بۆ ڕۆیشتن.", "Drag to look around, buttons to move.", "تبلێ ڕاکێشە بۆ سەحکرنێ، دوگمە بۆ چوونێ.", "اسحب للنظر حولك، والأزرار للمشي."],
+  done: ["✓ تەواو", "✓ Done", "✓ تەمام", "✓ تم"], len: ["درێژی (م)", "Length (m)", "درێژی (م)", "الطول (م)"], size: ["قەبارە (وەک 4×5)", "Size (like 4×5)", "قەبارە (وەک 4×5)", "المقاس (مثل 4×5)"],
+  empty1: ["دەست پێبکە", "Get started", "دەست پێ بکە", "ابدأ"],
+  empty2: ["بە پەنجە بیکێشە، نەخشەیەک بنێرە، یان بە کوردی بە AI بڵێ چی دروست بکات.", "Draw with your finger, send a floor plan, or tell the AI in Kurdish what to build.", "ب تبلێ بکێشە، نەخشەکێ بهنێرە، یان ب کوردی بێژە AI چ دروست بکەت.", "ارسم بإصبعك، أو أرسل مخططاً، أو أخبر الذكاء الاصطناعي بما تريد بناءه."],
+  sample: ["🏠 خانوویەکی نموونە", "🏠 Sample house", "🏠 خانیەکێ نموونە", "🏠 منزل نموذجي"], fromPlan: ["📐 نەخشە ← 3D", "📐 Plan → 3D", "📐 نەخشە ← 3D", "📐 مخطط ← 3D"], askAi: ["🤖 بە AI بڵێ", "🤖 Ask the AI", "🤖 بێژە AI", "🤖 اطلب من AI"],
+  aiPh: ["بۆ نموونە: ژوورێکی نوستنی ٤×٤ لە لای ڕاستی هۆڵەکە زیاد بکە", "e.g. add a 4×4 bedroom to the right of the living room", "بۆ نموونە: ژوورەکا نڤستنێ یا ٤×٤ ل لایێ ڕاستێ هۆلێ زێدە بکە", "مثلاً: أضف غرفة نوم 4×4 يمين الصالة"],
+  send: ["ناردن", "Send", "هنارتن", "إرسال"], thinking: ["AI بیر دەکاتەوە…", "The AI is thinking…", "AI هزر دکەت…", "الذكاء الاصطناعي يفكر…"],
+  sug1: ["دیوارە دەرەکییەکان ٣٠ سم ئەستوور بکە", "Make the outside walls 30 cm thick", "دیوارێن دەرڤە ٣٠ سم ستویر بکە", "اجعل الجدران الخارجية بسماكة 30 سم"],
+  sug2: ["پەنجەرە بخەرە سەر هەموو دیوارە دەرەکییەکان", "Put windows on all outside walls", "پەنجەران دانە سەر هەمی دیوارێن دەرڤە", "ضع نوافذ على كل الجدران الخارجية"],
+  sug3: ["چێشتخانەیەکی ٣×٤ لە خوارەوەی هۆڵەکە زیاد بکە", "Add a 3×4 kitchen below the living room", "مەتبەخەکا ٣×٤ ل خوارێ هۆلێ زێدە بکە", "أضف مطبخاً 3×4 أسفل الصالة"],
+  sug4: ["بەرزی هەموو دیوارەکان بکە ٣.٢ م", "Make all walls 3.2 m high", "بلندیا هەمی دیواران بکە ٣.٢ م", "اجعل ارتفاع كل الجدران 3.2 م"],
+  thick: ["ئەستووری (م)", "Thickness (m)", "ستویراتی (م)", "السماكة (م)"], height: ["بەرزی (م)", "Height (m)", "بلندی (م)", "الارتفاع (م)"], length: ["درێژی", "Length", "درێژی", "الطول"], color: ["ڕەنگ", "Colour", "ڕەنگ", "اللون"],
+  width: ["پانی (م)", "Width (m)", "پانی (م)", "العرض (م)"], sill: ["بەرزی لە زەوی (م)", "Sill (m)", "بلندی ژ ئەردی (م)", "الارتفاع عن الأرض (م)"], name: ["ناو", "Name", "ناڤ", "الاسم"], type: ["جۆر", "Type", "جۆر", "النوع"],
+  addDoor: ["+ دەرگا", "+ Door", "+ دەرگەه", "+ باب"], addWin: ["+ پەنجەرە", "+ Window", "+ پەنجەرە", "+ نافذة"], del: ["🗑️ سڕینەوە", "🗑️ Delete", "🗑️ ژێبرن", "🗑️ حذف"],
+  nothingSel: ["هیچ شتێک دیاری نەکراوە. ئامرازی «دیاریکردن» بەکاربهێنە.", "Nothing selected. Use the Select tool.", "چو تشت نەهاتیە هەلبژارتن. ئامرازێ «هەلبژارتن» بکاربینە.", "لم يُحدَّد شيء. استخدم أداة «تحديد»."],
+  costNote: ["خەمڵاندنێکی سەرەتاییە. نرخەکان نموونەن بە دینار، بیانگۆڕە بۆ نرخی بازاڕی ناوچەکەت.", "A rough estimate. Prices are examples in IQD — change them to your local prices.", "خەملاندنەکا سەرەتاییە. بها نموونەنە ب دینار، بگوهۆڕە بۆ بهایێ بازارا دەڤەرا خۆ.", "تقدير أولي. الأسعار أمثلة بالدينار، غيّرها إلى أسعار سوقك."],
+  total: ["کۆی گشتی", "Total", "کۆمێ گشتی", "المجموع"], floorA: ["ڕووبەری زەوی", "Floor area", "ڕووبەرێ ئەردی", "مساحة الأرض"], wallA: ["ڕووبەری دیوار", "Wall area", "ڕووبەرێ دیواری", "مساحة الجدران"],
+  c_block: ["بلۆک", "Blocks", "بلۆک", "بلوك"], c_plaster: ["گەچ و سمنت", "Plaster", "گەچ و چیمەنتۆ", "لياسة"], c_paint: ["بۆیە", "Paint", "بۆیاخ", "دهان"], c_tile: ["کاشی", "Floor tiles", "کاشی", "بلاط"],
+  c_concrete: ["کۆنکرێتی سەقف", "Roof concrete", "کۆنکرێتێ سەقفی", "خرسانة السقف"], c_door: ["دەرگا", "Doors", "دەرگەه", "أبواب"], c_window: ["پەنجەرە", "Windows", "پەنجەرە", "نوافذ"],
+  newM: ["🆕 نوێ", "🆕 New", "🆕 نوو", "🆕 جديد"], saveJ: ["💾 پاشەکەوت (فایل)", "💾 Save (file)", "💾 پاشەکەفت (فایل)", "💾 حفظ (ملف)"], openJ: ["📂 کردنەوەی فایل", "📂 Open file", "📂 ڤەکرنا فایلێ", "📂 فتح ملف"],
+  png: ["🖼️ وێنەی 4K", "🖼️ 4K picture", "🖼️ وێنەیێ 4K", "🖼️ صورة 4K"], glb: ["🧊 مۆدێلی 3D (GLB)", "🧊 3D model (GLB)", "🧊 مۆدێلێ 3D (GLB)", "🧊 نموذج 3D (GLB)"], sunT: ["☀️ کاتی خۆر", "☀️ Sun time", "☀️ دەمێ ڕۆژێ", "☀️ وقت الشمس"],
+  reading: ["نەخشەکە دەخوێنرێتەوە…", "Reading the plan…", "نەخشە دهێتە خواندن…", "جارٍ قراءة المخطط…"], planDone: ["نەخشەکە کرا بە 3D ✅ ئێستا دەتوانیت دەستکاری بکەیت.", "The plan is now 3D ✅ You can edit it.", "نەخشە بوو 3D ✅ نوکە دشێی دەستکاری بکەی.", "تحوّل المخطط إلى 3D ✅ يمكنك تعديله الآن."],
+  planFail: ["نەتوانرا نەخشەکە بخوێنرێتەوە. وێنەیەکی ڕوونتر تاقی بکەرەوە.", "Couldn't read the plan. Try a clearer picture.", "نەشیا نەخشە بهێتە خواندن. وێنەکێ ڕوونتر تاقی بکە.", "تعذّرت قراءة المخطط. جرّب صورة أوضح."],
+  confirmNew: ["مۆدێلەکە بسڕدرێتەوە و لە سەرەتاوە دەست پێبکەیت؟", "Clear the model and start again?", "مۆدێل بهێتە ژێبرن و ژ سەری دەست پێ بکەی؟", "حذف النموذج والبدء من جديد؟"],
+  aiFail: ["AI وەڵامی نەدایەوە. دووبارە هەوڵ بدەرەوە.", "The AI didn't answer. Try again.", "AI بەرسڤ نەدا. دووبارە تاقی بکە.", "لم يرد الذكاء الاصطناعي. حاول مجدداً."], saved: ["پاشەکەوت کرا", "Saved", "هاتە پاشەکەفتکرن", "تم الحفظ"],
+  floorN: ["نهۆمی", "Floor", "قات", "الطابق"], measured: ["دووری", "Distance", "دووراتی", "المسافة"],
+  paint: ["ڕەنگ", "Paint", "ڕەنگ", "طلاء"], items: ["🛋️ کەلوپەل", "🛋️ Furniture", "🛋️ کەلوپەل", "🛋️ أثاث"],
+  h_paint: ["ڕەنگ و کەرەستە هەڵبژێرە، پاشان لەسەر هەر لایەکی دیوار یان زەویی ژوورێک دابگرە.", "Pick a colour and material, then tap any side of a wall or a room's floor.", "ڕەنگ و کەرەستەی هەلبژێرە، پاشان ل سەر هەر لایەکێ دیواری یان ئەردێ ژوورەکێ بکە.", "اختر لوناً ومادة ثم اضغط على أي وجه من الجدار أو أرضية غرفة."],
+  pickColor: ["هەموو ڕەنگەکان", "All colours", "هەمی ڕەنگ", "كل الألوان"], wallMat: ["کەرەستەی دیوار", "Wall material", "کەرەستێ دیواری", "مادة الجدار"], floorMat: ["کەرەستەی زەوی", "Floor material", "کەرەستێ ئەردی", "مادة الأرضية"],
+  bothSides: ["هەردوو لای دیوار", "Both sides of the wall", "هەردوو لایێن دیواری", "وجها الجدار"], allWalls: ["🖌️ هەموو دیوارەکان", "🖌️ All walls", "🖌️ هەمی دیوار", "🖌️ كل الجدران"],
+  m_paint: ["بۆیە", "Paint", "بۆیاخ", "دهان"], m_brick: ["خشت", "Brick", "خشت", "طابوق"], m_stone: ["بەرد", "Stone", "بەر", "حجر"], m_tile: ["کاشی", "Tile", "کاشی", "بلاط"], m_wood: ["دار", "Wood", "دار", "خشب"], m_marble: ["مەڕمەڕ", "Marble", "مەڕمەڕ", "رخام"], m_concrete: ["کۆنکرێت", "Concrete", "کۆنکرێت", "خرسانة"], m_carpet: ["فەرش", "Carpet", "فەرش", "سجاد"],
+  searchPh: ["بگەڕێ: قەنەفە، جێگا، مێز، گڵۆپ، دار…", "Search: sofa, bed, table, lamp, tree…", "لێ بگەڕە: قەنەفە، جهێ نڤستنێ، مێز، گلۆپ، دار…", "ابحث: كنبة، سرير، طاولة، مصباح، شجرة…"], all: ["هەموو", "All", "هەمی", "الكل"],
+  libOff: ["کتێبخانەی 3D ئێستا ناگات. دواتر هەوڵ بدەرەوە.", "The 3D library isn't reachable now. Try later.", "پەرتووکخانەیا 3D نوکە ناگەهیت. پاشان تاقی بکە.", "مكتبة 3D غير متاحة الآن. حاول لاحقاً."],
+  added: ["زیاد کرا ✅ بە پەنجە ڕایبکێشە بۆ شوێنی خۆی.", "Added ✅ Drag it into place with your finger.", "هاتە زێدەکرن ✅ ب تبلێ ڕاکێشە بۆ جهێ وی.", "أُضيف ✅ اسحبه بإصبعك إلى مكانه."],
+  rotate: ["سووڕاندن", "Rotate", "زڤڕاندن", "تدوير"], sizeL: ["قەبارە", "Size", "قەبارە", "الحجم"], lift: ["بەرزی لە زەوی", "Height from floor", "بلندی ژ ئەردی", "الارتفاع عن الأرض"], dup: ["📄 دووبارەکردنەوە", "📄 Duplicate", "📄 دووبارەکرن", "📄 تكرار"],
+  libNote: ["مۆدێلی 3D ی ڕاستەقینە لە Poly Haven (بەخۆڕایی، CC0)، بە قەبارەی ڕاستی.", "Real 3D models from Poly Haven (free, CC0), real size.", "مۆدێلێن 3D یێن ڕاستەقینە ژ Poly Haven (بێ بەرامبەر، CC0)، ب قەبارێ ڕاستی.", "نماذج 3D حقيقية من Poly Haven (مجانية، CC0) بالحجم الحقيقي."],
+  more: ["📁 زیاتر", "📁 More", "📁 پتر", "📁 المزيد"], realism: ["ڕاستەقینەیی", "Realism", "ڕاستەقینەیی", "الواقعية"], roofT: ["🏠 سەقفی خانوو", "🏠 Roof", "🏠 سەقفێ خانیی", "🏠 السقف"], ceilT: ["💡 سەقفی ناوەوە", "💡 Ceilings", "💡 سەقفێ ناڤخۆ", "💡 الأسقف الداخلية"],
+  render: ["✨ وێنەی ڕاستەقینە بە AI", "✨ Photo-real picture (AI)", "✨ وێنەیێ ڕاستەقینە ب AI", "✨ صورة واقعية بالذكاء الاصطناعي"], renderSub: ["ئەم دیمەنە دەکاتە وێنەیەکی وەک فۆتۆی ڕاستەقینە (١ وێنە حیساب دەکرێت).", "Turns this exact view into a real-looking photo (counts as 1 picture).", "ئەڤ دیمەنە دکەتە وێنەیەکێ وەک فۆتۆیەکا ڕاستەقینە (١ وێنە دهێتە هژمارتن).", "يحوّل هذا المشهد إلى صورة تشبه الصورة الحقيقية (تُحسب صورة واحدة)."],
+  rendering: ["AI وێنەی ڕاستەقینە دروست دەکات… (١٠–٤٠ چرکە)", "The AI is making the photo… (10–40 s)", "AI وێنەیێ ڕاستەقینە دروست دکەت… (١٠–٤٠ چرکە)", "يصنع الذكاء الاصطناعي الصورة… (10–40 ثانية)"], renderFail: ["وێنەکە دروست نەبوو. دووبارە هەوڵ بدەرەوە.", "The picture failed. Try again.", "وێنە دروست نەبوو. دووبارە تاقی بکە.", "فشلت الصورة. حاول مجدداً."],
+  dl: ["⬇️ داگرتن", "⬇️ Download", "⬇️ داگرتن", "⬇️ تنزيل"], close: ["داخستن", "Close", "گرتن", "إغلاق"],
+  real: ["🏗️ ڕاستەقینە", "🏗️ Realistic", "🏗️ ڕاستەقینە", "🏗️ واقعي"],
+  realSub: ["زەوییەک هەڵبژێرە، خانووەکەت بلۆک بە بلۆک دروست بکە، پاشان بچۆ ناوی", "Pick a plot, build your house block by block, then walk inside", "ئەردەکی هەلبژێرە، خانیێ خۆ بلۆک ب بلۆک ئاڤا بکە، پاشان بچە د ناڤدا", "اختر أرضاً، ابنِ منزلك بلوكاً بلوكاً، ثم ادخل إليه"],
+  plotT: ["قەبارەی زەوییەکەت", "Your plot size", "قەبارێ ئەردێ تە", "مساحة أرضك"],
+  plotW: ["پانی (م)", "Width (m)", "پانی (م)", "العرض (م)"],
+  plotD: ["درێژی (م)", "Depth (m)", "درێژی (م)", "العمق (م)"],
+  streetNote: ["شەقام لە بەردەمی زەوییەکەیە (لای خوارەوە).", "The street is in front of the plot (bottom side).", "جادە ل بەرامبەر ئەردییە (لایێ خوارێ).", "الشارع أمام الأرض (الجهة السفلى)."],
+  start: ["🚀 دەستپێکردن", "🚀 Start", "🚀 دەستپێکرن", "🚀 ابدأ"],
+  s1: ["ژوورەکان", "Rooms", "ژوور", "الغرف"],
+  s2: ["بلۆک", "Blocks", "بلۆک", "البلوك"],
+  s3: ["دەرگا و پەنجەرە", "Doors & windows", "دەرگەه و پەنجەرە", "أبواب ونوافذ"],
+  s4: ["ڕەنگ", "Paint", "ڕەنگ", "الطلاء"],
+  s5: ["سوورە", "Fence", "سوور", "السور"],
+  s6: ["کەلوپەل", "Furniture", "کەلوپەل", "الأثاث"],
+  s7: ["بچۆ ژوورەوە", "Go inside", "بچە ژوورڤە", "ادخل"],
+  h_s1: ["ژوورەکانت لەسەر زەوییەکە دابنێ: دوو گۆشە دابگرە یان قەبارە بنووسە (وەک 4×5) و دابگرە.", "Lay out your rooms on the plot: tap two corners, or type a size (like 4×5) and tap.", "ژوورێن خۆ ل سەر ئەردی دانە: دوو گۆشان بکە یان قەبارەی بنڤیسە (وەک 4×5) و بکە.", "ضع غرفك على الأرض: اضغط زاويتين أو اكتب المقاس (مثل 4×5) واضغط."],
+  buildWith: ["دیوارەکان بە چی دروست بکرێن؟", "What should the walls be built with?", "دیوار ب چ بهێنە ئاڤاکرن؟", "بماذا تُبنى الجدران؟"],
+  buildGo: ["🧱 دروستی بکە", "🧱 Build it", "🧱 ئاڤا بکە", "🧱 ابنِه"],
+  building: ["دیوارەکان ڕیز بە ڕیز بەرز دەبنەوە…", "The walls are rising course by course…", "دیوار ڕیز ب ڕیز بلند دبن…", "الجدران ترتفع صفاً بعد صف…"],
+  built: ["دیوارەکان تەواو بوون ✅ ئێستا دەرگا و پەنجەرە دابنێ.", "Walls are up ✅ Now add doors and windows.", "دیوار تەمام بوون ✅ نوکە دەرگەه و پەنجەران دانە.", "اكتملت الجدران ✅ أضف الآن الأبواب والنوافذ."],
+  needRooms: ["سەرەتا ژوورێک دابنێ.", "Lay out a room first.", "دەستپێکێ ژوورەکێ دانە.", "ضع غرفة أولاً."],
+  fenceT: ["🧱 سوورە لە دەوری زەوییەکە", "🧱 Fence around the plot", "🧱 سوور ل دۆر ئەردی", "🧱 سور حول الأرض"],
+  fenceDone: ["سوورە دروست کرا، لەگەڵ دەرگای ئۆتۆمبێل و دەرگای پیاوان ✅", "Fence built, with a car gate and a front door ✅", "سوور هاتە ئاڤاکرن، دگەل دەرگەهێ ترومبێلێ و دەرگەهێ پیادەیان ✅", "بُني السور مع بوابة سيارة وباب أمامي ✅"],
+  goIn: ["🚶 لە شەقامەوە بچۆ ناو خانووەکە", "🚶 Walk in from the street", "🚶 ژ جادێ بچە د ناڤ خانیی دا", "🚶 ادخل من الشارع"],
+  google: ["🌐 Google", "🌐 Google", "🌐 Google", "🌐 Google"],
+  gHint: ["لە Google بگەڕێ — هەر وێنەیەک هەڵبژێریت دەبێتە شتێک لە ناو خانووەکەت", "Search Google — any picture you pick becomes an object in your house", "ل Google بگەڕە — هەر وێنەکێ هەلبژێری دبیتە تشتەک د ناڤ خانیێ تە دا", "ابحث في Google — أي صورة تختارها تصبح قطعة داخل منزلك"],
+  models3d: ["🧊 مۆدێلی 3D", "🧊 3D models", "🧊 مۆدێلێن 3D", "🧊 نماذج 3D"],
+  picH: ["بەرزی (م)", "Height (m)", "بلندی (م)", "الارتفاع (م)"],
+  m_block: ["بلۆک", "Block", "بلۆک", "بلوك"],
+  ofPlot: ["ی زەوی", "of plot", "یێ ئەردی", "من الأرض"]
 };
 const MAT_WALL = ["paint", "brick", "stone", "tile", "wood", "marble", "concrete"], MAT_FLOOR = ["tile", "wood", "marble", "carpet", "stone", "concrete"];
 const PALETTE = ["#ffffff", "#f4efe6", "#ebe4d6", "#e2d5bf", "#d6c3a3", "#c9a77c", "#a8865c", "#7b5b3a", "#4b3621", "#f3e1dc", "#e8c3b7", "#d39c8a", "#b5654f", "#8e3b2e",
   "#f6e7b5", "#ead27a", "#d8b23f", "#e3eadf", "#bfd3b6", "#8fae86", "#5a7d55", "#2f4a32", "#dbe8ef", "#a9c6d8", "#6d9ab8", "#2f5f86", "#1d3550",
   "#e6e0ef", "#bfb1d6", "#7f6aa6", "#f0f0f0", "#cfcfcf", "#9e9e9e", "#6b6b6b", "#3d3d3d", "#1e1e1e"];
-const CATS = [["all", "all"], ["sofa", "قەنەفە|Sofas", "sofa couch armchair ottoman pouf"], ["chair", "کورسی|Chairs", "chair stool bench"], ["table", "مێز|Tables", "table desk"],
-  ["bed", "نوستن و حەمام|Bed & bath", "bed bathtub toilet sink basin"], ["storage", "دۆڵاب|Storage", "shelf cabinet drawer wardrobe dresser bookcase"],
-  ["light", "گڵۆپ|Lights", "lamp chandelier lantern light"], ["plant", "ڕووەک|Plants", "plant potted flower fern cactus"],
-  ["decor", "ڕازاندنەوە|Decor", "vase frame painting mirror rug clock"], ["outdoor", "دەرەوە|Outdoor", "tree bush shrub outdoor garden fence barrel"]];
-const TYPE_NAMES = { living: ["هۆڵ", "Living"], guest: ["دیوەخان", "Guest"], bedroom: ["ژووری نوستن", "Bedroom"], kitchen: ["چێشتخانە", "Kitchen"], dining: ["نانخواردن", "Dining"],
-  bath: ["حەمام / ئاودەست", "Bath"], hall: ["ڕاڕەو", "Hall"], stairs: ["پەیژە", "Stairs"], garage: ["گەراج", "Garage"], office: ["ئۆفیس", "Office"], storage: ["کۆگا", "Storage"], balcony: ["باڵکۆن", "Balcony"], other: ["تر", "Other"] };
+const CATS = [["all", "all"], ["sofa", "قەنەفە|Sofas|قەنەفە|كنب", "sofa couch armchair ottoman pouf"], ["chair", "کورسی|Chairs|کورسی|كراسي", "chair stool bench"], ["table", "مێز|Tables|مێز|طاولات", "table desk"],
+  ["bed", "نوستن و حەمام|Bed & bath|نڤستن و حەمام|نوم وحمام", "bed bathtub toilet sink basin"], ["storage", "دۆڵاب|Storage|دۆلاب|خزائن", "shelf cabinet drawer wardrobe dresser bookcase"],
+  ["light", "گڵۆپ|Lights|گلۆپ|إضاءة", "lamp chandelier lantern light"], ["plant", "ڕووەک|Plants|ڕووەک|نباتات", "plant potted flower fern cactus"],
+  ["decor", "ڕازاندنەوە|Decor|خەملاندن|ديكور", "vase frame painting mirror rug clock"], ["outdoor", "دەرەوە|Outdoor|دەرڤە|خارجي", "tree bush shrub outdoor garden fence barrel"]];
+const TYPE_NAMES = { living: ["هۆڵ", "Living", "هۆل", "الصالة"], guest: ["دیوەخان", "Guest", "دیوەخان", "الضيوف"], bedroom: ["ژووری نوستن", "Bedroom", "ژوورا نڤستنێ", "غرفة نوم"], kitchen: ["چێشتخانە", "Kitchen", "مەتبەخ", "مطبخ"], dining: ["نانخواردن", "Dining", "خوارن", "طعام"],
+  bath: ["حەمام / ئاودەست", "Bath", "حەمام / ئاڤدەست", "حمام"], hall: ["ڕاڕەو", "Hall", "ڕێڕەو", "ممر"], stairs: ["پەیژە", "Stairs", "پەیژە", "درج"], garage: ["گەراج", "Garage", "گەراج", "كراج"], office: ["ئۆفیس", "Office", "ئۆفیس", "مكتب"], storage: ["کۆگا", "Storage", "کۆگەه", "مخزن"], balcony: ["باڵکۆن", "Balcony", "بالکۆن", "بلكونة"], other: ["تر", "Other", "دی", "أخرى"] };
 
 const KEY = "ahm3d:v1", PKEY = "ahm3d:prices";
 const fa = (s) => String(s).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[٫,]/g, ".");
@@ -110,7 +139,7 @@ async function shrinkImage(file, max = 1400) {
 function download(href, name) { const a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 
 export default function Studio3DView({ lang, getToken, onBack }) {
-  const L = lang === "en" ? 1 : 0;
+  const L = { ckb: 0, en: 1, kmr: 2, ar: 3 }[lang] ?? 0, EN = lang === "en";
   const tx = (k) => T[k]?.[L] ?? T[k]?.[0] ?? k;
   const canvasRef = useRef(null), eng = useRef(null), fileRef = useRef(null), jsonRef = useRef(null);
   const [model, setModelState] = useState(() => {
@@ -146,6 +175,12 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   const [ceil, setCeil] = useState(false);
   const [rendered, setRendered] = useState(null);
   const drag = useRef(null);
+  const [setup, setSetup] = useState(false);
+  const [plotW, setPlotW] = useState("10");
+  const [plotD, setPlotD] = useState("20");
+  const [buildMat, setBuildMat] = useState("block");
+  const [libTab, setLibTab] = useState("3d");
+  const [gFound, setGFound] = useState(null);
 
   const say = (s) => { setToast(s); clearTimeout(say.t); say.t = setTimeout(() => setToast(""), 4200); };
   function commit(next, keepFuture) {
@@ -162,6 +197,16 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   useEffect(() => {
     const e = new Studio3D(canvasRef.current);
     eng.current = e;
+    e.resolvePic = async (url) => {
+      const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "grab", url }) });
+      if (!r.ok) throw new Error("pic");
+      const blobUrl = URL.createObjectURL(await r.blob());
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = blobUrl; });
+      const { cutout } = await import("../lib/room3d");
+      const c = cutout(im); URL.revokeObjectURL(blobUrl);
+      return { url: c.url, ar: im.width / im.height };
+    };
+    e.onBuilt = () => { say(tx("built")); setTool("door"); };
     e.resolve = async (ph) => {
       const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "model", id: ph }) });
       if (!r.ok) throw new Error("model");
@@ -232,7 +277,7 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   }
   function placeRoom(x, z, w, d) {
     const n = modelRef.current.rooms.length + 1;
-    commit(addRoom(modelRef.current, { name: (L ? "Room " : "ژووری ") + n, type: "other", x, z, w, d }));
+    commit(addRoom(modelRef.current, { name: [ "ژووری ", "Room ", "ژوورا ", "غرفة " ][L] + n, type: "other", x, z, w, d }));
   }
   function tap(cx, cy) {
     const e = eng.current; if (!e) return;
@@ -354,6 +399,44 @@ export default function Studio3DView({ lang, getToken, onBack }) {
     setBusy("");
   }
 
+  const BUILD_COL = { block: "#b9b6ae", brick: "#b5654f", stone: "#c8b89a", concrete: "#a9a59c" };
+  function startPlot() {
+    const w = parseFloat(fa(plotW)), d = parseFloat(fa(plotD));
+    if (!(w >= 5 && d >= 5)) return;
+    commit(applyOps(emptyModel(), [{ op: "setPlot", w, d }]));
+    setSetup(false); setSel(null); setView("3d"); setTool("room"); setPanel(null);
+    setTimeout(() => eng.current?.fit(), 60); say(tx("h_s1"));
+  }
+  function buildWalls() {
+    if (!modelRef.current.rooms.length) { say(tx("needRooms")); return; }
+    const col = BUILD_COL[buildMat] || "#b9b6ae";
+    const ids = modelRef.current.walls.filter((w) => !w.fence).map((w) => w.id);
+    edit(ids.map((id) => ({ op: "paintWall", id, side: "both", color: col, mat: buildMat })));
+    setPanel(null); setView("3d"); setRoof(false);
+    setTimeout(() => { eng.current?.fit(); eng.current?.animateBuild(); say(tx("building")); }, 120);
+  }
+  function makeFence() {
+    edit([{ op: "fence", mat: "stone", color: "#c8b89a", h: 2 }]);
+    setView("3d"); setTimeout(() => eng.current?.fit(), 60); say(tx("fenceDone"));
+  }
+  async function searchGoogle(e) {
+    e?.preventDefault(); const q = libQ.trim(); if (!q || busy) return;
+    setBusy("search");
+    try {
+      const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "search", q, google: true }) });
+      const j = await r.json();
+      setGFound([...(j.google || []), ...(j.results || [])].slice(0, 60));
+      if (j.models?.length) setFound(j.models);
+    } catch { setGFound([]); }
+    setBusy("");
+  }
+  function addPic(pic) {
+    const p = where();
+    const big = /sofa|bed|table|wardrobe|cabinet|tree|car|کەنەفە|قەنەفە|جێگا|دۆڵاب|دار/i.test(libQ) ? 1.1 : /lamp|plant|vase|گڵۆپ|گوڵ/i.test(libQ) ? 0.9 : 1;
+    const next = applyOps(modelRef.current, [{ op: "addPic", pic: pic.thumb, name: pic.title || libQ, x: p.x, z: p.z, h: big }]);
+    commit(next); setSel(next.items[next.items.length - 1].id); setTool("select"); setPanel("props"); say(tx("added"));
+  }
+
   function where() { // centre of the selected room, or the middle of the view
     const r = modelRef.current.rooms.find((x) => x.id === sel);
     if (r) return { x: r.x + r.w / 2, z: r.z + r.d / 2 };
@@ -401,7 +484,7 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   const q = boq(m, prices);
   const isEmpty = !m.walls.length && !m.rooms.length;
   const TOOLS = [["select", "👆"], ["wall", "🧱"], ["room", "⬜"], ["door", "🚪"], ["window", "🪟"], ["paint", "🎨"], ["measure", "📏"], ["erase", "🗑️"]];
-  const catLabel = (c) => (c[0] === "all" ? tx("all") : c[1].split("|")[L]);
+  const catLabel = (c) => (c[0] === "all" ? tx("all") : (c[1].split("|")[L] || c[1].split("|")[0]));
   const libShown = Array.isArray(lib) ? (cat === "all" ? lib : lib.filter((md) => {
     const w = (md.id.replace(/_/g, " ") + " " + md.name + " " + (md.tags || []).join(" ") + " " + (md.cats || []).join(" ")).toLowerCase();
     return CATS.find((c) => c[0] === cat)[2].split(" ").some((k) => new RegExp("(^|[^a-z])" + k + "(s|es)?([^a-z]|$)").test(w));
@@ -413,9 +496,9 @@ export default function Studio3DView({ lang, getToken, onBack }) {
   );
 
   return (
-    <div className="s3d" dir={L ? "ltr" : "rtl"}>
+    <div className="s3d" dir={EN ? "ltr" : "rtl"}>
       <header className="s3d-top">
-        <button className="s3d-btn" onClick={onBack} aria-label={tx("back")}>{L ? "←" : "→"}</button>
+        <button className="s3d-btn" onClick={onBack} aria-label={tx("back")}>{EN ? "←" : "→"}</button>
         <div className="s3d-title"><b>{tx("title")}</b><small>{tx("beta")}</small></div>
         <div className="s3d-seg" role="tablist">
           {[["plan", "vplan"], ["3d", "v3d"], ["walk", "vwalk"]].map(([v, k]) => (
@@ -452,9 +535,39 @@ export default function Studio3DView({ lang, getToken, onBack }) {
             {planFloors.floors.map((f) => <button key={f} className={"s3d-btn" + (planFloors.cur === f ? " gold" : "")} onClick={() => { const mm = planToModel(planFloors.plan, f); if (mm) { commit(mm); setPlanFloors({ ...planFloors, cur: f }); setTimeout(() => eng.current?.fit(), 50); } }}>{tx("floorN")} {f}</button>)}
           </div>
         )}
-        {isEmpty && !busy && (
+        {setup && (
+          <div className="s3d-empty s3d-setup">
+            <b>{tx("plotT")}</b>
+            <div className="s3d-chips center">{[[10, 20], [10, 25], [12, 25], [16, 25], [20, 30]].map(([w, d]) => (
+              <button key={w + "x" + d} className={plotW == w && plotD == d ? "on" : ""} onClick={() => { setPlotW(String(w)); setPlotD(String(d)); }}>{w * d} م² · {w}×{d}</button>))}</div>
+            <div className="s3d-row">
+              <label className="s3d-in">{tx("plotW")}<input inputMode="decimal" value={plotW} onChange={(e) => setPlotW(e.target.value)} /></label>
+              <label className="s3d-in">{tx("plotD")}<input inputMode="decimal" value={plotD} onChange={(e) => setPlotD(e.target.value)} /></label>
+            </div>
+            <p><b>{Math.round((parseFloat(fa(plotW)) || 0) * (parseFloat(fa(plotD)) || 0))} م²</b> · {tx("streetNote")}</p>
+            <div className="s3d-row">
+              <button className="s3d-btn gold" onClick={startPlot}>{tx("start")}</button>
+              <button className="s3d-btn" onClick={() => setSetup(false)}>{tx("close")}</button>
+            </div>
+          </div>
+        )}
+        {m.plot && !setup && view !== "walk" && (
+          <div className="s3d-steps">
+            {[["s1", m.rooms.length > 0, () => { setTool("room"); setView("plan"); setPanel(null); say(tx("h_s1")); }],
+              ["s2", m.walls.some((w) => !w.fence && w.matA), () => setPanel("build")],
+              ["s3", m.openings.some((o) => m.walls.find((w) => w.id === o.wall && !w.fence)), () => { setTool("door"); setView("3d"); }],
+              ["s4", m.walls.some((w) => !w.fence && w.matA && w.matA !== buildMat && w.matA !== "block"), () => setTool("paint")],
+              ["s5", m.walls.some((w) => w.fence), makeFence],
+              ["s6", (m.items || []).length > 0, () => setPanel("items")],
+              ["s7", false, () => setView("walk")]].map(([k, ok, go], i) => (
+              <button key={k} className={ok ? "ok" : ""} onClick={go}><em>{ok ? "✓" : i + 1}</em>{tx(k)}</button>
+            ))}
+          </div>
+        )}
+        {isEmpty && !busy && !setup && !m.plot && (
           <div className="s3d-empty">
             <b>{tx("empty1")}</b><p>{tx("empty2")}</p>
+            <button className="s3d-btn gold s3d-wide s3d-real" onClick={() => setSetup(true)}>{tx("real")}<small>{tx("realSub")}</small></button>
             <div className="s3d-row">
               <button className="s3d-btn gold" onClick={() => { commit(sampleHouse()); setTimeout(() => eng.current?.fit(), 50); }}>{tx("sample")}</button>
               <button className="s3d-btn" onClick={() => fileRef.current?.click()}>{tx("fromPlan")}</button>
@@ -519,7 +632,7 @@ export default function Studio3DView({ lang, getToken, onBack }) {
                 <h4>⬜ {selRoom.w}×{selRoom.d} م · {Math.round(selRoom.w * selRoom.d * 10) / 10} م²</h4>
                 <label>{tx("name")} <input defaultValue={selRoom.name} key={sel} onBlur={(e) => edit([{ op: "setRoom", id: sel, name: e.target.value }])} /></label>
                 <label>{tx("type")} <select value={selRoom.type} onChange={(e) => edit([{ op: "setRoom", id: sel, type: e.target.value }])}>
-                  {Object.keys(ROOM_TYPES).map((k) => <option key={k} value={k}>{TYPE_NAMES[k][L]}</option>)}</select></label>
+                  {Object.keys(ROOM_TYPES).map((k) => <option key={k} value={k}>{TYPE_NAMES[k][L] || TYPE_NAMES[k][0]}</option>)}</select></label>
                 <div className="s3d-sw">{["#eadcc4", "#d8e3ee", "#c9a77c", "#8f6a4a", "#e9e9e9", "#bdbdbd", "#d6c6a5", "#a9b8a0"].map((c) => <button key={c} style={{ background: c }} onClick={() => edit([{ op: "setRoom", id: sel, floor: c }])} aria-label={c} />)}</div>
                 <button className="s3d-btn danger" onClick={() => { edit([{ op: "delete", id: sel }]); setSel(null); }}>{tx("del")}</button>
               </div>
@@ -539,6 +652,25 @@ export default function Studio3DView({ lang, getToken, onBack }) {
           )}
           {panel === "items" && (
             <div className="s3d-form">
+              <div className="s3d-seg small">
+                <button className={libTab === "3d" ? "on" : ""} onClick={() => setLibTab("3d")}>{tx("models3d")}</button>
+                <button className={libTab === "google" ? "on" : ""} onClick={() => setLibTab("google")}>{tx("google")}</button>
+              </div>
+              {libTab === "google" ? (
+                <>
+                  <form className="s3d-search" onSubmit={searchGoogle}>
+                    <input value={libQ} onChange={(e) => setLibQ(e.target.value.slice(0, 80))} placeholder={tx("searchPh")} enterKeyHint="search" />
+                    <button className="s3d-btn gold" disabled={!libQ.trim() || !!busy}>{busy === "search" ? <span className="mini-spin" /> : "🔍"}</button>
+                  </form>
+                  <p className="s3d-sub">{tx("gHint")}</p>
+                  {gFound && (
+                    <div className="s3d-lib">
+                      {gFound.map((g2) => <button key={g2.thumb} onClick={() => addPic(g2)} title={g2.title}><img src={g2.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /><small>{g2.credit || g2.title}</small></button>)}
+                      {!gFound.length && <p className="muted">—</p>}
+                    </div>
+                  )}
+                </>
+              ) : (<>
               <form className="s3d-search" onSubmit={searchLib}>
                 <input value={libQ} onChange={(e) => setLibQ(e.target.value.slice(0, 80))} placeholder={tx("searchPh")} enterKeyHint="search" />
                 <button className="s3d-btn gold" disabled={!libQ.trim() || !!busy}>{busy === "search" ? <span className="mini-spin" /> : "🔍"}</button>
@@ -556,6 +688,14 @@ export default function Studio3DView({ lang, getToken, onBack }) {
                 </div>
               )}
               <p className="cs-note">{tx("libNote")}</p>
+              </>)}
+            </div>
+          )}
+          {panel === "build" && (
+            <div className="s3d-form">
+              <h4>{tx("buildWith")}</h4>
+              <div className="s3d-chips">{["block", "brick", "stone", "concrete"].map((k) => <button key={k} className={buildMat === k ? "on" : ""} onClick={() => setBuildMat(k)}>{tx("m_" + k)}</button>)}</div>
+              <button className="s3d-btn gold" onClick={buildWalls}>{tx("buildGo")}</button>
             </div>
           )}
           {panel === "ai" && (
