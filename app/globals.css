@@ -2341,3 +2341,6 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .s3d-seg.small button.on { background: #e8b44a; color: #1b1300; }
 .s3d-stage:has(.s3d-steps) .s3d-hint:not(.static) { top: 52px; }
 .ds-tool.ds-real { border-color: rgb(52 168 83 / .7); background: linear-gradient(135deg, rgb(52 168 83 / .16), rgb(var(--gold-rgb) / .1)); }
+.s3d-progress { position: relative; height: 26px; border-radius: 999px; background: #0c0f15; border: 1px solid #343c4c; overflow: hidden; }
+.s3d-progress i { position: absolute; inset-block: 0; inset-inline-start: 0; background: linear-gradient(90deg, #8f8b84, #e8b44a); transition: width .3s; }
+.s3d-progress b { position: relative; display: block; text-align: center; line-height: 24px; font-size: 12.5px; }

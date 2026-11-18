@@ -89,6 +89,31 @@ const T = {
   m_block: ["بلۆک", "Block", "بلۆک", "بلوك"],
   gQuick: ["🚗 ئۆتۆمبێل|🛋️ قەنەفە|🛏️ جێگا|🍽️ مێزی نانخواردن|🌳 دار|🌷 گوڵ|💡 گڵۆپ|📺 تەلەفزیۆن|🚿 حەمام|🏊 مەلەوانگە", "🚗 car|🛋️ sofa|🛏️ bed|🍽️ dining table|🌳 tree|🌷 flowers|💡 lamp|📺 TV|🚿 bathroom|🏊 pool",
     "🚗 ترومبێل|🛋️ قەنەفە|🛏️ جهێ نڤستنێ|🍽️ مێزا خوارنێ|🌳 دار|🌷 گول|💡 گلۆپ|📺 تەلەفزیۆن|🚿 حەمام|🏊 مەلەڤانگە", "🚗 سيارة|🛋️ كنبة|🛏️ سرير|🍽️ طاولة طعام|🌳 شجرة|🌷 زهور|💡 مصباح|📺 تلفاز|🚿 حمام|🏊 مسبح"],
+  lay: ["دانانی بلۆک", "Lay blocks", "دانانا بلۆکان", "وضع البلوك"],
+  pourT: ["ڕێژانی سەقف", "Pour roof", "ڕێژتنا سەقفی", "صبّ السقف"],
+  garden: ["باخچە", "Garden", "باخچە", "حديقة"],
+  h_lay: ["لەسەر دیوارێک دابگرە، هەر جارێک ڕیزێکی بلۆک دادەنرێت (٢٠ سم).", "Tap a wall: each tap lays one course of blocks (20 cm).", "ل سەر دیوارەکی بکە، هەر جارەکێ ڕیزەکا بلۆکان دادنیت (٢٠ سم).", "اضغط على جدار: كل ضغطة تضع صفاً من البلوك (20 سم)."],
+  h_pour: ["لەسەر ژوورێک دابگرە بۆ ڕێژانی کۆنکرێتی سەقفەکەی.", "Tap a room to pour its concrete roof slab.", "ل سەر ژوورەکێ بکە بۆ ڕێژتنا کۆنکرێتا سەقفێ وێ.", "اضغط على غرفة لصبّ سقفها الخرساني."],
+  h_garden: ["جۆرێک هەڵبژێرە، پاشان دوو گۆشە لەسەر زەوییەکە دابگرە.", "Pick a type, then tap two corners on the ground.", "جۆرەکی هەلبژێرە، پاشان دوو گۆشان ل سەر ئەردی بکە.", "اختر النوع ثم اضغط زاويتين على الأرض."],
+  rowAll: ["+ ڕیزێک بۆ هەموو دیوارەکان", "+ One course on all walls", "+ ڕیزەک بۆ هەمی دیواران", "+ صف على كل الجدران"],
+  fullAll: ["⚡ هەموو دیوارەکان تەواو بکە", "⚡ Finish all walls", "⚡ هەمی دیواران تەمام بکە", "⚡ أكمل كل الجدران"],
+  pourAll: ["🏗️ سەقفی هەموو ژوورەکان", "🏗️ Pour every roof", "🏗️ سەقفێ هەمی ژووران", "🏗️ صبّ كل الأسقف"],
+  laid: ["دانراوە", "laid", "دانایە", "مُنجز"],
+  pouring: ["کۆنکرێت دەڕێژرێت…", "Pouring concrete…", "کۆنکرێت دهێتە ڕێژتن…", "يُصبّ الخرسانة…"],
+  wallsFirst: ["سەرەتا دیوارەکانی ئەم ژوورە تەواو بکە.", "Finish this room's walls first.", "دەستپێکێ دیوارێن ڤی ژووری تەمام بکە.", "أكمل جدران هذه الغرفة أولاً."],
+  g_grass: ["🌱 چیمەن", "🌱 Lawn", "🌱 چیمەن", "🌱 عشب"],
+  g_paving: ["کاشی حەوشە", "Paving", "کاشیێ حەوشێ", "بلاط"],
+  g_gravel: ["چەو", "Gravel", "چەو", "حصى"],
+  g_soil: ["خۆڵ", "Soil", "ئاخ", "تراب"],
+  planUp: ["📐 نەخشەکەم بنێرە", "📐 Send my plan", "📐 نەخشا من بهنێرە", "📐 أرسل مخططي"],
+  planUpSub: ["ژوورەکانی نەخشەکەت لەسەر زەوییەکە دادەنرێن، دیوارەکان خۆت بلۆک بە بلۆک دادەنێیت", "Your plan's rooms go on the plot; you lay the walls block by block yourself", "ژوورێن نەخشا تە ل سەر ئەردی دهێنە دانان، دیواران تو ب خۆ بلۆک ب بلۆک دادنێی", "تُوضع غرف مخططك على الأرض، وأنت تبني الجدران بلوكاً بلوكاً"],
+  orT: ["یان", "or", "یان", "أو"],
+  r2: ["بلۆک دابنێ", "Lay blocks", "بلۆکان دانە", "ضع البلوك"],
+  r4: ["سەقف بڕێژە", "Pour roof", "سەقفی بڕێژە", "صبّ السقف"],
+  r5: ["سواخ و ڕەنگ", "Plaster & paint", "سواخ و ڕەنگ", "لياسة ودهان"],
+  r7: ["باخچە و چیمەن", "Garden & lawn", "باخچە و چیمەن", "حديقة وعشب"],
+  r9: ["🚗 ئۆتۆمبێل", "🚗 Car", "🚗 ترومبێل", "🚗 سيارة"],
+  carQ: ["ئۆتۆمبێل", "car", "ترومبێل", "سيارة"],
   ofPlot: ["ی زەوی", "of plot", "یێ ئەردی", "من الأرض"]
 };
 const MAT_WALL = ["paint", "brick", "stone", "tile", "wood", "marble", "concrete"], MAT_FLOOR = ["tile", "wood", "marble", "carpet", "stone", "concrete"];
@@ -179,14 +204,18 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
   const [ceil, setCeil] = useState(false);
   const [rendered, setRendered] = useState(null);
   const drag = useRef(null);
+  const realPlan = useRef(false);
   const [setup, setSetup] = useState(() => REAL && !model.plot);
   const [plotW, setPlotW] = useState("10");
   const [plotD, setPlotD] = useState("20");
   const [buildMat, setBuildMat] = useState("block");
   const [libTab, setLibTab] = useState(REAL ? "google" : "3d");
   const [gFound, setGFound] = useState(null);
+  const [layMat, setLayMat] = useState("block");
+  const [gardenK, setGardenK] = useState("grass");
 
-  const say = (s) => { setToast(s); clearTimeout(say.t); say.t = setTimeout(() => setToast(""), 4200); };
+  const toastT = useRef(0);
+  const say = (s) => { setToast(s); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(""), 4200); };
   function commit(next, keepFuture) {
     hist.current.past.push(modelRef.current);
     if (hist.current.past.length > 80) hist.current.past.shift();
@@ -229,7 +258,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
   useEffect(() => { eng.current?.setView(view); }, [view]);
   useEffect(() => { eng.current?.placeSun(hour); }, [hour]);
   useEffect(() => { const e = eng.current; if (!e) return; e.roof = roof; e.ceiling = ceil; e.build(); }, [roof, ceil]);
-  useEffect(() => { if (tool === "paint") setPanel("paint"); }, [tool]);
+  useEffect(() => { if (["paint", "lay", "pour", "garden"].includes(tool)) setPanel(tool === "paint" ? "paint" : tool); }, [tool]);
   // the 3D furniture library (loaded once when the furniture panel opens)
   useEffect(() => {
     if (panel !== "items" || lib) return;
@@ -261,7 +290,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
     const items = [];
     if (start) items.push({ kind: "dot", x: start.x, z: start.z });
     if (start && p) {
-      if (tool === "room") {
+      if (tool === "room" || tool === "garden") {
         const x0 = Math.min(start.x, p.x), x1 = Math.max(start.x, p.x), z0 = Math.min(start.z, p.z), z1 = Math.max(start.z, p.z);
         const lab = `${(x1 - x0).toFixed(2)}×${(z1 - z0).toFixed(2)}`;
         items.push({ kind: "line", x1: x0, z1: z0, x2: x1, z2: z0, label: lab }, { kind: "line", x1: x1, z1: z0, x2: x1, z2: z1 }, { kind: "line", x1: x0, z1: z1, x2: x1, z2: z1 }, { kind: "line", x1: x0, z1: z0, x2: x0, z2: z1 });
@@ -274,17 +303,44 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
     if (!s) return;
     if (Math.hypot(p.x - s.x, p.z - s.z) < 0.05) { setDraft(null); eng.current.setPreview([]); return; }
     const m = modelRef.current;
-    commit({ ...m, walls: [...m.walls, { id: uid("w"), x1: s.x, z1: s.z, x2: p.x, z2: p.z, t: 0.2, h: m.wallH || 3, color: WALL_COLORS[0] }] });
+    commit(unbuilt({ ...m, walls: [...m.walls, { id: uid("w"), x1: s.x, z1: s.z, x2: p.x, z2: p.z, t: 0.2, h: m.wallH || 3, color: WALL_COLORS[0] }] }));
     const closed = draft.first && Math.hypot(p.x - draft.first.x, p.z - draft.first.z) < 0.05;
     if (closed) { setDraft(null); eng.current.setPreview([]); return; }
     setDraft({ start: p, first: draft.first || s }); preview(p);
   }
+  const RAWC = { block: "#b9b6ae", brick: "#b5654f", stone: "#c8b89a" };
+  const unbuilt = (mm) => (REAL ? { ...mm, walls: mm.walls.map((w) => (w.built === undefined && !w.fence ? { ...w, built: 0, matA: layMat, matB: layMat, colorA: RAWC[layMat], colorB: RAWC[layMat] } : w)) } : mm);
   function placeRoom(x, z, w, d) {
     const n = modelRef.current.rooms.length + 1;
-    commit(addRoom(modelRef.current, { name: [ "ژووری ", "Room ", "ژوورا ", "غرفة " ][L] + n, type: "other", x, z, w, d }));
+    commit(unbuilt(addRoom(modelRef.current, { name: [ "ژووری ", "Room ", "ژوورا ", "غرفة " ][L] + n, type: "other", x, z, w, d })));
   }
   function tap(cx, cy) {
     const e = eng.current; if (!e) return;
+    if (tool === "lay") {
+      const hit = e.pick(cx, cy);
+      if (hit?.type === "wall") edit([{ op: "lay", id: hit.id, n: 1, mat: layMat }]);
+      else say(tx("h_lay"));
+      return;
+    }
+    if (tool === "pour") {
+      const hit = e.pick(cx, cy);
+      const rm = hit?.type === "room" && modelRef.current.rooms.find((r) => r.id === hit.id);
+      if (!rm) { say(tx("h_pour")); return; }
+      const around = modelRef.current.walls.filter((w) => !w.fence && Math.min(w.x1, w.x2) <= rm.x + rm.w + 0.05 && Math.max(w.x1, w.x2) >= rm.x - 0.05 && Math.min(w.z1, w.z2) <= rm.z + rm.d + 0.05 && Math.max(w.z1, w.z2) >= rm.z - 0.05);
+      if (around.some((w) => (w.built ?? w.h) < w.h - 0.01)) { say(tx("wallsFirst")); return; }
+      edit([{ op: "pour", id: rm.id }]); say(tx("pouring"));
+      setTimeout(() => eng.current?.pour(rm.id), 30);
+      return;
+    }
+    if (tool === "garden") {
+      const raw = e.toFloor(cx, cy); if (!raw) return;
+      const p = e.snap(raw);
+      if (!draft?.c1) { setDraft({ c1: p }); preview(p); return; }
+      const a = draft.c1; setDraft(null); e.setPreview([]);
+      const w = Math.abs(p.x - a.x), d = Math.abs(p.z - a.z);
+      if (w >= 0.3 && d >= 0.3) edit([{ op: "patch", kind: gardenK, x: Math.min(a.x, p.x), z: Math.min(a.z, p.z), w, d }]);
+      return;
+    }
     if (tool === "paint") {
       const hit = e.pick(cx, cy);
       if (hit?.type === "wall") edit([{ op: "paintWall", id: hit.id, side: both || !hit.side ? "both" : hit.side, color: paintC, mat: paintM }]);
@@ -354,7 +410,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
     if (ev.pointerType === "mouse" && !ev.buttons && (draft?.start || draft?.c1 || draft?.m1)) {
       const raw = eng.current.toFloor(ev.clientX, ev.clientY); if (!raw) return;
       const s = draft.start || draft.c1 || draft.m1;
-      preview(s, eng.current.snap(raw, tool === "room" ? null : s));
+      preview(s, eng.current.snap(raw, tool === "room" || tool === "garden" ? null : s));
     }
   };
   const onUp = (ev) => {
@@ -394,8 +450,20 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.plan) throw new Error(j.error || "plan");
       const floors = [...new Set((j.plan.rooms || []).map((x) => x.floor || 1))].sort();
-      const m = planToModel(j.plan, floors[0] || 1);
+      let m = planToModel(j.plan, floors[0] || 1);
       if (!m) throw new Error("plan");
+      if (realPlan.current) { // put the house on the plot: 2 m side yards, 2 m behind, 6 m front yard (or the size typed)
+        realPlan.current = false;
+        const xs = m.walls.flatMap((w) => [w.x1, w.x2]), zs = m.walls.flatMap((w) => [w.z1, w.z2]);
+        const W = Math.max(...xs) - Math.min(...xs), D = Math.max(...zs) - Math.min(...zs);
+        const pw = Math.max(parseFloat(fa(plotW)) || 0, Math.ceil(W + 4)), pd = Math.max(parseFloat(fa(plotD)) || 0, Math.ceil(D + 8));
+        const ox = (pw - W) / 2 - Math.min(...xs), oz = 2 - Math.min(...zs);
+        const mv = (v) => Math.round(v * 100) / 100;
+        m = { ...m, plot: { w: pw, d: pd, ground: "soil" },
+          walls: m.walls.map((w) => ({ ...w, x1: mv(w.x1 + ox), x2: mv(w.x2 + ox), z1: mv(w.z1 + oz), z2: mv(w.z2 + oz) })),
+          rooms: m.rooms.map((r) => ({ ...r, x: mv(r.x + ox), z: mv(r.z + oz) })) };
+        m = unbuilt(m); setSetup(false); setPlotW(String(pw)); setPlotD(String(pd)); setTool("lay"); setView("3d");
+      }
       commit(m); setSel(null); setTimeout(() => eng.current?.fit(), 50);
       setPlanFloors(floors.length > 1 ? { plan: j.plan, floors, cur: floors[0] } : null);
       say(tx("planDone")); setPanel(null);
@@ -487,7 +555,9 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
   const selWall = m.walls.find((w) => w.id === sel), selOpen = m.openings.find((o) => o.id === sel), selRoom = m.rooms.find((r) => r.id === sel);
   const q = boq(m, prices);
   const isEmpty = !m.walls.length && !m.rooms.length;
-  const TOOLS = [["select", "👆"], ["wall", "🧱"], ["room", "⬜"], ["door", "🚪"], ["window", "🪟"], ["paint", "🎨"], ["measure", "📏"], ["erase", "🗑️"]];
+  const TOOLS = REAL
+    ? [["select", "👆"], ["room", "⬜"], ["wall", "📐"], ["lay", "🧱"], ["door", "🚪"], ["window", "🪟"], ["pour", "🏗️"], ["paint", "🎨"], ["garden", "🌱"], ["measure", "📏"], ["erase", "🗑️"]]
+    : [["select", "👆"], ["wall", "🧱"], ["room", "⬜"], ["door", "🚪"], ["window", "🪟"], ["paint", "🎨"], ["measure", "📏"], ["erase", "🗑️"]];
   const catLabel = (c) => (c[0] === "all" ? tx("all") : (c[1].split("|")[L] || c[1].split("|")[0]));
   const libShown = Array.isArray(lib) ? (cat === "all" ? lib : lib.filter((md) => {
     const w = (md.id.replace(/_/g, " ") + " " + md.name + " " + (md.tags || []).join(" ") + " " + (md.cats || []).join(" ")).toLowerCase();
@@ -553,9 +623,29 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
               <button className="s3d-btn gold" onClick={startPlot}>{tx("start")}</button>
               <button className="s3d-btn" onClick={() => setSetup(false)}>{tx("close")}</button>
             </div>
+            {REAL && (<>
+              <p className="s3d-sub">— {tx("orT")} —</p>
+              <button className="s3d-btn s3d-wide" disabled={!!busy} onClick={() => { realPlan.current = true; fileRef.current?.click(); }}>{tx("planUp")}<small>{tx("planUpSub")}</small></button>
+            </>)}
           </div>
         )}
-        {m.plot && !setup && view !== "walk" && (
+        {m.plot && !setup && view !== "walk" && REAL && (
+          <div className="s3d-steps">
+            {[["s1", m.rooms.length > 0, () => { setTool("room"); setView("plan"); setPanel(null); say(tx("h_s1")); }],
+              ["r2", m.walls.some((w) => !w.fence) && m.walls.filter((w) => !w.fence).every((w) => (w.built ?? w.h) >= w.h - 0.01), () => { setTool("lay"); setView("3d"); }],
+              ["s3", m.openings.some((o) => m.walls.find((w) => w.id === o.wall && !w.fence)), () => { setTool("door"); setView("3d"); }],
+              ["r4", m.rooms.length > 0 && m.rooms.every((r) => r.slab), () => { setTool("pour"); setView("3d"); }],
+              ["r5", m.walls.some((w) => !w.fence && (w.matA === "paint" || w.matB === "paint")), () => { setTool("paint"); setPaintM("paint"); setView("3d"); }],
+              ["s6", (m.items || []).some((i) => i.ph), () => { setLibTab("3d"); setPanel("items"); }],
+              ["r7", (m.patches || []).length > 0, () => { setTool("garden"); setView("3d"); }],
+              ["s5", m.walls.some((w) => w.fence), makeFence],
+              ["r9", (m.items || []).some((i) => i.pic), () => { setLibTab("google"); setPanel("items"); setLibQ(tx("carQ")); searchGoogle(null, tx("carQ")); }],
+              ["s7", false, () => setView("walk")]].map(([k, ok, go], i) => (
+              <button key={k} className={ok ? "ok" : ""} onClick={go}><em>{ok ? "✓" : i + 1}</em>{tx(k)}</button>
+            ))}
+          </div>
+        )}
+        {m.plot && !setup && view !== "walk" && !REAL && (
           <div className="s3d-steps">
             {[["s1", m.rooms.length > 0, () => { setTool("room"); setView("plan"); setPanel(null); say(tx("h_s1")); }],
               ["s2", m.walls.some((w) => !w.fence && w.matA), () => setPanel("build")],
@@ -697,6 +787,37 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
               </>)}
             </div>
           )}
+          {panel === "lay" && (() => {
+            const hw = m.walls.filter((w) => !w.fence), done = hw.reduce((a, w) => a + (w.built ?? w.h), 0), all = hw.reduce((a, w) => a + w.h, 0);
+            return (
+              <div className="s3d-form">
+                <p className="s3d-sub">{tx("h_lay")}</p>
+                <div className="s3d-chips">{["block", "brick", "stone"].map((k) => <button key={k} className={layMat === k ? "on" : ""} onClick={() => setLayMat(k)}>{tx("m_" + k)}</button>)}</div>
+                <div className="s3d-progress"><i style={{ width: (all ? Math.round((done / all) * 100) : 0) + "%" }} /><b>{all ? Math.round((done / all) * 100) : 0}% {tx("laid")}</b></div>
+                <div className="s3d-row start">
+                  <button className="s3d-btn" disabled={!hw.length} onClick={() => edit([{ op: "lay", id: "*", n: 1, mat: layMat }])}>{tx("rowAll")}</button>
+                  <button className="s3d-btn gold" disabled={!hw.length} onClick={() => { edit([{ op: "lay", id: "*", full: true, mat: layMat }]); setTimeout(() => eng.current?.animateBuild(), 60); }}>{tx("fullAll")}</button>
+                </div>
+              </div>
+            );
+          })()}
+          {panel === "pour" && (
+            <div className="s3d-form">
+              <p className="s3d-sub">{tx("h_pour")}</p>
+              <button className="s3d-btn gold" disabled={!m.rooms.length} onClick={() => {
+                const ok = m.walls.filter((w) => !w.fence).every((w) => (w.built ?? w.h) >= w.h - 0.01);
+                if (!ok) { say(tx("wallsFirst")); return; }
+                edit([{ op: "pour", id: "*" }]); say(tx("pouring"));
+                m.rooms.forEach((r, i) => setTimeout(() => eng.current?.pour(r.id), 40 + i * 450));
+              }}>{tx("pourAll")}</button>
+            </div>
+          )}
+          {panel === "garden" && (
+            <div className="s3d-form">
+              <p className="s3d-sub">{tx("h_garden")}</p>
+              <div className="s3d-chips">{["grass", "paving", "gravel", "soil"].map((k) => <button key={k} className={gardenK === k ? "on" : ""} onClick={() => setGardenK(k)}>{tx("g_" + k)}</button>)}</div>
+            </div>
+          )}
           {panel === "build" && (
             <div className="s3d-form">
               <h4>{tx("buildWith")}</h4>
@@ -755,7 +876,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
         <div className="s3d-tools">
           {TOOLS.map(([k, ic]) => (
             <button key={k} className={tool === k ? "on" : ""} onClick={() => { setTool(k); if (view === "walk") setView("3d"); }} aria-pressed={tool === k}>
-              <span aria-hidden="true">{ic}</span><small>{tx(k)}</small>
+              <span aria-hidden="true">{ic}</span><small>{tx(k === "pour" ? "pourT" : k)}</small>
             </button>
           ))}
           <button onClick={undo} disabled={!hist.current.past.length}><span aria-hidden="true">↶</span><small>{tx("undo")}</small></button>
