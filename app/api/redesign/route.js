@@ -192,15 +192,22 @@ async function englishQuery(q) {
 // pictures (gstatic) are used, so the app never fetches from unknown websites.
 async function googlePictures(query) {
   const key = serverEnv("SERPER_API_KEY");
-  if (!key) return [];
+  if (!key) return { list: [], why: "no_key" };
   try {
     const r = await fetch("https://google.serper.dev/images", { method: "POST", headers: { "X-API-KEY": key, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: query, num: 30 }), signal: AbortSignal.timeout(8000) });
-    if (!r.ok) return [];
+      body: JSON.stringify({ q: query, num: 30 }), signal: AbortSignal.timeout(9000) });
+    if (!r.ok) {
+      const t = (await r.text().catch(() => "")).slice(0, 160);
+      console.error("serper images", r.status, t);
+      return { list: [], why: r.status === 401 || r.status === 403 ? (/credit|quota|limit/i.test(t) ? "quota" : "key") : r.status === 429 ? "quota" : "http_" + r.status };
+    }
     const j = await r.json();
-    return (j.images || []).filter((x) => /^https:\/\/encrypted-tbn\d\.gstatic\.com\//.test(x.thumbnailUrl || ""))
-      .map((x) => ({ thumb: x.thumbnailUrl, title: clean(x.title, 80), credit: clean(x.source || x.domain, 60), license: "google" })).slice(0, 30);
-  } catch { return []; }
+    const all = j.images || [];
+    // Google's small previews (gstatic) only — the app never downloads from unknown websites
+    const list = all.map((x) => ({ thumb: /^https:\/\/encrypted-tbn\d\.gstatic\.com\//.test(x.thumbnailUrl || "") ? x.thumbnailUrl : null, title: clean(x.title, 80), credit: clean(x.source || x.domain, 60), license: "google" }))
+      .filter((x) => x.thumb).slice(0, 30);
+    return { list, why: list.length ? "" : all.length ? "no_thumbs" : "empty" };
+  } catch (e) { console.error("serper images", String(e.message).slice(0, 80)); return { list: [], why: "timeout" }; }
 }
 
 async function searchPictures(q, google) {
@@ -217,12 +224,12 @@ async function searchPictures(q, google) {
         return ii?.thumburl ? { thumb: ii.thumburl, title: clean(String(pg.title || "").replace(/^File:|\.[a-z]+$/gi, ""), 80), credit: clean(ii.extmetadata?.Artist?.value?.replace(/<[^>]+>/g, ""), 60), license: clean(ii.extmetadata?.LicenseShortName?.value, 20), source: "Wikimedia" } : null;
       }).filter(Boolean))
       .catch((e) => { console.error("wikimedia", String(e.message).slice(0, 80)); return []; }),
-    google ? googlePictures(query + " product white background") : Promise.resolve([]),
+    google ? googlePictures(query) : Promise.resolve({ list: [], why: "" }),
   ]);
   // mix the two picture sources, best first, no repeats
   const pics = [], seen = new Set();
   for (let i = 0; i < Math.max(ov.length, wm.length); i++) for (const x of [ov[i], wm[i]]) if (x && !seen.has(x.thumb)) { seen.add(x.thumb); pics.push(x); }
-  return { q: query, models: found3d, results: pics.slice(0, 48), google: gg };
+  return { q: query, models: found3d, results: pics.slice(0, 48), google: gg.list, googleWhy: gg.why };
 }
 const GRAB_HOSTS = /^https:\/\/(api\.openverse\.org|upload\.wikimedia\.org|encrypted-tbn\d\.gstatic\.com)\//;
 

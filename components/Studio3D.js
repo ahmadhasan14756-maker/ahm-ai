@@ -114,6 +114,22 @@ const T = {
   r7: ["باخچە و چیمەن", "Garden & lawn", "باخچە و چیمەن", "حديقة وعشب"],
   r9: ["🚗 ئۆتۆمبێل", "🚗 Car", "🚗 ترومبێل", "🚗 سيارة"],
   carQ: ["ئۆتۆمبێل", "car", "ترومبێل", "سيارة"],
+  myPhoto: ["📷 وێنەی خۆم", "📷 My photo", "📷 وێنێ من", "📷 صورتي"],
+  myPhotoSub: ["وێنەی هەر شتێک بنێرە، پاشبنەماکەی لادەبرێت و دەیخەیتە ناو خانووەکەت", "Upload a photo of anything: its background is removed and it goes into your house", "وێنێ هەر تشتەکی بهنێرە، پاشبنەما وێ دهێتە لابرن و دچیتە د ناڤ خانیێ تە دا", "ارفع صورة لأي شيء: تُزال خلفيتها وتوضع داخل منزلك"],
+  gwhy_quota: ["Google وەڵام نادات: گەڕانە بەخۆڕاییەکانی کلیلی Serper تەواو بوون. لە serper.dev کلیلێکی نوێ وەربگرە و لە Vercel دایبنێ.", "Google isn't answering: the Serper key's free searches are used up. Get a new key at serper.dev and put it in Vercel.", "Google بەرسڤێ نادەت: لێگەڕیانێن بێ بەرامبەر یێن کلیلا Serper ب دوماهی هاتن. ل serper.dev کلیلەکا نوو وەربگرە و ل Vercel دانە.", "لا يستجيب Google: انتهت عمليات البحث المجانية لمفتاح Serper. احصل على مفتاح جديد من serper.dev وضعه في Vercel."],
+  gwhy_key: ["کلیلی Serper لە Vercel هەڵەیە یان کار ناکات.", "The Serper key in Vercel is wrong or not working.", "کلیلا Serper ل Vercel خەلەتە یان کار ناکەت.", "مفتاح Serper في Vercel خاطئ أو لا يعمل."],
+  gwhy_no_key: ["کلیلی Serper لە Vercel دانەنراوە.", "No Serper key is set in Vercel.", "کلیلا Serper ل Vercel نەهاتیە دانان.", "لم يُضبط مفتاح Serper في Vercel."],
+  gwhy_other: ["Google ئێستا وەڵامی نەدایەوە، دووبارە هەوڵ بدەرەوە. وێنەی سەرچاوەکانی تر لە خوارەوەن.", "Google didn't answer now — try again. Pictures from other sources are below.", "Google نوکە بەرسڤ نەدا، دووبارە تاقی بکە. وێنێن ژێدەرێن دی ل خوارێنە.", "لم يستجب Google الآن، حاول مجدداً. صور من مصادر أخرى بالأسفل."],
+  restart: ["↺ سەرەتا", "↺ Start over", "↺ دەستپێک", "↺ من البداية"],
+  saveP: ["💾 پاشەکەوت", "💾 Save", "💾 پاشەکەفت", "💾 حفظ"],
+  savedP: ["پاشەکەوت کرا ✅ لە «📁 زیاتر ← پرۆژەکانم» دەیدۆزیتەوە.", "Saved ✅ Find it in «📁 More → My projects».", "هاتە پاشەکەفتکرن ✅ ل «📁 پتر ← پرۆژێن من» دبینی.", "تم الحفظ ✅ تجده في «📁 المزيد ← مشاريعي»."],
+  myProjects: ["پرۆژەکانم", "My projects", "پرۆژێن من", "مشاريعي"],
+  noSaves: ["هێشتا هیچ پرۆژەیەکت پاشەکەوت نەکردووە.", "No saved projects yet.", "هێشتا چو پرۆژە نەهاتینە پاشەکەفتکرن.", "لا توجد مشاريع محفوظة بعد."],
+  openP: ["کردنەوە", "Open", "ڤەکرن", "فتح"],
+  fullStore: ["جێگا پڕە. هەندێک پرۆژەی کۆن بسڕەوە یان وەک فایل دایبگرە.", "Storage is full. Delete old projects or download them as a file.", "جه تژی یە. هندەک پرۆژێن کەڤن ژێببە یان وەک فایل داگرە.", "المساحة ممتلئة. احذف مشاريع قديمة أو نزّلها كملف."],
+  projN: ["پرۆژەی", "Project", "پرۆژەیا", "مشروع"],
+  photoFail: ["نەتوانرا وێنەکە بخوێنرێتەوە.", "Couldn't read the photo.", "نەشیا وێنە بهێتە خواندن.", "تعذّرت قراءة الصورة."],
+  autoSave: ["هەموو گۆڕانکارییەک خۆکارانە پاشەکەوت دەبێت.", "Every change is saved automatically.", "هەر گوهۆڕینەک ب خۆکاری پاشەکەفت دبیت.", "يُحفظ كل تغيير تلقائياً."],
   ofPlot: ["ی زەوی", "of plot", "یێ ئەردی", "من الأرض"]
 };
 const MAT_WALL = ["paint", "brick", "stone", "tile", "wood", "marble", "concrete"], MAT_FLOOR = ["tile", "wood", "marble", "carpet", "stone", "concrete"];
@@ -231,6 +247,10 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
     const e = new Studio3D(canvasRef.current);
     eng.current = e;
     e.resolvePic = async (url) => {
+      if (url.startsWith("data:")) {
+        const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+        return { url, ar: im.width / im.height };
+      }
       const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "grab", url }) });
       if (!r.ok) throw new Error("pic");
       const blobUrl = URL.createObjectURL(await r.blob());
@@ -498,10 +518,39 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
       const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "search", q, google: true }) });
       const j = await r.json();
       setGFound([...(j.google || []), ...(j.results || [])].slice(0, 60));
+      if (!(j.google || []).length) say(tx(j.googleWhy === "quota" ? "gwhy_quota" : j.googleWhy === "key" ? "gwhy_key" : j.googleWhy === "no_key" ? "gwhy_no_key" : "gwhy_other"));
       if (j.models?.length) setFound(j.models);
     } catch { setGFound([]); }
     setBusy("");
   }
+  const photoRef = useRef(null);
+  async function addOwnPhoto(file) {
+    if (!file) return;
+    try {
+      const url = URL.createObjectURL(file);
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      const { cutout } = await import("../lib/room3d");
+      const c = cutout(im, 512); URL.revokeObjectURL(url);
+      const p = where();
+      const next = applyOps(modelRef.current, [{ op: "addPic", pic: c.url, name: file.name.replace(/\.[a-z0-9]+$/i, "").slice(0, 40) || "📷", x: p.x, z: p.z, h: 1 }]);
+      commit(next); setSel(next.items[next.items.length - 1].id); setTool("select"); setPanel("props"); say(tx("added"));
+    } catch { say(tx("photoFail")); }
+  }
+  const SKEY = KEY + ":saves";
+  const [saves, setSaves] = useState(() => { try { return JSON.parse(localStorage.getItem(SKEY) || "[]"); } catch { return []; } });
+  function saveProject() {
+    const d = new Date(), name = `${tx("projN")} ${saves.length + 1} · ${d.toLocaleDateString("en-GB")} ${d.toTimeString().slice(0, 5)}`;
+    const list = [{ id: uid("s"), name, at: Date.now(), model: modelRef.current }, ...saves].slice(0, 20);
+    try { localStorage.setItem(SKEY, JSON.stringify(list)); setSaves(list); say(tx("savedP")); }
+    catch { say(tx("fullStore")); }
+  }
+  function delSave(id) { const list = saves.filter((x) => x.id !== id); try { localStorage.setItem(SKEY, JSON.stringify(list)); } catch {} setSaves(list); }
+  function restart() {
+    if (!confirm(tx("confirmNew"))) return;
+    commit(emptyModel()); setSel(null); setPlanFloors(null); setPanel(null); setTool("select");
+    if (REAL) setSetup(true);
+  }
+
   function addPic(pic) {
     const p = where();
     const big = /car|ئۆتۆمبێل|ترومبێل|سيارة/i.test(libQ) ? 1.5 : /tree|دار|شجرة/i.test(libQ) ? 3 : /sofa|bed|table|wardrobe|cabinet|قەنەفە|جێگا|دۆڵاب|كنبة|سرير/i.test(libQ) ? 1.1 : /lamp|plant|vase|گڵۆپ|گوڵ/i.test(libQ) ? 0.9 : 1; // real height in metres
@@ -631,6 +680,8 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
         )}
         {m.plot && !setup && view !== "walk" && REAL && (
           <div className="s3d-steps">
+            <button className="act" onClick={saveProject}>{tx("saveP")}</button>
+            <button className="act" onClick={restart}>{tx("restart")}</button>
             {[["s1", m.rooms.length > 0, () => { setTool("room"); setView("plan"); setPanel(null); say(tx("h_s1")); }],
               ["r2", m.walls.some((w) => !w.fence) && m.walls.filter((w) => !w.fence).every((w) => (w.built ?? w.h) >= w.h - 0.01), () => { setTool("lay"); setView("3d"); }],
               ["s3", m.openings.some((o) => m.walls.find((w) => w.id === o.wall && !w.fence)), () => { setTool("door"); setView("3d"); }],
@@ -695,6 +746,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
                 <label>{tx("sizeL")} · {Math.round((selItem.s || 1) * 100)}% <span className="s3d-row">
                   <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, s: Math.round((selItem.s || 1) * 0.9 * 100) / 100 }])}>−</button>
                   <button className="s3d-btn" onClick={() => edit([{ op: "setItem", id: sel, s: Math.round((selItem.s || 1) * 1.1 * 100) / 100 }])}>+</button></span></label>
+                {selItem.pic && <label>{tx("picH")} {num(Math.round((selItem.h || 1) * (selItem.s || 1) * 100) / 100, (v) => edit([{ op: "setItem", id: sel, s: Math.round((v / (selItem.h || 1)) * 100) / 100 }]))}</label>}
                 <label>{tx("lift")} {num(selItem.y || 0, (v) => edit([{ op: "setItem", id: sel, y: v }]))}</label>
                 <div className="s3d-row">
                   <button className="s3d-btn" onClick={() => { const n = applyOps(modelRef.current, [{ op: "addItem", ph: selItem.ph, name: selItem.name, x: selItem.x + 0.6, z: selItem.z + 0.6, rot: selItem.rot, s: selItem.s, y: selItem.y }]); commit(n); setSel(n.items[n.items.length - 1].id); }}>{tx("dup")}</button>
@@ -746,9 +798,12 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
           )}
           {panel === "items" && (
             <div className="s3d-form">
-              <div className="s3d-seg small">
-                <button className={libTab === "3d" ? "on" : ""} onClick={() => setLibTab("3d")}>{tx("models3d")}</button>
-                <button className={libTab === "google" ? "on" : ""} onClick={() => setLibTab("google")}>{tx("google")}</button>
+              <div className="s3d-row start">
+                <div className="s3d-seg small">
+                  <button className={libTab === "3d" ? "on" : ""} onClick={() => setLibTab("3d")}>{tx("models3d")}</button>
+                  <button className={libTab === "google" ? "on" : ""} onClick={() => setLibTab("google")}>{tx("google")}</button>
+                </div>
+                <button className="s3d-btn gold" onClick={() => photoRef.current?.click()} title={tx("myPhotoSub")}>{tx("myPhoto")}</button>
               </div>
               {libTab === "google" ? (
                 <>
@@ -866,6 +921,16 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
                 <button className="s3d-btn" onClick={() => jsonRef.current?.click()}>{tx("openJ")}</button>
                 <button className="s3d-btn danger" onClick={() => { if (confirm(tx("confirmNew"))) { commit(emptyModel()); setSel(null); setPlanFloors(null); if (REAL) setSetup(true); } }}>{tx("newM")}</button>
               </div>
+              <p className="s3d-sub">{tx("myProjects")} · {tx("autoSave")}</p>
+              <button className="s3d-btn gold" onClick={saveProject}>{tx("saveP")}</button>
+              {saves.length ? (
+                <ul className="s3d-saves">{saves.map((sv) => (
+                  <li key={sv.id}><span>{sv.name}</span>
+                    <button className="s3d-btn" onClick={() => { commit(applyOps({ ...emptyModel(), ...sv.model }, [])); setSel(null); setSetup(false); setPanel(null); setTimeout(() => eng.current?.fit(), 60); }}>{tx("openP")}</button>
+                    <button className="s3d-btn" onClick={() => { const u = URL.createObjectURL(new Blob([JSON.stringify(sv.model)], { type: "application/json" })); download(u, (REAL ? "ahm-realistic" : "ahm-3d") + "-" + sv.at + ".json"); setTimeout(() => URL.revokeObjectURL(u), 4000); }}>⬇️</button>
+                    <button className="s3d-btn danger" onClick={() => delSave(sv.id)}>🗑️</button>
+                  </li>))}</ul>
+              ) : <p className="muted small">{tx("noSaves")}</p>}
               <label className="s3d-sun">{tx("sunT")} · {hour}:00 <input type="range" min={7} max={19} value={hour} onChange={(e) => setHour(+e.target.value)} /></label>
             </div>
           )}
@@ -888,6 +953,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
           ))}
         </div>
       </nav>
+      <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { addOwnPhoto(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { readPlan(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={jsonRef} type="file" accept="application/json,.json" hidden onChange={async (e) => {
         const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;

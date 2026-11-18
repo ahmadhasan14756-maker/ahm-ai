@@ -2344,3 +2344,8 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .s3d-progress { position: relative; height: 26px; border-radius: 999px; background: #0c0f15; border: 1px solid #343c4c; overflow: hidden; }
 .s3d-progress i { position: absolute; inset-block: 0; inset-inline-start: 0; background: linear-gradient(90deg, #8f8b84, #e8b44a); transition: width .3s; }
 .s3d-progress b { position: relative; display: block; text-align: center; line-height: 24px; font-size: 12.5px; }
+.s3d-steps button.act { background: #e8b44a; color: #1b1300; border-color: #e8b44a; font-weight: 700; }
+.s3d-saves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.s3d-saves li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #2c3445; border-radius: 12px; background: #1c2230; }
+.s3d-saves li span { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s3d-saves .s3d-btn { padding: 6px 9px; font-size: 12.5px; }
