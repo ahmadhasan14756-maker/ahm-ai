@@ -2351,3 +2351,5 @@ button:hover > .tile3d { transform: perspective(240px) rotateX(0) translateY(-2p
 .s3d-saves .s3d-btn { padding: 6px 9px; font-size: 12.5px; }
 .s3d-lib.props { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
 .s3d-emo { display: grid; place-items: center; width: 100%; aspect-ratio: 1; font-size: 34px; border-radius: 10px; background: #2a3140; }
+.img-chip .to-pptx { position: absolute; bottom: 4px; inset-inline-start: 4px; border: 0; border-radius: 8px; background: #e8b44a; color: #1b1300; font-size: 14px; padding: 2px 6px; cursor: pointer; }
+.attached .to-pptx.wide { margin-inline-start: 8px; border: 1px solid rgb(var(--gold-rgb) / .6); background: rgb(var(--gold-rgb) / .14); color: inherit; border-radius: 10px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }

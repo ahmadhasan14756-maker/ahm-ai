@@ -13,7 +13,12 @@ const TX = {
   topicPh: { ckb: "بۆ نموونە: گرنگیی وزەی خۆر لە کوردستان، بۆ قوتابیانی زانکۆ…", kmr: "بۆ نموونە: گرنگیا وزەیا ڕۆژێ ل کوردستانێ، بۆ قوتابیێن زانکۆیێ…", ar: "مثلاً: أهمية الطاقة الشمسية في العراق، لطلاب الجامعة…", en: "e.g. Solar energy in Kurdistan, for university students…" },
   wishPh: { ckb: "ئارەزوومەندانە: چی زیاد بکەم یان بگۆڕم؟", kmr: "ب دلێ خۆ: ئەز چ زێدە بکەم یان بگوهۆڕم؟", ar: "اختياري: ماذا أضيف أو أغيّر؟", en: "Optional: anything to add or change?" },
   pick: { ckb: "📂 فایل هەڵبژێرە (PowerPoint، PDF، Word)", kmr: "📂 فایلەکێ هەلبژێرە (PowerPoint، PDF، Word)", ar: "📂 اختر ملفاً (PowerPoint، PDF، Word)", en: "📂 Choose a file (PowerPoint, PDF, Word)" },
-  pickHint: { ckb: "PPTX، PDF (تا 3MB)، DOCX یان TXT", kmr: "PPTX، PDF (هەتا 3MB)، DOCX یان TXT", ar: "PPTX أو PDF (حتى 3MB) أو DOCX أو TXT", en: "PPTX, PDF (up to 3 MB), DOCX or TXT" },
+  pickHint: { ckb: "PowerPoint، PDF (تا 30MB)، Word، Excel، TXT، یان وێنە (تا ٨ وێنە: لاپەڕە، تێبینی، تەختەڕەش)", kmr: "PowerPoint، PDF (هەتا 30MB)، Word، Excel، TXT، یان وێنە (هەتا ٨ وێنە: لاپەڕ، تێبینی، تەختە)", ar: "PowerPoint أو PDF (حتى 30MB) أو Word أو Excel أو TXT أو صور (حتى 8: صفحات، ملاحظات، سبورة)", en: "PowerPoint, PDF (up to 30 MB), Word, Excel, TXT, or photos (up to 8: pages, notes, a whiteboard)" },
+  exact: { ckb: "ناوەڕۆکەکە وەک خۆی بێت (نووسینەکان ناگۆڕدرێن، تەنها دەکرێتە سلاید)", kmr: "ناڤەڕۆک وەک خۆ بیت (نڤیسین ناهێنە گوهۆڕین، تنێ دبیتە سلاید)", ar: "المحتوى كما هو (لا تُغيَّر الكلمات، يتحول إلى شرائح فقط)", en: "Keep the content exactly as it is (same words, just turned into slides)" },
+  picsFound: { ckb: "{n} وێنە", kmr: "{n} وێنە", ar: "{n} صور", en: "{n} photos" },
+  textFound: { ckb: "ناوەڕۆکەکە خوێندرایەوە ✅", kmr: "ناڤەڕۆک هاتە خواندن ✅", ar: "تمت قراءة المحتوى ✅", en: "Content read ✅" },
+  reading: { ckb: "فایلەکە دەخوێنرێتەوە…", kmr: "فایل دهێتە خواندن…", ar: "جارٍ قراءة الملف…", en: "Reading the file…" },
+  e_old_format: { ckb: "ئەمە فۆرماتی کۆنە (.ppt / .doc / .xls). لە Office وەک .pptx / .docx / .xlsx پاشەکەوتی بکە و دووبارە بینێرە.", kmr: "ئەڤە فۆرماتەکێ کەڤنە (.ppt / .doc / .xls). ل Office وەک .pptx / .docx / .xlsx پاشەکەفت بکە و دووبارە بهنێرە.", ar: "هذه صيغة قديمة (.ppt / .doc / .xls). احفظه بصيغة .pptx / .docx / .xlsx وأعد إرساله.", en: "This is an old format (.ppt / .doc / .xls). Save it as .pptx / .docx / .xlsx and send it again." },
   slidesFound: { ckb: "{n} سلاید دۆزرایەوە", kmr: "{n} سلاید هاتنە دیتن", ar: "وُجدت {n} شرائح", en: "{n} slides found" },
   lang: { ckb: "زمان", kmr: "زمان", ar: "اللغة", en: "Language" },
   langAuto: { ckb: "وەک سەرچاوەکە", kmr: "وەکی ژێدەری", ar: "مثل المصدر", en: "Same as source" },
@@ -49,7 +54,7 @@ const TX = {
   next: { ckb: "دواتر", kmr: "پاشان", ar: "التالي", en: "Next" },
   e_limit: { ckb: "پێشکەشکردنە بەخۆڕاییەکانت تەواو بوون. بۆ زیاتر Pro وەربگرە.", kmr: "پێشکێشکرنێن تە یێن بێ بەرامبەر ب دوماهی هاتن. بۆ پتر Pro وەربگرە.", ar: "انتهت عروضك المجانية. اشترك في Pro للمزيد.", en: "Your free presentations are used up. Get Pro for more." },
   e_pdf_big: { ckb: "PDFـەکە زۆر گەورەیە (زیاتر لە 3MB). فایلی PowerPoint یان PDFێکی بچووکتر بنێرە.", kmr: "PDF گەلەک مەزنە (پتر ژ 3MB). فایلەکا PowerPoint یان PDF یەکا بچووکتر بهنێرە.", ar: "ملف PDF كبير جداً (أكثر من 3MB).", en: "The PDF is too big (over 3 MB). Send the PowerPoint or a smaller PDF." },
-  e_bad_type: { ckb: "ئەم جۆرە فایلە ناخوێنرێتەوە. PPTX، PDF، DOCX یان TXT بنێرە.", kmr: "ئەڤ جۆرێ فایلێ ناهێتە خواندن. PPTX، PDF، DOCX یان TXT بهنێرە.", ar: "لا يمكن قراءة هذا النوع. أرسل PPTX أو PDF أو DOCX أو TXT.", en: "This file type can't be read. Send PPTX, PDF, DOCX or TXT." },
+  e_bad_type: { ckb: "ئەم جۆرە فایلە ناخوێنرێتەوە. PowerPoint، PDF، Word، Excel، TXT یان وێنە بنێرە.", kmr: "ئەڤ جۆرێ فایلێ ناهێتە خواندن. PowerPoint، PDF، Word، Excel، TXT یان وێنە بهنێرە.", ar: "لا يمكن قراءة هذا النوع. أرسل PowerPoint أو PDF أو Word أو Excel أو TXT أو صورة.", en: "This file type can't be read. Send PowerPoint, PDF, Word, Excel, TXT or a photo." },
   e_too_big: { ckb: "فایلەکە زۆر گەورەیە.", kmr: "فایل گەلەک مەزنە.", ar: "الملف كبير جداً.", en: "The file is too big." },
   e_empty: { ckb: "سەرەتا بابەتێک بنووسە یان فایلێک هەڵبژێرە.", kmr: "دەستپێکێ بابەتەکێ بنڤیسە یان فایلەکێ هەلبژێرە.", ar: "اكتب موضوعاً أو اختر ملفاً أولاً.", en: "Type a topic or choose a file first." },
   e_busy: { ckb: "ئێستا داواکاری زۆرە. چەند خولەکێکی تر هەوڵ بدەرەوە.", kmr: "نوکە داخوازی گەلەکن. پشتی چەند خولەکان هەول بدە.", ar: "الضغط كبير الآن. حاول بعد دقائق.", en: "Very busy right now. Try again in a few minutes." },
@@ -89,11 +94,13 @@ function save(blob, name) {
 }
 const toDataUrl = (blob) => new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(blob); });
 
-export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
+export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initialFile }) {
   const tx = (k) => TX[k]?.[lang] ?? TX[k]?.ckb ?? k;
   const uiRtl = lang !== "en";
   const fileRef = useRef(null);
-  const [tab, setTab] = useState("topic");
+  const [tab, setTab] = useState(initialFile ? "file" : "topic");
+  const [exact, setExact] = useState(false);
+  const [reading, setReading] = useState(false);
   const [topic, setTopic] = useState("");
   const [src, setSrc] = useState(null); // { text | pdf, name, count }
   const [deckLang, setDeckLang] = useState("auto");
@@ -158,13 +165,20 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
     setForm(s ? { title: s.title || "", sub: s.subtitle || s.text || s.quote || "", bullets: (s.layout === "agenda" ? s.items || [] : s.bullets || []).join("\n"), notes: s.notes || "" } : null);
   }, [deck, sel]);
 
-  async function onFile(e) {
-    const f = e.target.files?.[0];
-    e.target.value = "";
+  async function takeFiles(list) {
+    const [f, ...more] = list;
     if (!f) return;
-    setError("");
-    try { const s = await readSource(f); setSrc(s); if (s.count) setKeep(false); } catch (er) { setError(errText(er.message)); }
+    setError(""); setReading(true);
+    try { const s = await readSource(f, more); setSrc(s); if (s.count) setKeep(false); } catch (er) { setError(errText(er.message)); }
+    setReading(false);
   }
+  async function onFile(e) {
+    const list = [...(e.target.files || [])];
+    e.target.value = "";
+    takeFiles(list);
+  }
+  // a file sent here from the chat ("📊 make it a PowerPoint")
+  useEffect(() => { if (initialFile) takeFiles(Array.isArray(initialFile) ? initialFile : [initialFile]); }, []);
 
   async function makePics(d) {
     const want = d.slides.map((s, i) => [i, s.image]).filter(([, p]) => p && p.trim()).slice(0, 3);
@@ -184,7 +198,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
     if (!useFile && !topic.trim()) { setError(tx("e_empty")); return; }
     setBusy("s_read");
     try {
-      const j = await api({ action: "make", topic: topic.trim(), text: useFile ? src.text : "", pdf: useFile ? src.pdf : undefined,
+      const j = await api({ action: "make", topic: topic.trim(), text: useFile ? src.text : "", pdf: useFile ? src.pdf : undefined, images: useFile ? src.images : undefined, exact: useFile && exact,
         lang: deckLang === "auto" ? undefined : deckLang, slides: !keep && count ? +count : undefined, keep: useFile && keep, count: src?.count });
       if (j.left != null) setQuota((q) => ({ ...q, left: j.left }));
       setPics({}); setSel(0);
@@ -263,11 +277,13 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade }) {
             </div>
             {tab === "file" && (
               <>
-                <input ref={fileRef} type="file" hidden accept=".pptx,.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={onFile} />
-                <button className="house-drop" onClick={() => fileRef.current?.click()}>
-                  <b>{src ? "📄 " + src.name : tx("pick")}</b>
-                  <small>{src?.count ? tx("slidesFound").replace("{n}", src.count) : tx("pickHint")}</small>
+                <input ref={fileRef} type="file" hidden multiple onChange={onFile}
+                  accept=".pptx,.pdf,.docx,.xlsx,.txt,.md,.csv,.ppt,.doc,.xls,image/*,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <button className="house-drop" disabled={reading} onClick={() => fileRef.current?.click()}>
+                  <b>{reading ? <><span className="mini-spin" /> {tx("reading")}</> : src ? (src.images ? "📷 " : "📄 ") + src.name : tx("pick")}</b>
+                  <small>{src?.count ? tx("slidesFound").replace("{n}", src.count) : src?.images ? tx("picsFound").replace("{n}", src.images.length) : src ? tx("textFound") : tx("pickHint")}</small>
                 </button>
+                {src && <label className="house-check"><input type="checkbox" checked={exact} onChange={(e) => setExact(e.target.checked)} /><span><b>{tx("exact")}</b></span></label>}
                 {src?.count > 0 && (
                   <label className="house-check"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /><span><b>{tx("keep")}</b></span></label>
                 )}

@@ -18,8 +18,9 @@ const nextConfig = {
   webpack(config, { isServer, webpack }) {
     if (!isServer) {
       config.plugins.push(new webpack.NormalModuleReplacementPlugin(/^node:/, (r) => { r.request = r.request.replace(/^node:/, ""); }));
-      config.resolve.fallback = { ...(config.resolve.fallback || {}), fs: false, https: false, http: false, path: false, os: false, "image-size": false };
+      config.resolve.fallback = { ...(config.resolve.fallback || {}), canvas: false, zlib: false, stream: false, url: false, fs: false, https: false, http: false, path: false, os: false, "image-size": false };
     }
+    config.resolve.alias = { ...(config.resolve.alias || {}), canvas: false }; // pdfjs (big PDFs) never needs the Node canvas
     return config;
   },
   async headers() {

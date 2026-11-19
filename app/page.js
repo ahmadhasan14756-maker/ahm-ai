@@ -1973,6 +1973,9 @@ function Main({ session }) {
   const [me, setMe] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [file, setFile] = useState(null);
+  const [slidesFile, setSlidesFile] = useState(null); // { files: [File], at } sent from the chat to the presentation maker
+  const toSlides = (files) => { setSlidesFile({ files, at: Date.now() }); setView("slides"); setSideOpen(false); };
+  const b64File = (b64, name, type) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new File([u], name, { type }); };
   const [images, setImages] = useState([]);
   const [deciding, setDeciding] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -2598,6 +2601,8 @@ function Main({ session }) {
       r.onload = () => setImages((cur) => (cur.length < 4 ? [...cur, { mimeType: "application/pdf", data: String(r.result).split(",")[1], docName: f.name }] : cur));
       r.readAsDataURL(f);
     }
+    const office = all.filter((f) => /\.(docx|pptx|xlsx)$/i.test(f.name));
+    if (office.length) { toSlides(office.slice(0, 1)); return; }
     const imgs = all.filter((f) => f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
     if (imgs.length) { addImages(imgs); return; }
     if (pdfs.length) return;
@@ -3259,7 +3264,7 @@ function Main({ session }) {
             initialTool={studioJump?.tool} initialFile={studioJump?.file} owner={!!me?.owner}
             onOpenPlan={(file) => { setStudioJump(null); setHouseFrom("studio"); setHousePlan(file || null); setView("house"); }} onChat={() => { setStudioJump(null); setView("chat"); chooseTool("construct"); }} />
         ) : view === "slides" ? (
-          <SlidesStudio lang={lang} getToken={token} onBack={() => setView("chat")} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
+          <SlidesStudio key={slidesFile ? slidesFile.at : 0} lang={lang} getToken={token} initialFile={slidesFile?.files} onBack={() => { setSlidesFile(null); setView("chat"); }} onUpgrade={() => setSheet({ type: "upgrade", reason: "info" })} />
         ) : view === "house" ? (
           <HouseStudio key={housePlan ? housePlan.size + ":" + houseFrom : 0} lang={lang} getToken={token} initialPlan={housePlan} autoRead={!!housePlan}
             fromChat={houseFrom === "chat"} onBack={() => { setStudioJump(null); setView(houseFrom === "chat" ? "chat" : "studio"); }}
@@ -3489,6 +3494,7 @@ function Main({ session }) {
                   {images.map((im, k) => (
                     <div key={k} className={"img-chip" + (im.docName ? " doc" : "")}>
                       {im.docName ? <span dir="ltr">📄 {im.docName}</span> : <img src={im.thumb} alt="" />}
+                      {im.docName && <button className="to-pptx" title={t("toPptx")} onClick={() => toSlides([b64File(im.data, im.docName, "application/pdf")])}>📊</button>}
                       <button aria-label={t("removeImage")} onClick={() => setImages((l) => l.filter((_, j) => j !== k))}><Svg d={Icon.close} size={13} w={2.6} /></button>
                     </div>
                   ))}
@@ -3497,6 +3503,7 @@ function Main({ session }) {
               {file && (
                 <div className="attached" dir="ltr">
                   📎 {file.name} · {file.content.split("\n").length} {t("lines")}
+                  <button className="to-pptx wide" onClick={() => toSlides([new File([file.content], file.name, { type: "text/plain" })])}>📊 {t("toPptx")}</button>
                   <button aria-label={t("delete")} onClick={() => setFile(null)}>✕</button>
                 </div>
               )}
@@ -3511,7 +3518,7 @@ function Main({ session }) {
                 <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={pickPhotos} />
                 <input ref={zipInput} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden onChange={pickZip} />
                 <input ref={docInput} type="file" hidden onChange={pickFile}
-                  accept=".pdf,application/pdf,.txt,.md,.csv,.json,.html,.htm,.css,.js,.jsx,.ts,.tsx,.py,.php,.java,.kt,.swift,.dart,.c,.h,.cpp,.cs,.go,.rs,.rb,.vue,.svelte,.xml,.yml,.yaml,.sql,.sh,text/*" />
+                  accept=".pdf,application/pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json,.html,.htm,.css,.js,.jsx,.ts,.tsx,.py,.php,.java,.kt,.swift,.dart,.c,.h,.cpp,.cs,.go,.rs,.rb,.vue,.svelte,.xml,.yml,.yaml,.sql,.sh,text/*" />
                 {(mode === "build" || mode === "auto") && (
                   <button className="attach gallery zip-btn" aria-label={t("zipImport")} title={t("zipImport")} disabled={busy || zipBusy}
                     onClick={() => zipInput.current?.click()}>{zipBusy ? <span className="mini-spin" /> : "📦"}</button>

@@ -49,16 +49,23 @@ export async function POST(req) {
       if (left.left !== null && left.left <= 0) return err("limit", 402, left);
       const topic = String(body.topic || "").slice(0, 3000), text = String(body.text || "").slice(0, 60000);
       const pdf = typeof body.pdf === "string" && body.pdf.length < 4_500_000 && B64.test(body.pdf) ? body.pdf : null;
-      if (!topic.trim() && !text.trim() && !pdf) return err("empty");
+      // photos of pages / notes / a whiteboard (up to 8 JPEGs, all together under the 4.5 MB request limit)
+      const images = Array.isArray(body.images) ? body.images.filter((x) => typeof x === "string" && x.length < 1_600_000 && B64.test(x)).slice(0, 8) : [];
+      if (images.reduce((a, x) => a + x.length, 0) > 4_300_000) return err("too_big");
+      const exact = body.exact === true; // keep the user's own words, only lay them out as slides
+      if (!topic.trim() && !text.trim() && !pdf && !images.length) return err("empty");
       const lang = LANG[body.lang] ? body.lang : null; // null = the language of the source
       const n = Number(body.slides) > 0 ? Math.min(25, Math.round(Number(body.slides))) : null;
       const count = body.keep && body.count ? `Keep exactly ${Math.min(30, Number(body.count))} slides, one for each original slide, in the same order.` : n ? `Make exactly ${n} slides.` : "Choose the best number of slides (usually 7-12).";
-      const langLine = lang ? LANG[lang] : "the same language as the source (Kurdish Sorani in Arabic script if the source is Kurdish)";
+      const langLine = lang && !exact ? LANG[lang] : "the same language as the source (Kurdish Sorani in Arabic script if the source is Kurdish)";
       const parts = [];
       if (pdf) parts.push({ inlineData: { mimeType: "application/pdf", data: pdf } });
+      for (const im of images) parts.push({ inlineData: { mimeType: "image/jpeg", data: im } });
+      const how = exact ? "convert it into slides AS IT IS: keep the original words, numbers and order exactly — do not rewrite, summarise, translate or add new content; only split it into slides, give each slide a short title taken from the text, and choose fitting layouts (charts only from numbers that are in the source)"
+        : "redesign and improve it";
       parts.push({ text: [
-        text ? `EXISTING PRESENTATION / DOCUMENT (redesign and improve it):\n${text}` : pdf ? "EXISTING PRESENTATION / DOCUMENT: the attached PDF (redesign and improve it)." : "",
-        topic ? `${text || pdf ? "Extra wishes from the user" : "TOPIC (create a complete presentation about it)"}: ${topic}` : "",
+        text ? `EXISTING PRESENTATION / DOCUMENT (${how}):\n${text}` : pdf ? `EXISTING PRESENTATION / DOCUMENT: the attached PDF (${how}).` : images.length ? `SOURCE: the ${images.length} attached picture(s) — photos of pages, notes, a whiteboard, slides or a document. Read every word in them carefully (Kurdish, Arabic or English) and ${how}.` : "",
+        topic ? `${text || pdf || images.length ? "Extra wishes from the user" : "TOPIC (create a complete presentation about it)"}: ${topic}` : "",
         count,
         `Write the deck in ${langLine}; set "lang" to that language's code.`,
       ].filter(Boolean).join("\n\n") });
