@@ -2,7 +2,15 @@
 // 🎞️ AI presentation designer: a topic or an existing PowerPoint / PDF / Word file → AHM AI rewrites, fixes and
 // designs every slide → preview, edit, ask for changes → download an editable PowerPoint and a PDF.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { THEMES, brandTheme, layoutSlide, renderSlide, exportPptx, exportPdf, readSource } from "../lib/deck";
+import { THEMES, brandTheme, layoutSlide, renderSlide, exportPptx, exportPdf, readSource, splitBook, pdfPageImages } from "../lib/deck";
+
+const SCAN_PAGES = 6; // pages of a scanned book per part
+// how a book is split: text parts (smaller when the words must stay as they are) or page pictures
+function bookPlan(src, exact) {
+  if (src.scan) { const n = Math.min(50, Math.ceil(src.pages / SCAN_PAGES)); const per = Math.ceil(src.pages / n); return { n, pages: per }; }
+  const parts = splitBook(src.text, exact ? 15000 : 45000);
+  return { n: parts.length, parts };
+}
 
 const TX = {
   title: { ckb: "دیزاینەری پێشکەشکردن", kmr: "دیزاینەرێ پێشکێشکرنێ", ar: "مصمم العروض التقديمية", en: "Presentation designer" },
@@ -15,6 +23,13 @@ const TX = {
   pick: { ckb: "📂 فایل هەڵبژێرە (PowerPoint، PDF، Word)", kmr: "📂 فایلەکێ هەلبژێرە (PowerPoint، PDF، Word)", ar: "📂 اختر ملفاً (PowerPoint، PDF، Word)", en: "📂 Choose a file (PowerPoint, PDF, Word)" },
   pickHint: { ckb: "PowerPoint، PDF (تا 30MB)، Word، Excel، TXT، یان وێنە (تا ٨ وێنە: لاپەڕە، تێبینی، تەختەڕەش)", kmr: "PowerPoint، PDF (هەتا 30MB)، Word، Excel، TXT، یان وێنە (هەتا ٨ وێنە: لاپەڕ، تێبینی، تەختە)", ar: "PowerPoint أو PDF (حتى 30MB) أو Word أو Excel أو TXT أو صور (حتى 8: صفحات، ملاحظات، سبورة)", en: "PowerPoint, PDF (up to 30 MB), Word, Excel, TXT, or photos (up to 8: pages, notes, a whiteboard)" },
   exact: { ckb: "ناوەڕۆکەکە وەک خۆی بێت (نووسینەکان ناگۆڕدرێن، تەنها دەکرێتە سلاید)", kmr: "ناڤەڕۆک وەک خۆ بیت (نڤیسین ناهێنە گوهۆڕین، تنێ دبیتە سلاید)", ar: "المحتوى كما هو (لا تُغيَّر الكلمات، يتحول إلى شرائح فقط)", en: "Keep the content exactly as it is (same words, just turned into slides)" },
+  bookFound: { ckb: "📚 کتێب: {p} لاپەڕە — هەمووی دەکرێتە سلاید ({n} بەش)", kmr: "📚 پەرتووک: {p} لاپەڕ — هەمی دبیتە سلاید ({n} پشک)", ar: "📚 كتاب: {p} صفحة — يتحول كله إلى شرائح ({n} أجزاء)", en: "📚 Book: {p} pages — all of it becomes slides ({n} parts)" },
+  bookFoundT: { ckb: "📚 نووسینێکی درێژ — هەمووی دەکرێتە سلاید ({n} بەش)", kmr: "📚 نڤیسینەکا درێژ — هەمی دبیتە سلاید ({n} پشک)", ar: "📚 نص طويل — يتحول كله إلى شرائح ({n} أجزاء)", en: "📚 Long document — all of it becomes slides ({n} parts)" },
+  s_book: { ckb: "کتێبەکە دەکرێتە سلاید: {i} لە {n} بەش تەواو بوو…", kmr: "پەرتووک دبیتە سلاید: {i} ژ {n} پشکان ب دووماهی هات…", ar: "يتحول الكتاب إلى شرائح: اكتمل {i} من {n}…", en: "Turning the book into slides: {i} of {n} parts done…" },
+  readingP: { ckb: "دەخوێنرێتەوە… لاپەڕە {i} لە {n}", kmr: "دهێتە خواندن… لاپەڕ {i} ژ {n}", ar: "جارٍ القراءة… صفحة {i} من {n}", en: "Reading… page {i} of {n}" },
+  bookPartFail: { ckb: "هەندێک بەش دروست نەبوون ({n}). ئەوەی هەیە پیشان دراوە — دەتوانیت دووبارە هەوڵ بدەیتەوە.", kmr: "هندەک پشک چێ نەبوون ({n}). یا هەی هاتە نیشاندان — دشێی دووبارە هەول بدەی.", ar: "لم تُنشأ بعض الأجزاء ({n}). عُرض ما تم — يمكنك إعادة المحاولة.", en: "Some parts failed ({n}). What worked is shown — you can try again." },
+  savingP: { ckb: "ئامادە دەکرێت {i}/{n}", kmr: "ئامادە دبیت {i}/{n}", ar: "جارٍ التجهيز {i}/{n}", en: "Preparing {i}/{n}" },
+  e_ticket: { ckb: "کاتەکە تەواو بوو. دووبارە دروستی بکەرەوە.", kmr: "دەم ب دووماهی هات. دووبارە چێ بکە.", ar: "انتهت المهلة. أعد الإنشاء.", en: "The session expired. Make it again." },
   picsFound: { ckb: "{n} وێنە", kmr: "{n} وێنە", ar: "{n} صور", en: "{n} photos" },
   textFound: { ckb: "ناوەڕۆکەکە خوێندرایەوە ✅", kmr: "ناڤەڕۆک هاتە خواندن ✅", ar: "تمت قراءة المحتوى ✅", en: "Content read ✅" },
   reading: { ckb: "فایلەکە دەخوێنرێتەوە…", kmr: "فایل دهێتە خواندن…", ar: "جارٍ قراءة الملف…", en: "Reading the file…" },
@@ -101,6 +116,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
   const [tab, setTab] = useState(initialFile ? "file" : "topic");
   const [exact, setExact] = useState(false);
   const [reading, setReading] = useState(false);
+  const [prog, setProg] = useState(null); // { i, n } progress for reading / book parts / saving
   const [topic, setTopic] = useState("");
   const [src, setSrc] = useState(null); // { text | pdf, name, count }
   const [deckLang, setDeckLang] = useState("auto");
@@ -154,7 +170,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
     (async () => {
       await Promise.all(["500 30px Vazirmatn", "800 30px Vazirmatn"].map((f) => document.fonts?.load?.(f).catch(() => {})));
       const out = [];
-      for (const E of layouts) { if (stop) return; out.push((await renderSlide(E, { px: 1280 })).toDataURL("image/jpeg", 0.88)); }
+      for (const E of layouts) { if (stop) return; const c = await renderSlide(E, { px: layouts.length > 30 ? 960 : 1280 }); out.push(c.toDataURL("image/jpeg", 0.86)); c.width = c.height = 0; }
       if (!stop) setThumbs(out);
     })();
     return () => { stop = true; };
@@ -168,9 +184,9 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
   async function takeFiles(list) {
     const [f, ...more] = list;
     if (!f) return;
-    setError(""); setReading(true);
-    try { const s = await readSource(f, more); setSrc(s); if (s.count) setKeep(false); } catch (er) { setError(errText(er.message)); }
-    setReading(false);
+    setError(""); setReading(true); setProg(null);
+    try { const s = await readSource(f, more, (i, n) => setProg({ i, n })); setSrc(s); if (s.count) setKeep(false); } catch (er) { setError(errText(er.message)); }
+    setReading(false); setProg(null);
   }
   async function onFile(e) {
     const list = [...(e.target.files || [])];
@@ -191,11 +207,66 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
     return got;
   }
 
+  // a whole book: one ticket, then every part in parallel (3 at a time), then one deck
+  async function makeBook() {
+    const plan = bookPlan(src, exact);
+    setBusy("s_book"); setProg({ i: 0, n: plan.n });
+    try {
+      const t = await api({ action: "book", parts: plan.n });
+      if (t.left != null) setQuota((q) => ({ ...q, left: t.left }));
+      const total = count ? Math.max(plan.n * 3, +count) : 0;
+      const decks = new Array(plan.n).fill(null);
+      let done = 0, next = 0, fatal = null;
+      const one = async (i) => {
+        const body = { action: "make", book: { i, n: plan.n, ticket: t.ticket }, topic: topic.trim(), exact, lang: deckLang === "auto" ? undefined : deckLang, perPart: total ? Math.ceil(total / plan.n) : undefined };
+        if (plan.parts) body.text = plan.parts[i];
+        else body.images = await pdfPageImages(src.scan, 1 + i * plan.pages, 1 + (i + 1) * plan.pages);
+        for (let k = 0; k < 2; k++) {
+          try { decks[i] = (await api(body)).deck; return; } catch (e) {
+            if (["ticket", "limit", "unauthorized"].includes(e.message)) { fatal = e; return; }
+            await new Promise((r) => setTimeout(r, 2500));
+          }
+        }
+      };
+      await Promise.all([0, 1, 2].map(async () => {
+        while (next < plan.n && !fatal) { const i = next++; await one(i); setProg({ i: ++done, n: plan.n }); }
+      }));
+      if (fatal) throw fatal;
+      const ok = decks.filter(Boolean);
+      if (!ok.length) throw new Error("ai");
+      const failed = plan.n - ok.length;
+      // join the parts: one title slide at the start, one closing slide at the end, sections numbered in order
+      let slides = [];
+      decks.forEach((d, i) => d && d.slides.forEach((sl) => {
+        if (sl.layout === "title" && slides.length) return;
+        if (sl.layout === "closing" && i < plan.n - 1) return;
+        if (sl.layout === "agenda") return;
+        slides.push(sl);
+      }));
+      let sec = 0;
+      slides = slides.map((sl) => (sl.layout === "section" ? { ...sl, number: String(++sec).padStart(2, "0") } : sl));
+      const sections = slides.filter((sl) => sl.layout === "section").map((sl) => sl.title).filter(Boolean);
+      if (sections.length >= 3 && sections.length <= 7 && slides[0]?.layout === "title") slides.splice(1, 0, { layout: "agenda", title: { ckb: "ناوەڕۆک", kmr: "ناڤەڕۆک", ar: "المحتويات", en: "Contents" }[ok[0].lang] || "Contents", items: sections });
+      const first = ok[0];
+      setPics({}); setSel(0);
+      const deckAll = { title: first.title, subtitle: first.subtitle, lang: first.lang, corrections: [], slides };
+      const images = withPics && quota?.images ? await makePics(deckAll) : {};
+      setBusy("s_draw");
+      setPics(images); setDeck(deckAll);
+      if (failed) setError(tx("bookPartFail").replace("{n}", failed));
+    } catch (e) {
+      setError(errText(e.message));
+      if (e.message === "limit") setQuota((q) => ({ ...q, left: 0 }));
+    }
+    setBusy(""); setProg(null);
+  }
+
   async function make() {
     if (busy) return;
     setError("");
     const useFile = tab === "file" && src;
     if (!useFile && !topic.trim()) { setError(tx("e_empty")); return; }
+    if (useFile && src.book) return makeBook();
     setBusy("s_read");
     try {
       const j = await api({ action: "make", topic: topic.trim(), text: useFile ? src.text : "", pdf: useFile ? src.pdf : undefined, images: useFile ? src.images : undefined, exact: useFile && exact,
@@ -216,10 +287,18 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
     if (!deck || !ask.trim() || busy) return;
     setBusy("asking"); setError("");
     try {
-      const j = await api({ action: "revise", deck, ask: ask.trim() });
-      // keep pictures for slides that still want one in the same place
-      setPics((p) => Object.fromEntries(Object.entries(p).filter(([i]) => j.deck.slides[i]?.image)));
-      setDeck(j.deck); setAsk("");
+      if (deck.slides.length > 28) {
+        // a long (book) deck: change only the part around the selected slide
+        const a = Math.max(0, Math.min(sel - 10, deck.slides.length - 24)), b = Math.min(deck.slides.length, a + 24);
+        const j = await api({ action: "revise", deck: { ...deck, slides: deck.slides.slice(a, b) }, ask: ask.trim() + " (This is only slides " + (a + 1) + "-" + b + " of a longer deck; the user is looking at slide " + (sel + 1) + ".)" });
+        setPics((p) => Object.fromEntries(Object.entries(p).filter(([i]) => +i < a)));
+        setDeck({ ...deck, slides: [...deck.slides.slice(0, a), ...j.deck.slides, ...deck.slides.slice(b)] }); setAsk("");
+      } else {
+        const j = await api({ action: "revise", deck, ask: ask.trim() });
+        // keep pictures for slides that still want one in the same place
+        setPics((p) => Object.fromEntries(Object.entries(p).filter(([i]) => j.deck.slides[i]?.image)));
+        setDeck(j.deck); setAsk("");
+      }
     } catch (e) { setError(errText(e.message)); }
     setBusy("");
   }
@@ -246,12 +325,10 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
       const name = (deck.title || "AHM-AI").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 60) || "AHM-AI";
       if (kind === "pptx") { const f = await exportPptx(deck, layouts, { rtl, theme, fileName: name }); save(f.blob, f.name); }
       else {
-        const canvases = [];
-        for (const E of layouts) canvases.push(await renderSlide(E, { px: 1920 }));
-        const f = await exportPdf(canvases, { fileName: name }); save(f.blob, f.name);
+        const f = await exportPdf(layouts, { fileName: name, onProgress: layouts.length > 20 ? (i, n) => setProg({ i, n }) : undefined }); save(f.blob, f.name);
       }
     } catch (e) { console.error(e); setError(tx("e_net")); }
-    setSaving("");
+    setSaving(""); setProg(null);
   }
 
   const quotaLine = quota && quota.left != null ? (quota.pro ? tx("leftPro") : tx("left")).replace("{n}", quota.left) : "";
@@ -280,8 +357,8 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
                 <input ref={fileRef} type="file" hidden multiple onChange={onFile}
                   accept=".pptx,.pdf,.docx,.xlsx,.txt,.md,.csv,.ppt,.doc,.xls,image/*,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                 <button className="house-drop" disabled={reading} onClick={() => fileRef.current?.click()}>
-                  <b>{reading ? <><span className="mini-spin" /> {tx("reading")}</> : src ? (src.images ? "📷 " : "📄 ") + src.name : tx("pick")}</b>
-                  <small>{src?.count ? tx("slidesFound").replace("{n}", src.count) : src?.images ? tx("picsFound").replace("{n}", src.images.length) : src ? tx("textFound") : tx("pickHint")}</small>
+                  <b>{reading ? <><span className="mini-spin" /> {prog ? tx("readingP").replace("{i}", prog.i).replace("{n}", prog.n) : tx("reading")}</> : src ? (src.images ? "📷 " : "📄 ") + src.name : tx("pick")}</b>
+                  <small>{src?.book ? (src.pages ? tx("bookFound").replace("{p}", src.pages) : tx("bookFoundT")).replace("{n}", bookPlan(src, exact).n) : src?.count ? tx("slidesFound").replace("{n}", src.count) : src?.images ? tx("picsFound").replace("{n}", src.images.length) : src ? tx("textFound") : tx("pickHint")}</small>
                 </button>
                 {src && <label className="house-check"><input type="checkbox" checked={exact} onChange={(e) => setExact(e.target.checked)} /><span><b>{tx("exact")}</b></span></label>}
                 {src?.count > 0 && (
@@ -299,7 +376,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
                 </select>
               </label>
               <label>{tx("count")}
-                <input type="number" min="3" max="25" placeholder={tx("auto")} value={count} disabled={keep} onChange={(e) => setCount(e.target.value)} />
+                <input type="number" min="3" max={src?.book && tab === "file" ? 300 : 25} placeholder={tx("auto")} value={count} disabled={keep} onChange={(e) => setCount(e.target.value)} />
               </label>
             </div>
             <StylePicker style={style} setStyle={setStyle} lang={lang} tx={tx} />
@@ -309,7 +386,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
             )}
             {out ? <button className="gold-btn" onClick={onUpgrade}>{tx("getPro")}</button> : (
               <button className="gold-btn" disabled={!!busy} onClick={make}>
-                {busy ? <><span className="mini-spin" /> {tx(busy)}</> : tx("make")}
+                {busy ? <><span className="mini-spin" /> {busy === "s_book" && prog ? tx("s_book").replace("{i}", prog.i).replace("{n}", prog.n) : tx(busy)}</> : tx("make")}
               </button>
             )}
           </div>
@@ -319,7 +396,7 @@ export default function SlidesStudio({ lang, getToken, onBack, onUpgrade, initia
           <>
             <div className="sl-bar">
               <button className="gold-btn small" disabled={!!saving || !thumbs.length} onClick={() => download("pptx")}>{saving === "pptx" ? tx("saving") : tx("pptx")}</button>
-              <button className="gold-btn small" disabled={!!saving || !thumbs.length} onClick={() => download("pdf")}>{saving === "pdf" ? tx("saving") : tx("pdf")}</button>
+              <button className="gold-btn small" disabled={!!saving || !thumbs.length} onClick={() => download("pdf")}>{saving === "pdf" ? (prog ? tx("savingP").replace("{i}", prog.i).replace("{n}", prog.n) : tx("saving")) : tx("pdf")}</button>
               <button className="ghost-btn" disabled={!!busy} onClick={() => { setDeck(null); setPics({}); setThumbs([]); try { localStorage.removeItem(STORE); } catch {} }}>{tx("newDeck")}</button>
             </div>
             <StylePicker style={style} setStyle={setStyle} lang={lang} tx={tx} />

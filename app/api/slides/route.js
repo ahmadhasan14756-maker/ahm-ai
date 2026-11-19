@@ -10,6 +10,13 @@ import { makeImage } from "../../../lib/imagegen";
 import { quota } from "../../../lib/quota";
 import { LANG, SCHEMA, RULES, cleanDeck } from "../../../lib/deckSchema";
 import { allow, tooMany } from "../../../lib/ratelimit";
+import { serverEnv } from "../../../lib/env";
+import { createHmac } from "crypto";
+
+// a long book is made part by part: one "book" call spends one presentation and returns a ticket the parts carry
+const sign = (s) => createHmac("sha256", serverEnv("SUPABASE_SERVICE_ROLE_KEY") || "ahm-slides").update(s).digest("base64url").slice(0, 32);
+const ticketFor = (uid, n, exp) => `${exp}.${sign(`book|${uid}|${n}|${exp}`)}`;
+const ticketOk = (t, uid, n) => { const [exp] = String(t || "").split("."); return +exp > Date.now() && t === ticketFor(uid, n, exp); };
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,10 +50,28 @@ export async function POST(req) {
     const body = await req.json().catch(() => null);
     if (!body) return err("bad_request");
 
-    if (body.action === "make") {
+    if (body.action === "book") {
+      const n = Math.round(Number(body.parts));
+      if (!(n >= 2 && n <= 60)) return err("bad_request");
       if (!(await allow("sl-make:" + user.id, 4, 60000))) return tooMany();
       const left = await LIMIT.left(user.id, usage);
       if (left.left !== null && left.left <= 0) return err("limit", 402, left);
+      await LIMIT.spend(user.id, usage);
+      return Response.json({ ticket: ticketFor(user.id, n, Date.now() + 40 * 60000), left: left.left === null ? null : left.left - 1 });
+    }
+
+    if (body.action === "make") {
+      const b = body.book;
+      const book = b && Number.isInteger(b.i) && Number.isInteger(b.n) && b.n >= 2 && b.n <= 60 && b.i >= 0 && b.i < b.n ? b : null;
+      let left = { left: null };
+      if (book) {
+        if (!ticketOk(book.ticket, user.id, book.n)) return err("ticket", 403);
+        if (!(await allow("sl-book:" + user.id, 40, 60000))) return tooMany();
+      } else {
+        if (!(await allow("sl-make:" + user.id, 4, 60000))) return tooMany();
+        left = await LIMIT.left(user.id, usage);
+        if (left.left !== null && left.left <= 0) return err("limit", 402, left);
+      }
       const topic = String(body.topic || "").slice(0, 3000), text = String(body.text || "").slice(0, 60000);
       const pdf = typeof body.pdf === "string" && body.pdf.length < 4_500_000 && B64.test(body.pdf) ? body.pdf : null;
       // photos of pages / notes / a whiteboard (up to 8 JPEGs, all together under the 4.5 MB request limit)
@@ -56,7 +81,16 @@ export async function POST(req) {
       if (!topic.trim() && !text.trim() && !pdf && !images.length) return err("empty");
       const lang = LANG[body.lang] ? body.lang : null; // null = the language of the source
       const n = Number(body.slides) > 0 ? Math.min(25, Math.round(Number(body.slides))) : null;
-      const count = body.keep && body.count ? `Keep exactly ${Math.min(30, Number(body.count))} slides, one for each original slide, in the same order.` : n ? `Make exactly ${n} slides.` : "Choose the best number of slides (usually 7-12).";
+      const per = Number(body.perPart) > 0 ? Math.min(30, Math.max(3, Math.round(Number(body.perPart)))) : null;
+      const count = book ? [
+        `This source is PART ${book.i + 1} of ${book.n} of one long book / document. Make slides ONLY for this part, covering all of its main ideas in their order, so that all parts together present the whole book. These part rules override the general first/last slide rules:`,
+        book.i === 0 ? `- Start with ONE "title" slide for the whole book (use the book's real title if you can see it, else a fitting one). No agenda slide.` : `- No "title" slide and no "agenda" slide.`,
+        `- After that, begin with a "section" slide naming this part's chapter or main topic. Add another "section" slide whenever a new chapter starts inside this part.`,
+        book.i === book.n - 1 ? `- End with a "closing" slide.` : `- No "closing" slide.`,
+        per ? `- Make about ${per} slides for this part.` : exact ? "- Make as many slides as this part needs (max 25)." : "- Make 8-14 slides for this part (more if it is dense).",
+        exact ? `- In "notes" of each slide put the original passage that slide comes from, word for word (max ~1200 characters).` : "",
+      ].filter(Boolean).join("\n")
+        : body.keep && body.count ? `Keep exactly ${Math.min(30, Number(body.count))} slides, one for each original slide, in the same order.` : n ? `Make exactly ${n} slides.` : "Choose the best number of slides (usually 7-12).";
       const langLine = lang && !exact ? LANG[lang] : "the same language as the source (Kurdish Sorani in Arabic script if the source is Kurdish)";
       const parts = [];
       if (pdf) parts.push({ inlineData: { mimeType: "application/pdf", data: pdf } });
@@ -69,10 +103,11 @@ export async function POST(req) {
         count,
         `Write the deck in ${langLine}; set "lang" to that language's code.`,
       ].filter(Boolean).join("\n\n") });
-      const out = await jsonCall(RULES(lang ? LANG[lang] : "the deck language") + "\n" + SCHEMA, parts, { maxTokens: 16000, think: "low" });
+      const out = await jsonCall(RULES(lang ? LANG[lang] : "the deck language") + "\n" + SCHEMA, parts, { maxTokens: book ? 24000 : 16000, think: "low" });
       const deck = cleanDeck(out);
       if (!deck) return err("ai", 502);
       if (lang) deck.lang = lang;
+      if (book) return Response.json({ deck });
       await LIMIT.spend(user.id, usage);
       return Response.json({ deck, left: left.left === null ? null : left.left - 1 });
     }
