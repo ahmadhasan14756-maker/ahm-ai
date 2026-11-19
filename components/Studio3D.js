@@ -3,7 +3,7 @@
 // Preview for the owner only (the button shows only for the owner; the AI route checks it too).
 import { useEffect, useRef, useState } from "react";
 import { PROPS, CAR_COLORS } from "../lib/props3d";
-import { Studio3D, emptyModel, applyOps, addRoom, planToModel, boq, wallLen, uid, ROOM_TYPES, WALL_COLORS, DEFAULT_PRICES, MATERIALS } from "../lib/studio3d";
+import { Studio3D, emptyModel, applyOps, addRoom, buildRoom, findSpot, roomFits, snapRoom, planToModel, boq, wallLen, uid, ROOM_TYPES, WALL_COLORS, DEFAULT_PRICES, MATERIALS } from "../lib/studio3d";
 
 const T = {
   title: ["AHM 3D Studio", "AHM 3D Studio", "AHM 3D Studio", "AHM 3D Studio"],
@@ -14,7 +14,16 @@ const T = {
   measure: ["پێوانە", "Measure", "پیڤان", "قياس"], erase: ["سڕینەوە", "Erase", "ژێبرن", "حذف"], undo: ["گەڕانەوە", "Undo", "زڤڕین", "تراجع"], redo: ["دووبارە", "Redo", "دووبارە", "إعادة"],
   ai: ["🤖 AI", "🤖 AI", "🤖 AI", "🤖 AI"], cost: ["💰 تێچوون", "💰 Cost", "💰 تێچوون", "💰 التكلفة"], file: ["📁 فایل", "📁 File", "📁 فایل", "📁 ملف"], props: ["⚙️ تایبەتمەندی", "⚙️ Properties", "⚙️ تایبەتمەندی", "⚙️ الخصائص"],
   h_wall: ["خاڵی یەکەم دابگرە، پاشان خاڵی دووەم. بۆ وەستان هەمان خاڵ دووبارە دابگرە یان «✓ تەواو».", "Tap the first point, then the next. Tap the same point again or «✓ Done» to stop.", "خالا ئێکێ بکە، پاشان خالا دووێ. بۆ ڕاوەستانێ هەمان خالێ دووبارە بکە یان «✓ تەمام».", "اضغط النقطة الأولى ثم التالية. اضغط النقطة نفسها مرة أخرى أو «✓ تم» للتوقف."],
-  h_room: ["دوو گۆشەی بەرامبەر دابگرە، یان قەبارە بنووسە (وەک 4×5) و یەک جار دابگرە.", "Tap two opposite corners, or type a size (like 4×5) and tap once.", "دوو گۆشێن بەرامبەر بکە، یان قەبارەی بنڤیسە (وەک 4×5) و ئێک جار بکە.", "اضغط زاويتين متقابلتين، أو اكتب المقاس (مثل 4×5) واضغط مرة واحدة."],
+  h_room: ["جۆر و قەبارەی ژوورەکە هەڵبژێرە، پاشان شوێنێکی بەتاڵ دابگرە.", "Pick the room type and size, then tap an empty spot.", "جۆر و قەبارێ ژوورێ هەلبژێرە، پاشان جهەکێ ڤالا بکە.", "اختر نوع الغرفة ومقاسها، ثم اضغط مكاناً فارغاً."],
+  rbType: ["جۆری ژوور", "Room type", "جۆرێ ژوورێ", "نوع الغرفة"], depth: ["درێژی (م)", "Length (m)", "درێژی (م)", "الطول (م)"],
+  rbDoor: ["دەرگا", "Door", "دەرگەه", "باب"], rbWin: ["پەنجەرە", "Windows", "پەنجەرە", "نوافذ"], rbAuto: ["دیوارەکان خۆی بیانکات", "Build the walls too", "دیوار ب خۆ چێ ببن", "يبني الجدران أيضاً"],
+  rbFind: ["📍 خۆی شوێنی بەتاڵ بدۆزێتەوە", "📍 Find an empty spot for me", "📍 ب خۆ جهێ ڤالا ببینیت", "📍 ابحث لي عن مكان فارغ"],
+  rbTap: ["👆 شوێنێکی بەتاڵ لەسەر زەوییەکە دابگرە — ژوورەکە لەوێ دەردەکەوێت.", "👆 Tap an empty spot on the ground — the room appears there.", "👆 جهەکێ ڤالا ل سەر ئەردی بکە — ژوور ل وێرێ دیار دبیت.", "👆 اضغط مكاناً فارغاً على الأرض — تظهر الغرفة هناك."],
+  rbOk: ["✅ ئەم شوێنە بەتاڵە. دەتوانیت بیجوڵێنیت یان دروستی بکەیت.", "✅ This spot is free. Move it or build it.", "✅ ئەڤ جهە ڤالایە. دشێی بلڤینی یان چێ بکەی.", "✅ هذا المكان فارغ. حرّكه أو ابنِه."],
+  rbBad: ["⛔ ئەم شوێنە بەتاڵ نییە (ژوور یان دیوار هەیە، یان لە دەرەوەی زەوییەکەیە). شوێنێکی تر دابگرە.", "⛔ This spot is taken (a room or wall is there, or it is outside the plot). Tap another spot.", "⛔ ئەڤ جهە ڤالا نینە. جهەکێ دی بکە.", "⛔ هذا المكان مشغول. اضغط مكاناً آخر."],
+  rbBuild: ["🏗️ لێرە دروستی بکە", "🏗️ Build it here", "🏗️ ل ڤێرێ چێ بکە", "🏗️ ابنِها هنا"], rbTurn: ["⟳ سوڕاندن", "⟳ Turn", "⟳ زڤڕاندن", "⟳ تدوير"],
+  rbNoSpot: ["شوێنی بەتاڵ بەم قەبارەیە نییە. قەبارەکە بچووکتر بکە یان زەوییەکە گەورەتر بکە.", "No empty spot fits this size. Make it smaller or the plot bigger.", "جهێ ڤالا ب ڤێ قەبارێ نینە.", "لا يوجد مكان فارغ بهذا المقاس."],
+  roomDone: ["✅ ژوورەکە دروست کرا — دەرگا و پەنجەرەکانیشی دانران.", "✅ The room is built — with its door and windows.", "✅ ژوور هاتە چێکرن — دگەل دەرگەه و پەنجەران.", "✅ بُنيت الغرفة — مع بابها ونوافذها."],
   h_door: ["لەسەر دیوارێک دابگرە بۆ دانانی دەرگا.", "Tap a wall to put a door.", "ل سەر دیوارەکی بکە بۆ دانانا دەرگەهی.", "اضغط على جدار لوضع باب."],
   h_window: ["لەسەر دیوارێک دابگرە بۆ دانانی پەنجەرە.", "Tap a wall to put a window.", "ل سەر دیوارەکی بکە بۆ دانانا پەنجەرێ.", "اضغط على جدار لوضع نافذة."],
   h_measure: ["دوو خاڵ دابگرە بۆ پێوانە.", "Tap two points to measure.", "دوو خالان بکە بۆ پیڤانێ.", "اضغط نقطتين للقياس."],
@@ -74,7 +83,7 @@ const T = {
   s5: ["سوورە", "Fence", "سوور", "السور"],
   s6: ["کەلوپەل", "Furniture", "کەلوپەل", "الأثاث"],
   s7: ["بچۆ ژوورەوە", "Go inside", "بچە ژوورڤە", "ادخل"],
-  h_s1: ["ژوورەکانت لەسەر زەوییەکە دابنێ: دوو گۆشە دابگرە یان قەبارە بنووسە (وەک 4×5) و دابگرە.", "Lay out your rooms on the plot: tap two corners, or type a size (like 4×5) and tap.", "ژوورێن خۆ ل سەر ئەردی دانە: دوو گۆشان بکە یان قەبارەی بنڤیسە (وەک 4×5) و بکە.", "ضع غرفك على الأرض: اضغط زاويتين أو اكتب المقاس (مثل 4×5) واضغط."],
+  h_s1: ["ژوورەکانت دابنێ: جۆر و قەبارە هەڵبژێرە، پاشان شوێنێکی بەتاڵ دابگرە یان «📍 خۆی شوێن بدۆزێتەوە».", "Add your rooms: pick a type and size, then tap an empty spot or “📍 Find a spot”.", "ژوورێن خۆ دانە: جۆر و قەبارێ هەلبژێرە، پاشان جهەکێ ڤالا بکە.", "أضف غرفك: اختر النوع والمقاس، ثم اضغط مكاناً فارغاً أو «📍 ابحث عن مكان»."],
   buildWith: ["دیوارەکان بە چی دروست بکرێن؟", "What should the walls be built with?", "دیوار ب چ بهێنە ئاڤاکرن؟", "بماذا تُبنى الجدران؟"],
   buildGo: ["🧱 دروستی بکە", "🧱 Build it", "🧱 ئاڤا بکە", "🧱 ابنِه"],
   building: ["دیوارەکان ڕیز بە ڕیز بەرز دەبنەوە…", "The walls are rising course by course…", "دیوار ڕیز ب ڕیز بلند دبن…", "الجدران ترتفع صفاً بعد صف…"],
@@ -153,6 +162,8 @@ const TYPE_NAMES = { living: ["هۆڵ", "Living", "هۆل", "الصالة"], gue
   bath: ["حەمام / ئاودەست", "Bath", "حەمام / ئاڤدەست", "حمام"], hall: ["ڕاڕەو", "Hall", "ڕێڕەو", "ممر"], stairs: ["پەیژە", "Stairs", "پەیژە", "درج"], garage: ["گەراج", "Garage", "گەراج", "كراج"], office: ["ئۆفیس", "Office", "ئۆفیس", "مكتب"], storage: ["کۆگا", "Storage", "کۆگەه", "مخزن"], balcony: ["باڵکۆن", "Balcony", "بالکۆن", "بلكونة"], other: ["تر", "Other", "دی", "أخرى"] };
 
 const KEY3D = "ahm3d:v1", PKEY = "ahm3d:prices";
+// room builder: type → emoji and a usual size (metres)
+const RB_TYPES = [["living", "🛋️", 5, 6], ["bedroom", "🛏️", 4, 4], ["guest", "🪑", 4, 5], ["kitchen", "🍳", 3.5, 4], ["bath", "🚿", 2, 2.5], ["office", "💼", 3, 3.5], ["dining", "🍽️", 3.5, 4], ["hall", "🚶", 2, 4], ["stairs", "🪜", 2.5, 4], ["storage", "📦", 2, 2], ["garage", "🚗", 3.5, 6], ["other", "⬜", 4, 4]];
 const fa = (s) => String(s).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[٫,]/g, ".");
 const fmt = (n) => Math.round(n).toLocaleString("en-US");
 
@@ -239,6 +250,8 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
   const [layMat, setLayMat] = useState("block");
   const [gardenK, setGardenK] = useState("grass");
   const [carCol, setCarCol] = useState(CAR_COLORS[0]);
+  const [rb, setRb] = useState({ type: "bedroom", w: "4", d: "4", door: true, win: true, auto: true });
+  const [ghost, setGhost] = useState(null); // { x, z, w, d, ok } the room about to be built
 
   const toastT = useRef(0);
   const say = (s) => { setToast(s); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(""), 4200); };
@@ -254,7 +267,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
 
   // the 3D view
   useEffect(() => {
-    const e = new Studio3D(canvasRef.current);
+    const e = new Studio3D(canvasRef.current, { real: REAL });
     eng.current = e;
     e.resolvePic = async (url) => {
       if (url.startsWith("data:")) {
@@ -270,6 +283,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
       return { url: c.url, ar: im.width / im.height };
     };
     e.onBuilt = () => { say(tx("built")); setTool("door"); };
+    e.onRoomBuilt = () => say(tx("roomDone"));
     e.resolve = async (ph) => {
       const r = await fetch("/api/redesign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await getToken()) }, body: JSON.stringify({ action: "model", id: ph }) });
       if (!r.ok) throw new Error("model");
@@ -288,7 +302,11 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
   useEffect(() => { eng.current?.setView(view); }, [view]);
   useEffect(() => { eng.current?.placeSun(hour); }, [hour]);
   useEffect(() => { const e = eng.current; if (!e) return; e.roof = roof; e.ceiling = ceil; e.build(); }, [roof, ceil]);
-  useEffect(() => { if (["paint", "lay", "pour", "garden"].includes(tool)) setPanel(tool === "paint" ? "paint" : tool); }, [tool]);
+  useEffect(() => { if (["paint", "lay", "pour", "garden", "room"].includes(tool)) setPanel(tool === "paint" ? "paint" : tool); if (tool !== "room") setGhost(null); }, [tool]);
+  // the room builder's preview box follows size changes
+  const rbW = Math.min(30, Math.max(1, parseFloat(fa(rb.w)) || 0)), rbD = Math.min(30, Math.max(1, parseFloat(fa(rb.d)) || 0));
+  useEffect(() => { setGhost((g) => (g ? place(g.x + g.w / 2, g.z + g.d / 2, false) : g)); }, [rbW, rbD]);
+  useEffect(() => { eng.current?.setGhost(ghost ? { ...ghost, h: modelRef.current.wallH || 3, name: TYPE_NAMES[rb.type]?.[L] || "" } : null); }, [ghost, rb.type, view]);
   // the 3D furniture library (loaded once when the furniture panel opens)
   useEffect(() => {
     if (panel !== "items" || lib) return;
@@ -340,6 +358,32 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
   }
   const RAWC = { block: "#b9b6ae", brick: "#b5654f", stone: "#c8b89a" };
   const unbuilt = (mm) => (REAL ? { ...mm, walls: mm.walls.map((w) => (w.built === undefined && !w.fence ? { ...w, built: 0, matA: layMat, matB: layMat, colorA: RAWC[layMat], colorB: RAWC[layMat] } : w)) } : mm);
+  // put the preview box with its centre at (cx, cz), pulled onto nearby rooms so walls line up
+  function place(cx, cz, snap = true) {
+    const mm = modelRef.current;
+    let r = { x: Math.round((cx - rbW / 2) * 20) / 20, z: Math.round((cz - rbD / 2) * 20) / 20, w: rbW, d: rbD };
+    if (snap) r = snapRoom(mm, r);
+    return { ...r, ok: roomFits(mm, r) };
+  }
+  function autoSpot() {
+    const r = findSpot(modelRef.current, rbW, rbD);
+    if (!r) { setGhost(null); say(tx("rbNoSpot")); return; }
+    setGhost({ ...r, ok: true });
+  }
+  function nudge(dx, dz) { setGhost((g) => { if (!g) return g; const r = { x: Math.round((g.x + dx) * 100) / 100, z: Math.round((g.z + dz) * 100) / 100, w: g.w, d: g.d }; return { ...r, ok: roomFits(modelRef.current, r) }; }); }
+  function buildHere() {
+    const g = ghost; if (!g?.ok) return;
+    const n = modelRef.current.rooms.filter((r) => r.type === rb.type).length + 1;
+    const nm = (TYPE_NAMES[rb.type]?.[L] || TYPE_NAMES[rb.type]?.[0] || "") + (n > 1 ? " " + n : "");
+    let { model: next, fresh } = buildRoom(modelRef.current, { name: nm, type: rb.type, x: g.x, z: g.z, w: g.w, d: g.d, door: rb.door, windows: rb.win });
+    if (REAL) {
+      next = unbuilt(next);
+      if (rb.auto) next = { ...next, walls: next.walls.map((w) => (fresh.includes(w.id) ? { ...w, built: w.h } : w)) };
+    }
+    commit(next); setGhost(null);
+    if (!REAL || rb.auto) setTimeout(() => eng.current?.animateBuild(REAL ? 4200 : 2600, fresh), 40);
+    else say(tx("roomDone"));
+  }
   function placeRoom(x, z, w, d) {
     const n = modelRef.current.rooms.length + 1;
     commit(unbuilt(addRoom(modelRef.current, { name: [ "ژووری ", "Room ", "ژوورا ", "غرفة " ][L] + n, type: "other", x, z, w, d })));
@@ -393,13 +437,7 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
       const p = e.snap(raw, draft?.start);
       if (!draft?.start) { setDraft({ start: p, first: p }); preview(p); } else addWallTo(p);
     } else if (tool === "room") {
-      const sz = fa(sizeIn).match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
-      const p = e.snap(raw);
-      if (sz) { placeRoom(p.x, p.z, +sz[1], +sz[2]); return; }
-      if (!draft?.c1) { setDraft({ c1: p }); preview(p); return; }
-      const a = draft.c1, w = Math.abs(p.x - a.x), d = Math.abs(p.z - a.z);
-      setDraft(null); e.setPreview([]);
-      if (w >= 0.5 && d >= 0.5) placeRoom(Math.min(a.x, p.x), Math.min(a.z, p.z), w, d);
+      setGhost(place(raw.x, raw.z)); if (panel !== "room") setPanel("room");
     } else if (tool === "measure") {
       const p = e.snap(raw, draft?.m1);
       if (!draft?.m1) { setDraft({ m1: p }); preview(p); return; }
@@ -437,6 +475,10 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
       return;
     }
     if (view === "walk" && down.current && ev.buttons) { eng.current.look(ev.clientX - down.current.lx, ev.clientY - down.current.ly); down.current.lx = ev.clientX; down.current.ly = ev.clientY; return; }
+    if (ev.pointerType === "mouse" && !ev.buttons && tool === "room" && (!ghost || ghost.hover)) {
+      const raw = eng.current.toFloor(ev.clientX, ev.clientY); if (raw) setGhost({ ...place(raw.x, raw.z), hover: true });
+      return;
+    }
     if (ev.pointerType === "mouse" && !ev.buttons && (draft?.start || draft?.c1 || draft?.m1)) {
       const raw = eng.current.toFloor(ev.clientX, ev.clientY); if (!raw) return;
       const s = draft.start || draft.c1 || draft.m1;
@@ -665,9 +707,6 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
             {[["→", 1, 0], ["←", -1, 0], ["↑", 0, -1], ["↓", 0, 1]].map(([s, dx, dz]) => <button key={s} className="s3d-btn" onClick={() => wallByLength(dx, dz)}>{s}</button>)}
             <button className="s3d-btn gold" onClick={() => { setDraft(null); eng.current.setPreview([]); }}>{tx("done")}</button>
           </div>
-        )}
-        {tool === "room" && view !== "walk" && (
-          <div className="s3d-vcb"><input inputMode="text" placeholder={tx("size")} value={sizeIn} onChange={(e) => setSizeIn(e.target.value)} /></div>
         )}
         {planFloors && (
           <div className="s3d-floors">
@@ -902,6 +941,34 @@ export default function Studio3DView({ lang, getToken, onBack, mode }) {
                 edit([{ op: "pour", id: "*" }]); say(tx("pouring"));
                 m.rooms.forEach((r, i) => setTimeout(() => eng.current?.pour(r.id), 40 + i * 450));
               }}>{tx("pourAll")}</button>
+            </div>
+          )}
+          {panel === "room" && (
+            <div className="s3d-form s3d-rb">
+              <div className="s3d-chips">{RB_TYPES.map(([k, e2, w2, d2]) => (
+                <button key={k} className={rb.type === k ? "on" : ""} onClick={() => setRb({ ...rb, type: k, w: String(w2), d: String(d2) })}>{e2} {TYPE_NAMES[k]?.[L] || TYPE_NAMES[k]?.[0]}</button>))}</div>
+              <div className="s3d-row start s3d-rbsize">
+                <label className="s3d-in">{tx("width")}<input inputMode="decimal" value={rb.w} onChange={(e) => setRb({ ...rb, w: e.target.value.slice(0, 5) })} /></label>
+                <button className="s3d-btn" onClick={() => setRb({ ...rb, w: rb.d, d: rb.w })} aria-label="swap">⇄</button>
+                <label className="s3d-in">{tx("depth")}<input inputMode="decimal" value={rb.d} onChange={(e) => setRb({ ...rb, d: e.target.value.slice(0, 5) })} /></label>
+                <b className="s3d-area">{Math.round(rbW * rbD * 10) / 10} م²</b>
+              </div>
+              <div className="s3d-chips">{["3×3", "3×4", "4×4", "4×5", "5×5", "5×6", "6×8"].map((z2) => { const [a2, b2] = z2.split("×"); return (
+                <button key={z2} className={rbW == a2 && rbD == b2 ? "on" : ""} onClick={() => setRb({ ...rb, w: a2, d: b2 })}>{z2}</button>); })}</div>
+              <div className="s3d-row start">
+                <label className="s3d-check"><input type="checkbox" checked={rb.door} onChange={(e) => setRb({ ...rb, door: e.target.checked })} /> 🚪 {tx("rbDoor")}</label>
+                <label className="s3d-check"><input type="checkbox" checked={rb.win} onChange={(e) => setRb({ ...rb, win: e.target.checked })} /> 🪟 {tx("rbWin")}</label>
+                {REAL && <label className="s3d-check"><input type="checkbox" checked={rb.auto} onChange={(e) => setRb({ ...rb, auto: e.target.checked })} /> 🧱 {tx("rbAuto")}</label>}
+              </div>
+              <p className={"s3d-sub" + (ghost && !ghost.ok ? " bad" : "")}>{ghost && !ghost.hover ? (ghost.ok ? tx("rbOk") : tx("rbBad")) : tx("rbTap")}</p>
+              {ghost && !ghost.hover ? (
+                <div className="s3d-row start">
+                  {[["→", 0.25, 0], ["←", -0.25, 0], ["↑", 0, -0.25], ["↓", 0, 0.25]].map(([a2, dx, dz]) => <button key={a2} className="s3d-btn" onClick={() => nudge(dx, dz)}>{a2}</button>)}
+                  <button className="s3d-btn" onClick={() => setRb({ ...rb, w: rb.d, d: rb.w })}>{tx("rbTurn")}</button>
+                  <button className="s3d-btn gold" disabled={!ghost.ok} onClick={buildHere}>{tx("rbBuild")}</button>
+                  <button className="s3d-btn" onClick={() => setGhost(null)} aria-label="cancel">✕</button>
+                </div>
+              ) : <button className="s3d-btn gold" onClick={autoSpot}>{tx("rbFind")}</button>}
             </div>
           )}
           {panel === "garden" && (
